@@ -4,7 +4,7 @@ import type { Channel, ChannelMessageHandler } from "./channel.js";
 import type {
   WhatsAppConfig,
   ServerSecrets,
-} from "./server-config.js";
+} from "../server-config.js";
 
 type WhatsAppTextEvent = {
   from: string;

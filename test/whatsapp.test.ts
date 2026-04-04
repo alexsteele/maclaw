@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractWhatsAppTextEvents } from "../src/whatsapp.js";
+import { extractWhatsAppTextEvents } from "../src/channels/whatsapp.js";
 
 test("extractWhatsAppTextEvents returns inbound text messages", () => {
   const events = extractWhatsAppTextEvents({

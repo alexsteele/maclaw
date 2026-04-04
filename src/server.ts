@@ -1,7 +1,7 @@
 import type {
   Channel,
   ChannelMessage,
-} from "./channel.js";
+} from "./channels/channel.js";
 import { Harness } from "./harness.js";
 import {
   loadServerConfig,
@@ -10,7 +10,7 @@ import {
   type ServerSecrets,
 } from "./server-config.js";
 import type { Message, ScheduledTask } from "./types.js";
-import { WhatsAppChannel } from "./whatsapp.js";
+import { WhatsAppChannel } from "./channels/whatsapp.js";
 
 const logScheduledTask = async (
   projectName: string,
