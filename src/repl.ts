@@ -24,6 +24,17 @@ const chatHelpText = [
   "  /chat fork [X]     Fork the current chat and switch to it",
 ].join("\n");
 
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "numeric",
+  day: "numeric",
+  year: "numeric",
+});
+
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 const parseSessionId = (value: string): string | null => {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
@@ -56,6 +67,23 @@ const buildForkSessionId = async (
 
   return null;
 };
+
+const formatChatTimestamp = (value: string): string => {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  const now = new Date();
+  const isToday =
+    timestamp.getFullYear() === now.getFullYear() &&
+    timestamp.getMonth() === now.getMonth() &&
+    timestamp.getDate() === now.getDate();
+
+  return isToday ? timeFormatter.format(timestamp) : dateFormatter.format(timestamp);
+};
+
+const padCell = (value: string, width: number): string => value.padEnd(width, " ");
 
 export const runRepl = async (
   config: AppConfig,
@@ -100,12 +128,58 @@ export const runRepl = async (
       const rendered =
         sessions.length === 0
           ? "No saved chats."
-          : sessions
-              .map((session) => {
-                const current = session.id === agent.getCurrentSessionId() ? " *" : "";
-                return `- ${session.id}${current} (${session.messageCount} messages, updated ${session.updatedAt})`;
-              })
-              .join("\n");
+          : (() => {
+              const rows = sessions.map((session) => ({
+                marker: session.id === agent.getCurrentSessionId() ? "*" : " ",
+                id: session.id,
+                messages: String(session.messageCount),
+                created: formatChatTimestamp(session.createdAt),
+                lastActivity: formatChatTimestamp(session.updatedAt),
+              }));
+
+              const markerWidth = 1;
+              const idWidth = Math.max("chat".length, ...rows.map((row) => row.id.length));
+              const messagesWidth = Math.max(
+                "messages".length,
+                ...rows.map((row) => row.messages.length),
+              );
+              const createdWidth = Math.max(
+                "created".length,
+                ...rows.map((row) => row.created.length),
+              );
+              const activityWidth = Math.max(
+                "last activity".length,
+                ...rows.map((row) => row.lastActivity.length),
+              );
+
+              const header = [
+                padCell("", markerWidth),
+                padCell("chat", idWidth),
+                padCell("messages", messagesWidth),
+                padCell("created", createdWidth),
+                padCell("last activity", activityWidth),
+              ].join("  ");
+
+              const separator = [
+                "-".repeat(markerWidth),
+                "-".repeat(idWidth),
+                "-".repeat(messagesWidth),
+                "-".repeat(createdWidth),
+                "-".repeat(activityWidth),
+              ].join("  ");
+
+              const lines = rows.map((row) =>
+                [
+                  padCell(row.marker, markerWidth),
+                  padCell(row.id, idWidth),
+                  padCell(row.messages, messagesWidth),
+                  padCell(row.created, createdWidth),
+                  padCell(row.lastActivity, activityWidth),
+                ].join("  "),
+              );
+
+              return [header, separator, ...lines].join("\n");
+            })();
 
       output.write(`${rendered}\n\n`);
       continue;
