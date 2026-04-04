@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { TaskScheduler } from "../src/scheduler.js";
+import { parseTaskSchedule } from "../src/task.js";
 
 const createScheduler = async (): Promise<{
   cleanup: () => Promise<void>;
@@ -118,4 +119,77 @@ test("runDueTasks advances recurring tasks instead of completing them", async ()
   } finally {
     await cleanup();
   }
+});
+
+test("createTask stores a weekly task using AM/PM wall clock time", async () => {
+  const { cleanup, scheduler } = await createScheduler();
+
+  try {
+    const task = await scheduler.createTask({
+      sessionId: "chat-a",
+      title: "Stock Updates",
+      prompt: "Send me a monday market update",
+      schedule: {
+        type: "weekly",
+        days: ["mon"],
+        hour: 10,
+        minute: 0,
+      },
+    });
+
+    assert.equal(task.schedule.type, "weekly");
+    if (task.schedule.type === "weekly") {
+      assert.deepEqual(task.schedule.days, ["mon"]);
+      assert.equal(task.schedule.hour, 10);
+      assert.equal(task.schedule.minute, 0);
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("parseTaskSchedule parses a one-time task in US format", () => {
+  const parsed = parseTaskSchedule(
+    "once 4/5/2026 9:00 AM | Stock Updates | Send me a monday market update",
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.title, "Stock Updates");
+  assert.equal(parsed?.prompt, "Send me a monday market update");
+  assert.equal(parsed?.schedule.type, "once");
+});
+
+test("parseTaskSchedule parses a daily task with AM/PM time", () => {
+  const parsed = parseTaskSchedule(
+    "daily 9:00 AM | Daily Summary | Give me a summary",
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.schedule.type, "daily");
+  if (parsed?.schedule.type === "daily") {
+    assert.equal(parsed.schedule.hour, 9);
+    assert.equal(parsed.schedule.minute, 0);
+  }
+});
+
+test("parseTaskSchedule parses a weekly task with weekday and AM/PM time", () => {
+  const parsed = parseTaskSchedule(
+    "weekly mon 10:00 AM | Stock Updates | Send me a monday market update",
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.schedule.type, "weekly");
+  if (parsed?.schedule.type === "weekly") {
+    assert.deepEqual(parsed.schedule.days, ["mon"]);
+    assert.equal(parsed.schedule.hour, 10);
+    assert.equal(parsed.schedule.minute, 0);
+  }
+});
+
+test("parseTaskSchedule rejects invalid schedule text", () => {
+  const parsed = parseTaskSchedule(
+    "weekly someday 10:00 AM | Bad Task | This should fail",
+  );
+
+  assert.equal(parsed, null);
 });

@@ -1,4 +1,4 @@
-import { makeId, readJsonFile, writeJsonFile } from "./fs-utils.js";
+import { readJsonFile, writeJsonFile } from "./fs-utils.js";
 import type { ScheduledTask, TaskSchedule, Weekday } from "./types.js";
 
 type LegacyScheduledTask = Omit<ScheduledTask, "nextRunAt" | "schedule"> & {
@@ -55,6 +55,21 @@ const readAllTasks = async (tasksFile: string): Promise<ScheduledTask[]> => {
 const writeAllTasks = async (tasksFile: string, tasks: ScheduledTask[]): Promise<void> => {
   await writeJsonFile(tasksFile, tasks);
 };
+
+const createTaskId = (tasks: ScheduledTask[]): string => {
+  const existingIds = new Set(tasks.map((task) => task.id));
+
+  for (let attempt = 0; attempt < 10_000; attempt += 1) {
+    const value = Math.floor(Math.random() * 10_000);
+    const taskId = `task_${value.toString().padStart(4, "0")}`;
+    if (!existingIds.has(taskId)) {
+      return taskId;
+    }
+  }
+
+  throw new Error("Unable to generate a unique task id.");
+};
+
 
 const setDateParts = (
   base: Date,
@@ -186,7 +201,7 @@ export class TaskScheduler {
     }
 
     const task: ScheduledTask = {
-      id: makeId("task"),
+      id: createTaskId(tasks),
       sessionId: input.sessionId,
       title: input.title,
       prompt: input.prompt,

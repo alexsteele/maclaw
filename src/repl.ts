@@ -5,7 +5,8 @@ import type { SessionStore } from "./sessions.js";
 import { loadSkills } from "./skills.js";
 import { MaclawAgent } from "./agent.js";
 import { TaskScheduler } from "./scheduler.js";
-import type { TaskSchedule, Weekday } from "./types.js";
+import { parseTaskSchedule } from "./task.js";
+import type { TaskSchedule } from "./types.js";
 
 const helpText = [
   "Commands:",
@@ -95,7 +96,6 @@ const formatChatTimestamp = (value: string): string => {
 };
 
 const padCell = (value: string, width: number): string => value.padEnd(width, " ");
-const weekdayNames: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const formatTaskTimestamp = (value: string): string => {
   const timestamp = new Date(value);
@@ -144,240 +144,47 @@ const renderTaskList = async (
 
   const rows = tasks.map((task) => ({
     id: task.id,
+    title: task.title,
     status: task.status,
     nextRunAt: formatTaskTimestamp(task.nextRunAt),
     schedule: formatSchedule(task.schedule),
-    title: task.title,
   }));
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
+  const titleWidth = Math.max("title".length, ...rows.map((row) => row.title.length));
   const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
   const nextRunWidth = Math.max("next run".length, ...rows.map((row) => row.nextRunAt.length));
   const scheduleWidth = Math.max("schedule".length, ...rows.map((row) => row.schedule.length));
-  const titleWidth = Math.max("title".length, ...rows.map((row) => row.title.length));
 
   const header = [
     padCell("id", idWidth),
+    padCell("title", titleWidth),
     padCell("status", statusWidth),
     padCell("next run", nextRunWidth),
     padCell("schedule", scheduleWidth),
-    padCell("title", titleWidth),
   ].join("  ");
 
   const separator = [
     "-".repeat(idWidth),
+    "-".repeat(titleWidth),
     "-".repeat(statusWidth),
     "-".repeat(nextRunWidth),
     "-".repeat(scheduleWidth),
-    "-".repeat(titleWidth),
   ].join("  ");
 
   const lines = rows.map((row) =>
     [
       padCell(row.id, idWidth),
+      padCell(row.title, titleWidth),
       padCell(row.status, statusWidth),
       padCell(row.nextRunAt, nextRunWidth),
       padCell(row.schedule, scheduleWidth),
-      padCell(row.title, titleWidth),
     ].join("  "),
   );
 
   return [header, separator, ...lines].join("\n");
 };
 
-const parseTimeOfDay = (value: string): { hour: number; minute: number } | null => {
-  const trimmed = value.trim();
-  const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
-  if (twelveHourMatch) {
-    const rawHour = Number.parseInt(twelveHourMatch[1] ?? "", 10);
-    const minute = Number.parseInt(twelveHourMatch[2] ?? "", 10);
-    const meridiem = (twelveHourMatch[3] ?? "").toUpperCase();
-
-    if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) {
-      return null;
-    }
-
-    let hour = rawHour % 12;
-    if (meridiem === "PM") {
-      hour += 12;
-    }
-
-    return { hour, minute };
-  }
-
-  const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/u.exec(trimmed);
-  if (!twentyFourHourMatch) {
-    return null;
-  }
-
-  const hour = Number.parseInt(twentyFourHourMatch[1] ?? "", 10);
-  const minute = Number.parseInt(twentyFourHourMatch[2] ?? "", 10);
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return null;
-  }
-
-  return { hour, minute };
-};
-
-const parseUsDateTime = (value: string): string | null => {
-  const trimmed = value.trim();
-  const match =
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
-  if (!match) {
-    return null;
-  }
-
-  const month = Number.parseInt(match[1] ?? "", 10);
-  const day = Number.parseInt(match[2] ?? "", 10);
-  const year = Number.parseInt(match[3] ?? "", 10);
-  const rawHour = Number.parseInt(match[4] ?? "", 10);
-  const minute = Number.parseInt(match[5] ?? "", 10);
-  const meridiem = (match[6] ?? "").toUpperCase();
-
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31 ||
-    rawHour < 1 ||
-    rawHour > 12 ||
-    minute < 0 ||
-    minute > 59
-  ) {
-    return null;
-  }
-
-  let hour = rawHour % 12;
-  if (meridiem === "PM") {
-    hour += 12;
-  }
-
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return date.toISOString();
-};
-
-const parseWeekdays = (value: string): Weekday[] | null => {
-  const parts = value
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .filter((part) => part.length > 0);
-
-  if (parts.length === 0) {
-    return null;
-  }
-
-  const unique = new Set<Weekday>();
-  for (const part of parts) {
-    if (!weekdayNames.includes(part as Weekday)) {
-      return null;
-    }
-    unique.add(part as Weekday);
-  }
-
-  return weekdayNames.filter((day) => unique.has(day));
-};
-
-const parseTaskScheduleCommand = (
-  value: string,
-): { prompt: string; schedule: TaskSchedule; title: string } | null => {
-  const parts = value.split("|").map((part) => part.trim());
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  const [schedulePart, title, prompt] = parts;
-  if (!schedulePart || !title || !prompt) {
-    return null;
-  }
-
-  const usDateTime = parseUsDateTime(schedulePart);
-  if (usDateTime) {
-    return {
-      schedule: {
-        type: "once",
-        runAt: usDateTime,
-      },
-      title,
-      prompt,
-    };
-  }
-
-  const tokens = schedulePart.split(/\s+/u);
-  const kind = tokens[0]?.toLowerCase();
-
-  if (kind === "once" && tokens.length >= 2) {
-    const runAt = parseUsDateTime(tokens.slice(1).join(" "));
-    if (!runAt) {
-      return null;
-    }
-
-    return {
-      schedule: {
-        type: "once",
-        runAt,
-      },
-      title,
-      prompt,
-    };
-  }
-
-  if (kind === "hourly" && tokens.length === 1) {
-    return {
-      schedule: {
-        type: "hourly",
-        minute: new Date().getMinutes(),
-      },
-      title,
-      prompt,
-    };
-  }
-
-  if (kind === "daily" && tokens.length === 2) {
-    const time = parseTimeOfDay(tokens[1] ?? "");
-    if (!time) {
-      return null;
-    }
-
-    return {
-      schedule: {
-        type: "daily",
-        hour: time.hour,
-        minute: time.minute,
-      },
-      title,
-      prompt,
-    };
-  }
-
-  if (kind === "weekly" && tokens.length === 3) {
-    const days = parseWeekdays(tokens[1] ?? "");
-    const time = parseTimeOfDay(tokens[2] ?? "");
-    if (!days || !time) {
-      return null;
-    }
-
-    return {
-      schedule: {
-        type: "weekly",
-        days,
-        hour: time.hour,
-        minute: time.minute,
-      },
-      title,
-      prompt,
-    };
-  }
-
-  return null;
-};
 
 export const runRepl = async (
   config: AppConfig,
@@ -529,7 +336,7 @@ export const runRepl = async (
     }
 
     if (line.startsWith("/task schedule ")) {
-      const parsed = parseTaskScheduleCommand(line.slice("/task schedule ".length).trim());
+      const parsed = parseTaskSchedule(line.slice("/task schedule ".length).trim());
       if (!parsed) {
         output.write(
           "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>\n" +
