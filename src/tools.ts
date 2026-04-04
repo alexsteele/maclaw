@@ -1,4 +1,4 @@
-import type { AppConfig } from "./config.js";
+import type { ProjectConfig } from "./config.js";
 import { TaskScheduler } from "./scheduler.js";
 import { loadSkills } from "./skills.js";
 import type { ToolDefinition } from "./types.js";
@@ -20,7 +20,7 @@ const requiredString = (value: unknown, name: string): string => {
 };
 
 export const createTools = (
-  config: AppConfig,
+  config: ProjectConfig,
   scheduler: TaskScheduler,
   chatId: string,
 ): ToolDefinition[] => {
@@ -143,12 +143,11 @@ export const createTools = (
           {
             projectConfigFile: config.projectConfigFile,
             projectFolder: config.projectFolder,
-            projectName: config.projectName,
+            projectName: config.name,
             isProjectInitialized: config.isProjectInitialized,
             provider: config.provider,
             chatId,
             skillsDir: config.skillsDir,
-            dataDir: config.dataDir,
             retentionDays: config.retentionDays,
             compressionMode: config.compressionMode,
             schedulerPollMs: config.schedulerPollMs,

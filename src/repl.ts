@@ -1,6 +1,7 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { Harness, type ProjectInfo } from "./harness.js";
+import { Harness } from "./harness.js";
+import type { ProjectConfig } from "./config.js";
 import { parseTaskSchedule } from "./task.js";
 import type { TaskSchedule } from "./types.js";
 
@@ -185,18 +186,21 @@ const renderTaskList = async (tasks: Awaited<ReturnType<Harness["listCurrentChat
   return [header, separator, ...lines].join("\n");
 };
 
-const renderProjectInfo = (projectInfo: ProjectInfo): string => {
+const renderProjectInfo = (
+  projectConfig: ProjectConfig,
+  currentChatId: string,
+): string => {
   return [
-    `name: ${projectInfo.name}`,
-    `initialized: ${projectInfo.initialized ? "yes" : "no"}`,
-    `createdAt: ${projectInfo.createdAt ?? "(not set)"}`,
-    `folder: ${projectInfo.folder}`,
-    `config: ${projectInfo.configFile ?? "(not set)"}`,
-    `provider: ${projectInfo.provider}`,
-    `model: ${projectInfo.model}`,
-    `retentionDays: ${projectInfo.retentionDays}`,
-    `currentChat: ${projectInfo.currentChat}`,
-    `skillsDir: ${projectInfo.skillsDir}`,
+    `name: ${projectConfig.name}`,
+    `initialized: ${projectConfig.isProjectInitialized ? "yes" : "no"}`,
+    `createdAt: ${projectConfig.createdAt ?? "(not set)"}`,
+    `folder: ${projectConfig.projectFolder}`,
+    `config: ${projectConfig.isProjectInitialized ? projectConfig.projectConfigFile : "(not set)"}`,
+    `provider: ${projectConfig.provider}`,
+    `model: ${projectConfig.model}`,
+    `retentionDays: ${projectConfig.retentionDays}`,
+    `currentChat: ${currentChatId}`,
+    `skillsDir: ${projectConfig.skillsDir}`,
   ].join("\n");
 };
 
@@ -371,7 +375,9 @@ class Repl {
 
   private async handleProjectCommand(line: string): Promise<void> {
     if (line === "/project" || line === "/project show") {
-      this.writeLine(renderProjectInfo(this.harness.getProjectInfo()));
+      this.writeLine(
+        renderProjectInfo(this.harness.config, this.harness.getCurrentChatId()),
+      );
       return;
     }
 
@@ -461,7 +467,7 @@ class Repl {
         return;
       }
 
-      const task = await this.harness.createTaskForCurrentChat({
+      const task = await this.harness.createTask({
         title: parsed.title,
         prompt: parsed.prompt,
         schedule: parsed.schedule,

@@ -1,4 +1,4 @@
-import type { AppConfig } from "./config.js";
+import type { ProjectConfig } from "./config.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
 import { appendMessage, type ChatStore } from "./chats.js";
 import { loadSkills } from "./skills.js";
@@ -7,7 +7,7 @@ import type { ChatRecord, ChatSummary, Message } from "./types.js";
 import { TaskScheduler } from "./scheduler.js";
 
 const buildSystemPrompt = async (
-  config: AppConfig,
+  config: ProjectConfig,
   chat: ChatRecord,
 ): Promise<string> => {
   const skills = await loadSkills(config.skillsDir);
@@ -34,7 +34,7 @@ const buildSystemPrompt = async (
   ].join("\n");
 };
 
-const createProvider = (config: AppConfig): Provider => {
+const createProvider = (config: ProjectConfig): Provider => {
   if (config.provider === "openai" && config.openAiApiKey) {
     return new OpenAIResponsesProvider(config.openAiApiKey, config.model);
   }
@@ -43,14 +43,14 @@ const createProvider = (config: AppConfig): Provider => {
 };
 
 export class MaclawAgent {
-  private readonly config: AppConfig;
+  private readonly config: ProjectConfig;
   private readonly scheduler: TaskScheduler;
   private readonly chatStore: ChatStore;
   private readonly provider: Provider;
   private activeChatId: string;
   private activeChat?: ChatRecord;
 
-  constructor(config: AppConfig, scheduler: TaskScheduler, chatStore: ChatStore) {
+  constructor(config: ProjectConfig, scheduler: TaskScheduler, chatStore: ChatStore) {
     this.config = config;
     this.scheduler = scheduler;
     this.chatStore = chatStore;
@@ -59,7 +59,7 @@ export class MaclawAgent {
   }
 
   private getChatLoadOptions() {
-    return {
+      return {
       retentionDays: this.config.retentionDays,
       compressionMode: this.config.compressionMode,
     } as const;

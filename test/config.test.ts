@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { initProjectConfig, loadConfig } from "../src/config.js";
+import {
+  defaultTaskRunsFile,
+  defaultTasksFile,
+  initProjectConfig,
+  loadConfig,
+} from "../src/config.js";
 
 test("loadConfig derives project-local paths from the current folder and maclaw.json", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-"));
@@ -33,15 +38,11 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.isProjectInitialized, true);
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
     assert.equal(config.projectFolder, rootDir);
-    assert.equal(config.projectName, "example-project");
-    assert.equal(config.dataDir, path.join(rootDir, ".maclaw"));
+    assert.equal(config.name, "example-project");
     assert.equal(config.skillsDir, path.join(rootDir, "project-skills"));
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
-    assert.equal(config.schedulerFile, path.join(rootDir, ".maclaw", "tasks.json"));
-    assert.equal(
-      config.taskRunsFile,
-      path.join(rootDir, ".maclaw", "task-runs.jsonl"),
-    );
+    assert.equal(defaultTasksFile(rootDir), path.join(rootDir, ".maclaw", "tasks.json"));
+    assert.equal(defaultTaskRunsFile(rootDir), path.join(rootDir, ".maclaw", "task-runs.jsonl"));
     assert.equal(config.retentionDays, 14);
     assert.equal(config.chatId, "default");
     assert.equal(config.provider, "local");
@@ -60,7 +61,6 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
     assert.equal(config.isProjectInitialized, false);
     assert.equal(config.createdAt, undefined);
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
-    assert.equal(config.dataDir, path.join(rootDir, ".maclaw"));
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
   } finally {
     await rm(rootDir, { recursive: true, force: true });

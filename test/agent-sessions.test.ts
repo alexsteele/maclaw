@@ -4,7 +4,8 @@ import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { MaclawAgent } from "../src/agent.js";
-import type { AppConfig } from "../src/config.js";
+import type { ProjectConfig } from "../src/config.js";
+import { defaultTasksFile } from "../src/config.js";
 import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
 import { JsonFileChatStore, appendMessage } from "../src/chats.js";
 
@@ -14,27 +15,25 @@ const createHarness = async (): Promise<{
   chatStore: JsonFileChatStore;
 }> => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-"));
-  const config: AppConfig = {
+  const tasksFile = defaultTasksFile(projectDir);
+  const config: ProjectConfig = {
+    name: path.basename(projectDir),
     createdAt: undefined,
-    dataDir: path.join(projectDir, ".maclaw"),
-    isProjectInitialized: true,
-    model: "gpt-4.1-mini",
     provider: "local",
-    projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
-    projectFolder: projectDir,
-    projectName: path.basename(projectDir),
-    chatsDir: path.join(projectDir, ".maclaw", "chats"),
-    schedulerFile: path.join(projectDir, ".maclaw", "tasks.json"),
-    taskRunsFile: path.join(projectDir, ".maclaw", "task-runs.jsonl"),
-    skillsDir: path.join(projectDir, ".maclaw", "skills"),
-    chatId: "default",
+    model: "gpt-4.1-mini",
     retentionDays: 30,
+    skillsDir: path.join(projectDir, ".maclaw", "skills"),
     compressionMode: "none",
     schedulerPollMs: 1_000,
+    projectFolder: projectDir,
+    projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+    isProjectInitialized: true,
+    chatId: "default",
+    chatsDir: path.join(projectDir, ".maclaw", "chats"),
   };
 
   const chatStore = new JsonFileChatStore(config.chatsDir);
-  const scheduler = new TaskScheduler(new JsonFileTaskStore(config.schedulerFile));
+  const scheduler = new TaskScheduler(new JsonFileTaskStore(tasksFile));
   const agent = new MaclawAgent(config, scheduler, chatStore);
 
   return {

@@ -12,7 +12,7 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
     const harness = Harness.load(projectDir);
 
     await harness.handleUserInput("remember this");
-    await harness.createTaskForCurrentChat({
+    await harness.createTask({
       title: "Follow up",
       prompt: "Check back later",
       runAt: "2026-04-05T09:00:00-07:00",
@@ -26,7 +26,7 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
 
     assert.equal(upgraded, harness);
     assert.equal(harness.config.isProjectInitialized, true);
-    assert.equal(harness.config.projectName, "test-project");
+    assert.equal(harness.config.name, "test-project");
     assert.equal(harness.config.provider, "local");
     assert.equal(harness.config.model, "test-model");
 

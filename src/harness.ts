@@ -1,7 +1,8 @@
 import {
+  defaultTaskRunsFile,
+  defaultTasksFile,
   initProjectConfig,
   loadConfig,
-  type AppConfig,
   type ProjectConfig,
 } from "./config.js";
 import { MaclawAgent } from "./agent.js";
@@ -25,41 +26,33 @@ import type {
   Skill,
 } from "./types.js";
 
-export type ProjectInfo = {
-  name: string;
-  initialized: boolean;
-  createdAt?: string;
-  folder: string;
-  configFile?: string;
-  provider: AppConfig["provider"];
-  model: string;
-  retentionDays: number;
-  currentChat: string;
-  skillsDir: string;
-};
-
-const createChatStore = (config: AppConfig): ChatStore => {
+const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.isProjectInitialized
     ? new JsonFileChatStore(config.chatsDir)
     : new MemoryChatStore();
 };
 
-const createScheduler = (config: AppConfig): TaskScheduler => {
+const createScheduler = (config: ProjectConfig): TaskScheduler => {
   return config.isProjectInitialized
-    ? new TaskScheduler(new JsonFileTaskStore(config.schedulerFile, config.taskRunsFile))
+    ? new TaskScheduler(
+        new JsonFileTaskStore(
+          defaultTasksFile(config.projectFolder),
+          defaultTaskRunsFile(config.projectFolder),
+        ),
+      )
     : new TaskScheduler(new MemoryTaskStore());
 };
 
 // Harness orchestrates user interactions with a project.
 // A default harness has no project. initProject() creates one.
 export class Harness {
-  private _config: AppConfig;
+  private _config: ProjectConfig;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
   private _agent: MaclawAgent;
   private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
 
-  constructor(config: AppConfig) {
+  constructor(config: ProjectConfig) {
     this._config = config;
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
@@ -70,7 +63,7 @@ export class Harness {
     return new Harness(loadConfig(cwd));
   }
 
-  get config(): AppConfig {
+  get config(): ProjectConfig {
     return this._config;
   }
 
@@ -99,7 +92,7 @@ export class Harness {
       ...configPatch,
       createdAt: this.config.createdAt ?? new Date().toISOString(),
     });
-    const nextConfig: AppConfig = {
+    const nextConfig: ProjectConfig = {
       ...loadConfig(this._config.projectFolder),
       chatId: this.getCurrentChatId(),
     };
@@ -137,23 +130,6 @@ export class Harness {
 
   getCurrentChatId(): string {
     return this._agent.getCurrentChatId();
-  }
-
-  getProjectInfo(): ProjectInfo {
-    return {
-      name: this.config.projectName,
-      initialized: this.config.isProjectInitialized,
-      createdAt: this.config.createdAt,
-      folder: this.config.projectFolder,
-      configFile: this.config.isProjectInitialized
-        ? this.config.projectConfigFile
-        : undefined,
-      provider: this.config.provider,
-      model: this.config.model,
-      retentionDays: this.config.retentionDays,
-      currentChat: this.getCurrentChatId(),
-      skillsDir: this.config.skillsDir,
-    };
   }
 
   getChatOptions(): ChatLoadOptions {
@@ -211,23 +187,14 @@ export class Harness {
   }
 
   async createTask(input: {
-    chatId: string;
+    chatId?: string;
     title: string;
     prompt: string;
     schedule?: ScheduledTask["schedule"];
     runAt?: string;
   }): Promise<ScheduledTask> {
-    return this._scheduler.createTask(input);
-  }
-
-  async createTaskForCurrentChat(input: {
-    title: string;
-    prompt: string;
-    schedule?: ScheduledTask["schedule"];
-    runAt?: string;
-  }): Promise<ScheduledTask> {
-    return this.createTask({
-      chatId: this.getCurrentChatId(),
+    return this._scheduler.createTask({
+      chatId: input.chatId ?? this.getCurrentChatId(),
       ...input,
     });
   }
