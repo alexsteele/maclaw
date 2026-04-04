@@ -8,7 +8,7 @@ export type Message = {
   name?: string;
 };
 
-export type SessionRecord = {
+export type ChatRecord = {
   id: string;
   createdAt: string;
   updatedAt: string;
@@ -18,7 +18,7 @@ export type SessionRecord = {
   messages: Message[];
 };
 
-export type SessionSummary = {
+export type ChatSummary = {
   id: string;
   createdAt: string;
   updatedAt: string;
@@ -57,7 +57,7 @@ export type TaskSchedule =
 
 export type ScheduledTask = {
   id: string;
-  sessionId: string;
+  chatId: string;
   title: string;
   prompt: string;
   schedule: TaskSchedule;
@@ -72,7 +72,7 @@ export type ScheduledTask = {
 export type TaskRunLogEntry = {
   timestamp: string;
   taskId: string;
-  sessionId: string;
+  chatId: string;
   title: string;
   prompt: string;
   schedule: TaskSchedule;
@@ -91,7 +91,7 @@ export type ToolDefinition = {
 };
 
 export type ProviderRequest = {
-  session: SessionRecord;
+  chat: ChatRecord;
   userInput: string;
   systemPrompt: string;
   tools: ToolDefinition[];

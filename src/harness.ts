@@ -12,16 +12,16 @@ import {
   TaskScheduler,
 } from "./scheduler.js";
 import {
-  JsonFileSessionStore,
-  MemorySessionStore,
-  type SessionLoadOptions,
-  type SessionStore,
-} from "./sessions.js";
+  JsonFileChatStore,
+  MemoryChatStore,
+  type ChatLoadOptions,
+  type ChatStore,
+} from "./chats.js";
 import type {
+  ChatRecord,
+  ChatSummary,
   Message,
   ScheduledTask,
-  SessionRecord,
-  SessionSummary,
   Skill,
 } from "./types.js";
 
@@ -38,10 +38,10 @@ export type ProjectInfo = {
   skillsDir: string;
 };
 
-const createSessionStore = (config: AppConfig): SessionStore => {
+const createChatStore = (config: AppConfig): ChatStore => {
   return config.isProjectInitialized
-    ? new JsonFileSessionStore(config.sessionsDir)
-    : new MemorySessionStore();
+    ? new JsonFileChatStore(config.chatsDir)
+    : new MemoryChatStore();
 };
 
 const createScheduler = (config: AppConfig): TaskScheduler => {
@@ -53,15 +53,15 @@ const createScheduler = (config: AppConfig): TaskScheduler => {
 export class Harness {
   private _config: AppConfig;
   private _scheduler: TaskScheduler;
-  private _sessionStore: SessionStore;
+  private _chatStore: ChatStore;
   private _agent: MaclawAgent;
   private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
 
   constructor(config: AppConfig) {
     this._config = config;
     this._scheduler = createScheduler(config);
-    this._sessionStore = createSessionStore(config);
-    this._agent = new MaclawAgent(config, this._scheduler, this._sessionStore);
+    this._chatStore = createChatStore(config);
+    this._agent = new MaclawAgent(config, this._scheduler, this._chatStore);
   }
 
   static load(cwd?: string): Harness {
@@ -77,7 +77,7 @@ export class Harness {
   ): void {
     this._taskListener = onTaskMessage;
     this._scheduler.start(this._config.schedulerPollMs, async (task) => {
-      const message = await this.handleScheduledTask(task.sessionId, task.prompt);
+      const message = await this.handleScheduledTask(task.chatId, task.prompt);
       await onTaskMessage(task, message);
     });
   }
@@ -97,19 +97,19 @@ export class Harness {
     });
     const nextConfig: AppConfig = {
       ...loadConfig(this._config.projectFolder),
-      sessionId: this.getCurrentChatId(),
+      chatId: this.getCurrentChatId(),
     };
-    const nextSessionStore = createSessionStore(nextConfig);
+    const nextChatStore = createChatStore(nextConfig);
     const nextScheduler = createScheduler(nextConfig);
-    const nextAgent = new MaclawAgent(nextConfig, nextScheduler, nextSessionStore);
+    const nextAgent = new MaclawAgent(nextConfig, nextScheduler, nextChatStore);
 
-    const activeSession = await this.loadCurrentChat();
-    await nextSessionStore.saveSession(activeSession);
+    const activeChat = await this.loadCurrentChat();
+    await nextChatStore.saveChat(activeChat);
 
-    const sessions = await this.listChats();
-    for (const summary of sessions) {
-      const session = await this.loadChat(summary.id);
-      await nextSessionStore.saveSession(session);
+    const chats = await this.listChats();
+    for (const summary of chats) {
+      const chat = await this.loadChat(summary.id);
+      await nextChatStore.saveChat(chat);
     }
 
     const tasks = await this.listTasks();
@@ -120,7 +120,7 @@ export class Harness {
     }
 
     this._config = nextConfig;
-    this._sessionStore = nextSessionStore;
+    this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
     this._agent = nextAgent;
 
@@ -132,7 +132,7 @@ export class Harness {
   }
 
   getCurrentChatId(): string {
-    return this._agent.getCurrentSessionId();
+    return this._agent.getCurrentChatId();
   }
 
   getProjectInfo(): ProjectInfo {
@@ -152,7 +152,7 @@ export class Harness {
     };
   }
 
-  getSessionOptions(): SessionLoadOptions {
+  getChatOptions(): ChatLoadOptions {
     return {
       retentionDays: this.config.retentionDays,
       compressionMode: this.config.compressionMode,
@@ -160,38 +160,38 @@ export class Harness {
   }
 
   async pruneExpiredChats(): Promise<number> {
-    return this._sessionStore.pruneExpiredSessions(this._config.retentionDays);
+    return this._chatStore.pruneExpiredChats(this._config.retentionDays);
   }
 
-  async listChats(): Promise<SessionSummary[]> {
-    return this._agent.listSessions();
+  async listChats(): Promise<ChatSummary[]> {
+    return this._agent.listChats();
   }
 
   async listSkills(): Promise<Skill[]> {
     return loadSkills(this._config.skillsDir);
   }
 
-  async switchChat(chatId: string): Promise<SessionRecord> {
-    return this._agent.switchSession(chatId);
+  async switchChat(chatId: string): Promise<ChatRecord> {
+    return this._agent.switchChat(chatId);
   }
 
-  async forkChat(newChatId: string): Promise<SessionRecord> {
-    return this._agent.forkSession(newChatId);
+  async forkChat(newChatId: string): Promise<ChatRecord> {
+    return this._agent.forkChat(newChatId);
   }
 
-  async loadCurrentChat(): Promise<SessionRecord> {
-    return this._agent.loadActiveSession();
+  async loadCurrentChat(): Promise<ChatRecord> {
+    return this._agent.loadActiveChat();
   }
 
   async getCurrentChatTranscript(): Promise<string> {
-    const session = await this.loadCurrentChat();
-    return session.messages.length === 0
+    const chat = await this.loadCurrentChat();
+    return chat.messages.length === 0
       ? "No history yet."
-      : session.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+      : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
   }
 
-  async loadChat(chatId: string): Promise<SessionRecord> {
-    return this._sessionStore.loadSession(chatId, this.getSessionOptions());
+  async loadChat(chatId: string): Promise<ChatRecord> {
+    return this._chatStore.loadChat(chatId, this.getChatOptions());
   }
 
   async listTasks(chatId?: string): Promise<ScheduledTask[]> {
@@ -207,7 +207,7 @@ export class Harness {
   }
 
   async createTask(input: {
-    sessionId: string;
+    chatId: string;
     title: string;
     prompt: string;
     schedule?: ScheduledTask["schedule"];
@@ -223,7 +223,7 @@ export class Harness {
     runAt?: string;
   }): Promise<ScheduledTask> {
     return this.createTask({
-      sessionId: this.getCurrentChatId(),
+      chatId: this.getCurrentChatId(),
       ...input,
     });
   }
@@ -240,8 +240,8 @@ export class Harness {
     return this._agent.handleUserInput(userInput);
   }
 
-  async handleScheduledTask(sessionId: string, prompt: string): Promise<Message> {
-    return this._agent.handleScheduledTask(sessionId, prompt);
+  async handleScheduledTask(chatId: string, prompt: string): Promise<Message> {
+    return this._agent.handleScheduledTask(chatId, prompt);
   }
 
   async runDueTasks(

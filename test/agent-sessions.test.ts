@@ -6,12 +6,12 @@ import test from "node:test";
 import { MaclawAgent } from "../src/agent.js";
 import type { AppConfig } from "../src/config.js";
 import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
-import { JsonFileSessionStore, appendMessage } from "../src/sessions.js";
+import { JsonFileChatStore, appendMessage } from "../src/chats.js";
 
 const createHarness = async (): Promise<{
   agent: MaclawAgent;
   cleanup: () => Promise<void>;
-  sessionStore: JsonFileSessionStore;
+  chatStore: JsonFileChatStore;
 }> => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-"));
   const config: AppConfig = {
@@ -23,44 +23,44 @@ const createHarness = async (): Promise<{
     projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
     projectFolder: projectDir,
     projectName: path.basename(projectDir),
-    sessionsDir: path.join(projectDir, ".maclaw", "chats"),
+    chatsDir: path.join(projectDir, ".maclaw", "chats"),
     schedulerFile: path.join(projectDir, ".maclaw", "tasks.json"),
     taskRunsFile: path.join(projectDir, ".maclaw", "task-runs.jsonl"),
     skillsDir: path.join(projectDir, ".maclaw", "skills"),
-    sessionId: "default",
+    chatId: "default",
     retentionDays: 30,
     compressionMode: "none",
     schedulerPollMs: 1_000,
   };
 
-  const sessionStore = new JsonFileSessionStore(config.sessionsDir);
+  const chatStore = new JsonFileChatStore(config.chatsDir);
   const scheduler = new TaskScheduler(new JsonFileTaskStore(config.schedulerFile));
-  const agent = new MaclawAgent(config, scheduler, sessionStore);
+  const agent = new MaclawAgent(config, scheduler, chatStore);
 
   return {
     agent,
     cleanup: async () => rm(projectDir, { recursive: true, force: true }),
-    sessionStore,
+    chatStore,
   };
 };
 
-test("agent can fork and switch sessions", async () => {
-  const { agent, cleanup, sessionStore } = await createHarness();
+test("agent can fork and switch chats", async () => {
+  const { agent, cleanup, chatStore } = await createHarness();
 
   try {
-    const session = await agent.loadActiveSession();
-    appendMessage(session, "user", "hello from default");
-    await sessionStore.saveSession(session);
+    const chat = await agent.loadActiveChat();
+    appendMessage(chat, "user", "hello from default");
+    await chatStore.saveChat(chat);
 
-    const forked = await agent.forkSession("branch-a");
+    const forked = await agent.forkChat("branch-a");
     assert.equal(forked.id, "branch-a");
-    assert.equal(agent.getCurrentSessionId(), "branch-a");
+    assert.equal(agent.getCurrentChatId(), "branch-a");
     assert.equal(forked.messages.length, 1);
     assert.equal(forked.messages[0]?.content, "hello from default");
 
-    const switched = await agent.switchSession("fresh");
+    const switched = await agent.switchChat("fresh");
     assert.equal(switched.id, "fresh");
-    assert.equal(agent.getCurrentSessionId(), "fresh");
+    assert.equal(agent.getCurrentChatId(), "fresh");
     assert.equal(switched.messages.length, 0);
   } finally {
     await cleanup();

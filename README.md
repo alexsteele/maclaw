@@ -76,7 +76,7 @@ Commands:
   /help              Show this help
   /project           Project information commands
   /chat              Chat management commands
-  /history           Show the current session transcript
+  /history           Show the current chat transcript
   /skills            List local skills
   /task              Task scheduling commands
   /quit              Exit the REPL
@@ -98,7 +98,7 @@ Environment variables:
 - `OPENAI_MODEL`: backward-compatible override for OpenAI model selection
 - `MACLAW_DATA_DIR`: overrides the default `projectFolder/.maclaw`
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
-- `MACLAW_SESSION_ID`: defaults to `default`
+- `MACLAW_CHAT_ID`: defaults to `default`
 - `MACLAW_RETENTION_DAYS`: defaults to `30`
 - `MACLAW_COMPRESSION_MODE`: `none` or `planned`
 - `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`
@@ -123,9 +123,9 @@ Currently supported providers:
 
 - Chat support for WhatsApp, SMS, etc.
 - Support other LLMs
-- Improve session storage and retention policies (sqlite)
+- Improve chat storage and retention policies (sqlite)
 - Better project management.
-- Session compression and summarization.
+- Chat compression and summarization.
 - MCP support
 - Tool approval and policy controls.
 - Tests and end-to-end dev workflow.

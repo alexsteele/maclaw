@@ -22,7 +22,7 @@ const requiredString = (value: unknown, name: string): string => {
 export const createTools = (
   config: AppConfig,
   scheduler: TaskScheduler,
-  sessionId: string,
+  chatId: string,
 ): ToolDefinition[] => {
   return [
     {
@@ -92,7 +92,7 @@ export const createTools = (
         }
 
         const task = await scheduler.createTask({
-          sessionId,
+          chatId,
           title,
           prompt,
           runAt,
@@ -103,16 +103,16 @@ export const createTools = (
     },
     {
       name: "list_tasks",
-      description: "List scheduled tasks for the current session.",
+      description: "List scheduled tasks for the current chat.",
       inputSchema: {
         type: "object",
         properties: {},
         additionalProperties: false,
       },
       execute: async () => {
-        const tasks = await scheduler.listTasks(sessionId);
+        const tasks = await scheduler.listTasks(chatId);
         if (tasks.length === 0) {
-          return "No tasks are scheduled for this session.";
+          return "No tasks are scheduled for this chat.";
         }
 
         return tasks
@@ -146,7 +146,7 @@ export const createTools = (
             projectName: config.projectName,
             isProjectInitialized: config.isProjectInitialized,
             provider: config.provider,
-            sessionId,
+            chatId,
             skillsDir: config.skillsDir,
             dataDir: config.dataDir,
             retentionDays: config.retentionDays,

@@ -12,11 +12,11 @@ export type AppConfig = {
   projectConfigFile: string;
   projectFolder: string;
   projectName: string;
-  sessionsDir: string;
+  chatsDir: string;
   schedulerFile: string;
   taskRunsFile: string;
   skillsDir: string;
-  sessionId: string;
+  chatId: string;
   retentionDays: number;
   compressionMode: "none" | "planned";
   schedulerPollMs: number;
@@ -119,11 +119,11 @@ export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
     projectConfigFile,
     projectFolder,
     projectName: projectFileConfig.name ?? path.basename(projectFolder),
-    sessionsDir: path.join(dataDir, "chats"),
+    chatsDir: path.join(dataDir, "chats"),
     schedulerFile: path.join(dataDir, "tasks.json"),
     taskRunsFile: path.join(dataDir, "task-runs.jsonl"),
     skillsDir,
-    sessionId: process.env.MACLAW_SESSION_ID ?? "default",
+    chatId: process.env.MACLAW_CHAT_ID ?? "default",
     retentionDays: toPositiveInt(
       process.env.MACLAW_RETENTION_DAYS,
       projectFileConfig.retentionDays ?? 30,

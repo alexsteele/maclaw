@@ -3,54 +3,54 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { JsonFileSessionStore, MemorySessionStore, appendMessage } from "../src/sessions.js";
+import { JsonFileChatStore, MemoryChatStore, appendMessage } from "../src/chats.js";
 
 const createStore = async (): Promise<{
   cleanup: () => Promise<void>;
   dir: string;
-  store: JsonFileSessionStore;
+  store: JsonFileChatStore;
 }> => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-sessions-"));
   return {
     cleanup: async () => rm(dir, { recursive: true, force: true }),
     dir,
-    store: new JsonFileSessionStore(dir),
+    store: new JsonFileChatStore(dir),
   };
 };
 
-test("loadSession creates a new session with the requested options", async () => {
+test("loadChat creates a new chat with the requested options", async () => {
   const { cleanup, store } = await createStore();
 
   try {
-    const session = await store.loadSession("alpha", {
+    const chat = await store.loadChat("alpha", {
       retentionDays: 14,
       compressionMode: "planned",
     });
 
-    assert.equal(session.id, "alpha");
-    assert.equal(session.retentionDays, 14);
-    assert.equal(session.compressionMode, "planned");
-    assert.deepEqual(session.messages, []);
-    assert.ok(session.createdAt);
-    assert.ok(session.updatedAt);
+    assert.equal(chat.id, "alpha");
+    assert.equal(chat.retentionDays, 14);
+    assert.equal(chat.compressionMode, "planned");
+    assert.deepEqual(chat.messages, []);
+    assert.ok(chat.createdAt);
+    assert.ok(chat.updatedAt);
   } finally {
     await cleanup();
   }
 });
 
-test("saveSession persists messages and loadSession reapplies current options", async () => {
+test("saveChat persists messages and loadChat reapplies current options", async () => {
   const { cleanup, store } = await createStore();
 
   try {
-    const session = await store.loadSession("beta", {
+    const chat = await store.loadChat("beta", {
       retentionDays: 30,
       compressionMode: "none",
     });
 
-    appendMessage(session, "user", "hello");
-    await store.saveSession(session);
+    appendMessage(chat, "user", "hello");
+    await store.saveChat(chat);
 
-    const reloaded = await store.loadSession("beta", {
+    const reloaded = await store.loadChat("beta", {
       retentionDays: 7,
       compressionMode: "planned",
     });
@@ -64,21 +64,21 @@ test("saveSession persists messages and loadSession reapplies current options", 
   }
 });
 
-test("pruneExpiredSessions removes stale session files and keeps fresh ones", async () => {
+test("pruneExpiredChats removes stale chat files and keeps fresh ones", async () => {
   const { cleanup, dir, store } = await createStore();
 
   try {
-    const staleSession = await store.loadSession("stale", {
+    const staleChat = await store.loadChat("stale", {
       retentionDays: 1,
       compressionMode: "none",
     });
-    await store.saveSession(staleSession);
+    await store.saveChat(staleChat);
 
-    const freshSession = await store.loadSession("fresh", {
+    const freshChat = await store.loadChat("fresh", {
       retentionDays: 1,
       compressionMode: "none",
     });
-    await store.saveSession(freshSession);
+    await store.saveChat(freshChat);
 
     const stalePath = path.join(dir, "stale.json");
     const staleRaw = await readFile(stalePath, "utf8");
@@ -86,15 +86,15 @@ test("pruneExpiredSessions removes stale session files and keeps fresh ones", as
     staleJson.updatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     await writeFile(stalePath, `${JSON.stringify(staleJson, null, 2)}\n`, "utf8");
 
-    const removed = await store.pruneExpiredSessions(1);
+    const removed = await store.pruneExpiredChats(1);
 
     assert.equal(removed, 1);
 
-    const staleExists = await store.loadSession("stale", {
+    const staleExists = await store.loadChat("stale", {
       retentionDays: 1,
       compressionMode: "none",
     });
-    const freshExists = await store.loadSession("fresh", {
+    const freshExists = await store.loadChat("fresh", {
       retentionDays: 1,
       compressionMode: "none",
     });
@@ -106,54 +106,54 @@ test("pruneExpiredSessions removes stale session files and keeps fresh ones", as
   }
 });
 
-test("listSessions returns saved sessions sorted by most recent update", async () => {
+test("listChats returns saved chats sorted by most recent update", async () => {
   const { cleanup, store } = await createStore();
 
   try {
-    const older = await store.loadSession("older", {
+    const older = await store.loadChat("older", {
       retentionDays: 30,
       compressionMode: "none",
     });
     appendMessage(older, "user", "first");
-    await store.saveSession(older);
+    await store.saveChat(older);
 
-    const newer = await store.loadSession("newer", {
+    const newer = await store.loadChat("newer", {
       retentionDays: 30,
       compressionMode: "none",
     });
     appendMessage(newer, "assistant", "second");
-    await store.saveSession(newer);
+    await store.saveChat(newer);
 
-    const sessions = await store.listSessions();
+    const chats = await store.listChats();
 
-    assert.equal(sessions.length, 2);
-    assert.equal(sessions[0]?.id, "newer");
-    assert.equal(sessions[0]?.messageCount, 1);
-    assert.equal(sessions[1]?.id, "older");
+    assert.equal(chats.length, 2);
+    assert.equal(chats[0]?.id, "newer");
+    assert.equal(chats[0]?.messageCount, 1);
+    assert.equal(chats[1]?.id, "older");
   } finally {
     await cleanup();
   }
 });
 
-test("MemorySessionStore keeps chats in memory without filesystem backing", async () => {
-  const store = new MemorySessionStore();
+test("MemoryChatStore keeps chats in memory without filesystem backing", async () => {
+  const store = new MemoryChatStore();
 
-  const session = await store.loadSession("alpha", {
+  const chat = await store.loadChat("alpha", {
     retentionDays: 30,
     compressionMode: "none",
   });
-  appendMessage(session, "user", "hello");
-  await store.saveSession(session);
+  appendMessage(chat, "user", "hello");
+  await store.saveChat(chat);
 
-  const reloaded = await store.loadSession("alpha", {
+  const reloaded = await store.loadChat("alpha", {
     retentionDays: 7,
     compressionMode: "planned",
   });
-  const sessions = await store.listSessions();
+  const chats = await store.listChats();
 
   assert.equal(reloaded.messages.length, 1);
   assert.equal(reloaded.retentionDays, 7);
   assert.equal(reloaded.compressionMode, "planned");
-  assert.equal(sessions.length, 1);
-  assert.equal(sessions[0]?.id, "alpha");
+  assert.equal(chats.length, 1);
+  assert.equal(chats[0]?.id, "alpha");
 });

@@ -9,7 +9,7 @@ const helpText = [
   "  /help              Show this help",
   "  /project           Project information commands",
   "  /chat              Chat management commands",
-  "  /history           Show the current session transcript",
+  "  /history           Show the current chat transcript",
   "  /skills            List local skills",
   "  /task              Task scheduling commands",
   "  /quit              Exit the REPL",
@@ -51,7 +51,7 @@ const timeFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-const parseSessionId = (value: string): string | null => {
+const parseChatId = (value: string): string | null => {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
     return null;
@@ -60,16 +60,16 @@ const parseSessionId = (value: string): string | null => {
   return /^[A-Za-z0-9._-]+$/u.test(trimmed) ? trimmed : null;
 };
 
-const buildForkSessionId = async (
+const buildForkChatId = async (
   harness: Harness,
   requestedId?: string,
 ): Promise<string | null> => {
   if (requestedId && requestedId.trim().length > 0) {
-    return parseSessionId(requestedId);
+    return parseChatId(requestedId);
   }
 
   const baseId = `${harness.getCurrentChatId()}-fork`;
-  const existingIds = new Set((await harness.listChats()).map((session) => session.id));
+  const existingIds = new Set((await harness.listChats()).map((chat) => chat.id));
   if (!existingIds.has(baseId)) {
     return baseId;
   }
@@ -293,7 +293,9 @@ class Repl {
     output.write("maclaw REPL\n");
     output.write(`chat: ${this.harness.getCurrentChatId()}\n`);
     if (!this.harness.config.isProjectInitialized) {
-      output.write("warning: running without a project config; chats, tasks, and logs will not be saved\n");
+      output.write(
+        "warning: running without a project config; chats, tasks, and logs will not be saved. run /project init to set up a project\n",
+      );
     }
     output.write("type /help for commands\n\n");
   }
@@ -401,19 +403,19 @@ class Repl {
     }
 
     if (line.startsWith("/chat switch ")) {
-      const requestedId = parseSessionId(line.slice("/chat switch ".length));
+      const requestedId = parseChatId(line.slice("/chat switch ".length));
       if (!requestedId) {
         this.writeLine("Chat ids may only contain letters, numbers, dots, underscores, and hyphens.");
         return;
       }
 
-      const session = await this.harness.switchChat(requestedId);
-      this.writeLine(`switched to chat: ${session.id}`);
+      const chat = await this.harness.switchChat(requestedId);
+      this.writeLine(`switched to chat: ${chat.id}`);
       return;
     }
 
     if (line === "/chat fork" || line.startsWith("/chat fork ")) {
-      const requestedId = await buildForkSessionId(
+      const requestedId = await buildForkChatId(
         this.harness,
         line.slice("/chat fork".length).trim(),
       );
@@ -422,14 +424,14 @@ class Repl {
         return;
       }
 
-      const existingSessions = await this.harness.listChats();
-      if (existingSessions.some((session) => session.id === requestedId)) {
+      const existingChats = await this.harness.listChats();
+      if (existingChats.some((chat) => chat.id === requestedId)) {
         this.writeLine(`chat already exists: ${requestedId}`);
         return;
       }
 
-      const session = await this.harness.forkChat(requestedId);
-      this.writeLine(`forked current chat to: ${session.id}`);
+      const chat = await this.harness.forkChat(requestedId);
+      this.writeLine(`forked current chat to: ${chat.id}`);
       return;
     }
 

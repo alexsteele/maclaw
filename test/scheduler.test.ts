@@ -30,13 +30,13 @@ test("deleteTask removes a task for the matching chat", async () => {
 
   try {
     const first = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "First task",
       prompt: "Do the first thing",
       runAt: "2026-04-05T09:00:00-07:00",
     });
     await scheduler.createTask({
-      sessionId: "chat-b",
+      chatId: "chat-b",
       title: "Second task",
       prompt: "Do the second thing",
       runAt: "2026-04-05T10:00:00-07:00",
@@ -47,7 +47,7 @@ test("deleteTask removes a task for the matching chat", async () => {
 
     assert.equal(deleted, true);
     assert.equal(remaining.length, 1);
-    assert.equal(remaining[0]?.sessionId, "chat-b");
+    assert.equal(remaining[0]?.chatId, "chat-b");
   } finally {
     await cleanup();
   }
@@ -58,7 +58,7 @@ test("deleteTask does not remove a task from another chat", async () => {
 
   try {
     const task = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "Keep task",
       prompt: "Leave this alone",
       runAt: "2026-04-05T09:00:00-07:00",
@@ -80,7 +80,7 @@ test("createTask stores a one-time task with nextRunAt", async () => {
 
   try {
     const task = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "One time task",
       prompt: "Run once",
       runAt: "2026-04-05T09:00:00-07:00",
@@ -98,7 +98,7 @@ test("runDueTasks advances recurring tasks instead of completing them", async ()
 
   try {
     const task = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "Hourly task",
       prompt: "Repeat every hour",
       schedule: {
@@ -134,7 +134,7 @@ test("createTask stores a weekly task using AM/PM wall clock time", async () => 
 
   try {
     const task = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "Stock Updates",
       prompt: "Send me a monday market update",
       schedule: {
@@ -207,7 +207,7 @@ test("runDueTasks writes a JSONL execution log entry", async () => {
 
   try {
     const task = await scheduler.createTask({
-      sessionId: "chat-a",
+      chatId: "chat-a",
       title: "Log me",
       prompt: "Record this run",
       runAt: new Date(Date.now() - 60_000).toISOString(),
@@ -223,7 +223,7 @@ test("runDueTasks writes a JSONL execution log entry", async () => {
 
     const entry = JSON.parse(lines[0] ?? "{}") as TaskRunLogEntry;
     assert.equal(entry.taskId, task.id);
-    assert.equal(entry.sessionId, "chat-a");
+    assert.equal(entry.chatId, "chat-a");
     assert.equal(entry.title, "Log me");
     assert.equal(entry.prompt, "Record this run");
     assert.equal(entry.status, "completed");
@@ -236,7 +236,7 @@ test("runDueTasks writes a JSONL execution log entry", async () => {
 test("memory scheduler keeps tasks in memory without writing a task log", async () => {
   const scheduler = new TaskScheduler(new MemoryTaskStore());
   const task = await scheduler.createTask({
-    sessionId: "chat-a",
+    chatId: "chat-a",
     title: "Temporary task",
     prompt: "Only keep this in memory",
     runAt: new Date(Date.now() - 60_000).toISOString(),

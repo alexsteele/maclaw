@@ -1,7 +1,7 @@
 import type {
+  ChatRecord,
   ProviderRequest,
   ProviderResult,
-  SessionRecord,
   ToolDefinition,
 } from "./types.js";
 
@@ -24,8 +24,8 @@ const buildToolSpec = (tool: ToolDefinition): Record<string, unknown> => ({
   parameters: tool.inputSchema,
 });
 
-const conversationInput = (session: SessionRecord): Array<Record<string, unknown>> => {
-  return session.messages.map((message) => ({
+const conversationInput = (chat: ChatRecord): Array<Record<string, unknown>> => {
+  return chat.messages.map((message) => ({
     role: message.role,
     content: [{ type: "input_text", text: message.content }],
   }));
@@ -62,7 +62,7 @@ export class OpenAIResponsesProvider implements Provider {
     const toolsByName = new Map(request.tools.map((tool) => [tool.name, tool]));
     const input: Array<Record<string, unknown>> = [
       { role: "system", content: [{ type: "input_text", text: request.systemPrompt }] },
-      ...conversationInput(request.session),
+      ...conversationInput(request.chat),
     ];
 
     for (let iteration = 0; iteration < 8; iteration += 1) {

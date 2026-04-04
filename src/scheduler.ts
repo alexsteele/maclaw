@@ -184,10 +184,10 @@ export class TaskScheduler {
     await this.taskStore.saveTasks(tasks);
   }
 
-  async listTasks(sessionId?: string): Promise<ScheduledTask[]> {
+  async listTasks(chatId?: string): Promise<ScheduledTask[]> {
     const tasks = await this.readTasks();
-    const filtered = sessionId
-      ? tasks.filter((task) => task.sessionId === sessionId)
+    const filtered = chatId
+      ? tasks.filter((task) => task.chatId === chatId)
       : tasks;
 
     return filtered.sort((left, right) => left.nextRunAt.localeCompare(right.nextRunAt));
@@ -198,7 +198,7 @@ export class TaskScheduler {
   }
 
   async createTask(input: {
-    sessionId: string;
+    chatId: string;
     title: string;
     prompt: string;
     schedule?: TaskSchedule;
@@ -226,7 +226,7 @@ export class TaskScheduler {
 
     const task: ScheduledTask = {
       id: createTaskId(tasks),
-      sessionId: input.sessionId,
+      chatId: input.chatId,
       title: input.title,
       prompt: input.prompt,
       schedule,
@@ -241,14 +241,14 @@ export class TaskScheduler {
     return task;
   }
 
-  async deleteTask(taskId: string, sessionId?: string): Promise<boolean> {
+  async deleteTask(taskId: string, chatId?: string): Promise<boolean> {
     const tasks = await this.readTasks();
     const filtered = tasks.filter((task) => {
       if (task.id !== taskId) {
         return true;
       }
 
-      if (sessionId && task.sessionId !== sessionId) {
+      if (chatId && task.chatId !== chatId) {
         return true;
       }
 
@@ -322,7 +322,7 @@ export class TaskScheduler {
         await this.taskStore.logTaskRun({
           timestamp: finishedAt,
           taskId: task.id,
-          sessionId: task.sessionId,
+          chatId: task.chatId,
           title: task.title,
           prompt: task.prompt,
           schedule: task.schedule,
@@ -347,7 +347,7 @@ export class TaskScheduler {
         await this.taskStore.logTaskRun({
           timestamp: finishedAt,
           taskId: task.id,
-          sessionId: task.sessionId,
+          chatId: task.chatId,
           title: task.title,
           prompt: task.prompt,
           schedule: task.schedule,

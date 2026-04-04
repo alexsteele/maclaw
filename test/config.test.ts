@@ -36,14 +36,14 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.projectName, "example-project");
     assert.equal(config.dataDir, path.join(rootDir, ".maclaw"));
     assert.equal(config.skillsDir, path.join(rootDir, "project-skills"));
-    assert.equal(config.sessionsDir, path.join(rootDir, ".maclaw", "chats"));
+    assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
     assert.equal(config.schedulerFile, path.join(rootDir, ".maclaw", "tasks.json"));
     assert.equal(
       config.taskRunsFile,
       path.join(rootDir, ".maclaw", "task-runs.jsonl"),
     );
     assert.equal(config.retentionDays, 14);
-    assert.equal(config.sessionId, "default");
+    assert.equal(config.chatId, "default");
     assert.equal(config.provider, "local");
     assert.equal(config.model, "test-model");
   } finally {
@@ -61,7 +61,7 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
     assert.equal(config.createdAt, undefined);
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
     assert.equal(config.dataDir, path.join(rootDir, ".maclaw"));
-    assert.equal(config.sessionsDir, path.join(rootDir, ".maclaw", "chats"));
+    assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
