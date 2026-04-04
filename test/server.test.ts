@@ -30,10 +30,10 @@ test("server handles project commands and routes chat messages by active project
           { name: "home", folder: homeDir },
           { name: "work", folder: workDir },
         ],
+        defaultProject: "home",
         channels: {
           whatsapp: {
             enabled: false,
-            defaultProject: "home",
             graphApiVersion: "v23.0",
             port: 3000,
             webhookPath: "/whatsapp/webhook",
@@ -71,7 +71,7 @@ test("server handles project commands and routes chat messages by active project
     const switchReply = await server.handleMessage({
       channel: "whatsapp",
       userId: "whatsapp-15551234567",
-      text: "/project switch work",
+      text: "/switch work",
     });
     assert.equal(switchReply, "Switched to project: work");
 
@@ -99,6 +99,62 @@ test("server handles project commands and routes chat messages by active project
       .loadChat("whatsapp-15551234567")
       .then((chat) => chat.messages.map((message) => message.content).join("\n"));
     assert.doesNotMatch(homeTranscript, /remember this in work/u);
+
+    await server.stop();
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("server prompts the user to choose a project when none is selected", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-prompt-"));
+  const homeDir = path.join(rootDir, "home");
+  const workDir = path.join(rootDir, "work");
+
+  try {
+    await initProjectConfig(homeDir, {
+      name: "home",
+      provider: "local",
+      model: "test-model",
+    });
+    await initProjectConfig(workDir, {
+      name: "work",
+      provider: "local",
+      model: "test-model",
+    });
+
+    const server = MaclawServer.create(
+      {
+        configFile: path.join(rootDir, "server.json"),
+        projects: [
+          { name: "home", folder: homeDir },
+          { name: "work", folder: workDir },
+        ],
+        channels: {
+          whatsapp: {
+            enabled: false,
+            graphApiVersion: "v23.0",
+            port: 3000,
+            webhookPath: "/whatsapp/webhook",
+          },
+        },
+      },
+      {
+        configFile: path.join(rootDir, "secrets.json"),
+        whatsapp: {},
+      },
+    );
+    await server.start();
+
+    const reply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15550000000",
+      text: "hello",
+    });
+
+    assert.match(reply ?? "", /No project selected/u);
+    assert.match(reply ?? "", /home/u);
+    assert.match(reply ?? "", /work/u);
 
     await server.stop();
   } finally {

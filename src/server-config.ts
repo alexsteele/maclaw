@@ -8,7 +8,6 @@ export type ServerProjectConfig = {
 };
 
 type RawWhatsAppConfig = {
-  defaultProject?: string;
   enabled?: boolean;
   graphApiVersion?: string;
   phoneNumberId?: string;
@@ -17,6 +16,7 @@ type RawWhatsAppConfig = {
 };
 
 type RawServerConfig = {
+  defaultProject?: string;
   channels?: {
     whatsapp?: RawWhatsAppConfig;
   };
@@ -24,7 +24,6 @@ type RawServerConfig = {
 };
 
 export type WhatsAppConfig = {
-  defaultProject?: string;
   enabled: boolean;
   graphApiVersion: string;
   phoneNumberId?: string;
@@ -34,6 +33,7 @@ export type WhatsAppConfig = {
 
 export type ServerConfig = {
   configFile: string;
+  defaultProject?: string;
   projects: ServerProjectConfig[];
   channels: {
     whatsapp: WhatsAppConfig;
@@ -97,19 +97,19 @@ export const loadServerConfig = (
   }
 
   const whatsapp = parsed.channels?.whatsapp ?? {};
-  if (whatsapp.defaultProject && !names.has(whatsapp.defaultProject)) {
-    throw new Error(`Unknown WhatsApp default project: ${whatsapp.defaultProject}`);
+  if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
+    throw new Error(`Unknown default project: ${parsed.defaultProject}`);
   }
 
   return {
     configFile: resolvedConfigFile,
+    defaultProject: parsed.defaultProject,
     projects: projects.map((project) => ({
       name: project.name,
       folder: path.resolve(project.folder),
     })),
     channels: {
       whatsapp: {
-        defaultProject: whatsapp.defaultProject,
         enabled: whatsapp.enabled ?? false,
         graphApiVersion: whatsapp.graphApiVersion ?? "v23.0",
         phoneNumberId:

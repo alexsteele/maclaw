@@ -23,10 +23,10 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
             { name: "home", folder: projectA },
             { name: "work", folder: projectB },
           ],
+          defaultProject: "home",
           channels: {
             whatsapp: {
               enabled: true,
-              defaultProject: "home",
               port: 4010,
               webhookPath: "/hooks/whatsapp",
             },
@@ -45,8 +45,8 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
       { name: "home", folder: projectA },
       { name: "work", folder: projectB },
     ]);
+    assert.equal(config.defaultProject, "home");
     assert.equal(config.channels.whatsapp.enabled, true);
-    assert.equal(config.channels.whatsapp.defaultProject, "home");
     assert.equal(config.channels.whatsapp.port, 4010);
     assert.equal(config.channels.whatsapp.webhookPath, "/hooks/whatsapp");
   } finally {

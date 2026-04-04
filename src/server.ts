@@ -26,6 +26,7 @@ const helpText = [
   "  /project                 Show the current project",
   "  /project list            List available projects",
   "  /project switch <name>   Switch to a different project",
+  "  /switch <name>           Alias for /project switch <name>",
   "",
   "Any other message is sent to the current project's chat.",
 ].join("\n");
@@ -79,18 +80,12 @@ export class MaclawServer {
     return harness;
   }
 
-  getDefaultProjectName(): string {
+  getDefaultProjectName(): ProjectName | undefined {
     if (this.config.projects.length === 1) {
       return this.config.projects[0]!.name;
     }
 
-    if (this.config.channels.whatsapp.defaultProject) {
-      return this.config.channels.whatsapp.defaultProject;
-    }
-
-    throw new Error(
-      "Multiple server projects are configured. Set channels.whatsapp.defaultProject in ~/.maclaw/server.json.",
-    );
+    return this.config.defaultProject;
   }
 
   listProjectNames(): ProjectName[] {
@@ -105,8 +100,8 @@ export class MaclawServer {
 
   private getActiveProjectName(
     message: Pick<ChannelMessage, "channel" | "userId">,
-  ): ProjectName {
-    return this.activeProjects.get(this.getRouteKey(message)) ?? this.getDefaultProjectName();
+  ): ProjectName | undefined {
+    return this.activeProjects.get(this.getRouteKey(message)) ?? this.config.defaultProject;
   }
 
   private setActiveProjectName(
@@ -114,6 +109,18 @@ export class MaclawServer {
     projectName: ProjectName,
   ): void {
     this.activeProjects.set(this.getRouteKey(message), projectName);
+  }
+
+  private handleProjectSwitch(
+    message: Pick<ChannelMessage, "channel" | "userId">,
+    projectName: string,
+  ): string {
+    if (!this.projects.has(projectName)) {
+      return `Unknown project: ${projectName}`;
+    }
+
+    this.setActiveProjectName(message, projectName);
+    return `Switched to project: ${projectName}`;
   }
 
   async handleMessage(message: ChannelMessage): Promise<string | null> {
@@ -124,7 +131,10 @@ export class MaclawServer {
     }
 
     if (message.text === "/project") {
-      return `Current project: ${this.getActiveProjectName(message)}`;
+      const projectName = this.getActiveProjectName(message);
+      return projectName
+        ? `Current project: ${projectName}`
+        : `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
     }
 
     if (message.text === "/project list") {
@@ -132,16 +142,24 @@ export class MaclawServer {
     }
 
     if (message.text.startsWith("/project switch ")) {
-      const projectName = message.text.slice("/project switch ".length).trim();
-      if (!this.projects.has(projectName)) {
-        return `Unknown project: ${projectName}`;
-      }
-
-      this.setActiveProjectName(message, projectName);
-      return `Switched to project: ${projectName}`;
+      return this.handleProjectSwitch(
+        message,
+        message.text.slice("/project switch ".length).trim(),
+      );
     }
 
-    const projectName = this.getActiveProjectName(message);
+    if (message.text.startsWith("/switch ")) {
+      return this.handleProjectSwitch(
+        message,
+        message.text.slice("/switch ".length).trim(),
+      );
+    }
+
+    const projectName = this.getActiveProjectName(message) ?? this.getDefaultProjectName();
+    if (!projectName) {
+      return `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
+    }
+
     const harness = this.getHarness(projectName);
     const reply = await harness.handleUserInputForChat(message.userId, message.text);
     return reply.content;

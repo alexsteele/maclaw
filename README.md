@@ -68,13 +68,13 @@ Example `server.json`:
 
 ```json
 {
+  "defaultProject": "home",
   "projects": [
     { "name": "home", "folder": "/path/to/home-project" }
   ],
   "channels": {
     "whatsapp": {
       "enabled": true,
-      "defaultProject": "home",
       "port": 3000,
       "webhookPath": "/whatsapp/webhook"
     }
