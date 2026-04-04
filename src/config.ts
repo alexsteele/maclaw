@@ -22,7 +22,6 @@ export type ProjectConfig = {
   schedulerPollMs: number;
   projectFolder: string;
   projectConfigFile: string;
-  isProjectInitialized: boolean;
   chatId: string;
   openAiApiKey?: string;
   chatsDir: string;
@@ -92,7 +91,6 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   const projectFolder = path.resolve(cwd);
   const projectFileConfig = readProjectFileConfig(projectFolder);
   const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
-  const isProjectInitialized = existsSync(projectConfigFile);
   const compressionModeValue =
     process.env.MACLAW_COMPRESSION_MODE ?? projectFileConfig.compressionMode ?? "none";
   const providerValue =
@@ -123,7 +121,6 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
     ),
     projectConfigFile,
     projectFolder,
-    isProjectInitialized,
     chatsDir: path.join(defaultProjectDataDir(projectFolder), "chats"),
     chatId: process.env.MACLAW_CHAT_ID ?? "default",
     openAiApiKey: process.env.OPENAI_API_KEY,

@@ -1,4 +1,3 @@
-import type { ProjectConfig } from "./config.js";
 import { Harness } from "./harness.js";
 import { parseTaskSchedule } from "./task.js";
 import type { TaskSchedule } from "./types.js";
@@ -165,16 +164,15 @@ const renderTaskList = async (
   return [header, separator, ...lines].join("\n");
 };
 
-const renderProjectInfo = (
-  projectConfig: ProjectConfig,
-  currentChatId: string,
-): string => {
+const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
+  const projectConfig = harness.config;
+  const isProjectInitialized = harness.isProjectInitialized();
   return [
     `name: ${projectConfig.name}`,
-    `initialized: ${projectConfig.isProjectInitialized ? "yes" : "no"}`,
+    `initialized: ${isProjectInitialized ? "yes" : "no"}`,
     `createdAt: ${projectConfig.createdAt ?? "(not set)"}`,
     `folder: ${projectConfig.projectFolder}`,
-    `config: ${projectConfig.isProjectInitialized ? projectConfig.projectConfigFile : "(not set)"}`,
+    `config: ${isProjectInitialized ? projectConfig.projectConfigFile : "(not set)"}`,
     `provider: ${projectConfig.provider}`,
     `model: ${projectConfig.model}`,
     `retentionDays: ${projectConfig.retentionDays}`,
@@ -263,11 +261,11 @@ export const dispatchCommand = async (
   }
 
   if (input === "/project" || input === "/project show") {
-    return renderProjectInfo(harness.config, getScopedChatId(harness, options));
+    return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
 
   if (input === "/project init") {
-    if (harness.config.isProjectInitialized) {
+    if (harness.isProjectInitialized()) {
       return `project already initialized: ${harness.config.projectConfigFile}`;
     }
 

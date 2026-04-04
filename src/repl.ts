@@ -37,7 +37,7 @@ class Repl {
   private showStartup(): void {
     output.write("maclaw REPL\n");
     output.write(`chat: ${this.harness.getCurrentChatId()}\n`);
-    if (!this.harness.config.isProjectInitialized) {
+    if (!this.harness.isProjectInitialized()) {
       output.write(
         "warning: running without a project config; chats, tasks, and logs will not be saved. run /project init to set up a project\n",
       );

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { ProjectConfig } from "./config.js";
 import { TaskScheduler } from "./scheduler.js";
 import { loadSkills } from "./skills.js";
@@ -144,7 +145,7 @@ export const createTools = (
             projectConfigFile: config.projectConfigFile,
             projectFolder: config.projectFolder,
             projectName: config.name,
-            isProjectInitialized: config.isProjectInitialized,
+            isProjectInitialized: existsSync(config.projectConfigFile),
             provider: config.provider,
             chatId,
             skillsDir: config.skillsDir,

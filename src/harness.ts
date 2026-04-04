@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
   defaultTaskRunsFile,
   defaultTasksFile,
@@ -31,13 +32,13 @@ type ForkChatResult =
   | { chat?: undefined; error: string };
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
-  return config.isProjectInitialized
+  return existsSync(config.projectConfigFile)
     ? new JsonFileChatStore(config.chatsDir)
     : new MemoryChatStore();
 };
 
 const createScheduler = (config: ProjectConfig): TaskScheduler => {
-  return config.isProjectInitialized
+  return existsSync(config.projectConfigFile)
     ? new TaskScheduler(
         new JsonFileTaskStore(
           defaultTasksFile(config.projectFolder),
@@ -71,6 +72,10 @@ export class Harness {
     return this._config;
   }
 
+  isProjectInitialized(): boolean {
+    return existsSync(this._config.projectConfigFile);
+  }
+
   start(
     onTaskMessage: (task: ScheduledTask, message: Message) => void | Promise<void>,
   ): Promise<void> {
@@ -88,7 +93,7 @@ export class Harness {
   }
 
   async initProject(configPatch: Partial<ProjectConfig> = {}): Promise<Harness> {
-    if (this.config.isProjectInitialized) {
+    if (this.isProjectInitialized()) {
       return this;
     }
 

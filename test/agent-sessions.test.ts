@@ -27,7 +27,6 @@ const createHarness = async (): Promise<{
     schedulerPollMs: 1_000,
     projectFolder: projectDir,
     projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
-    isProjectInitialized: true,
     chatId: "default",
     chatsDir: path.join(projectDir, ".maclaw", "chats"),
   };

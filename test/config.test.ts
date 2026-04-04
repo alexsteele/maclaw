@@ -35,7 +35,6 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     const config = loadConfig(rootDir);
 
     assert.equal(config.createdAt, "2026-04-04T10:00:00.000Z");
-    assert.equal(config.isProjectInitialized, true);
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
     assert.equal(config.projectFolder, rootDir);
     assert.equal(config.name, "example-project");
@@ -58,7 +57,6 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
   try {
     const config = loadConfig(rootDir);
 
-    assert.equal(config.isProjectInitialized, false);
     assert.equal(config.createdAt, undefined);
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));

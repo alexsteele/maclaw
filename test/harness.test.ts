@@ -25,7 +25,7 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
     });
 
     assert.equal(upgraded, harness);
-    assert.equal(harness.config.isProjectInitialized, true);
+    assert.equal(harness.isProjectInitialized(), true);
     assert.equal(harness.config.name, "test-project");
     assert.equal(harness.config.provider, "local");
     assert.equal(harness.config.model, "test-model");

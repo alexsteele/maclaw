@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { ProjectConfig } from "./config.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
 import { appendMessage, type ChatStore } from "./chats.js";
@@ -22,7 +23,7 @@ const buildSystemPrompt = async (
     "Keep answers concise and practical.",
     "Use tools when needed.",
     "Local skills are available as user-authored task descriptions. Read them when useful.",
-    `Project initialized: ${config.isProjectInitialized ? "yes" : "no"}.`,
+    `Project initialized: ${existsSync(config.projectConfigFile) ? "yes" : "no"}.`,
     `Chat retention: ${config.retentionDays} days.`,
     `Compression mode: ${config.compressionMode}. If set to planned, compression is not implemented yet.`,
     "",
