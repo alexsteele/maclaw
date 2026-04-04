@@ -34,13 +34,27 @@ maclaw is a small LLM harness built with OpenAI codex.
 
 ## Projects
 
-maclaw runs in a project. It treats the current working directory as the project root.
+maclaw projects encompass settings, chats, and tasks.
 
-By default, project state lives under `.maclaw/`.
+When you start the repl, maclaw runs in "headless" mode without a project by default.
 
-If `.maclaw/maclaw.json` is present, maclaw uses it to configure that project.
+Run `project init` to set up a project in the current folder. 
 
-Example `maclaw.json`:
+By default, project data goes in the `.maclaw/` folder.
+
+```text
+my-project/
+  .maclaw/
+    maclaw.json
+    skills/
+      daily_summary.md
+    chats/
+      default.json
+    tasks.json
+    task-runs.jsonl
+```
+
+`maclaw.json` contains the config.
 
 ```json
 {
@@ -54,21 +68,6 @@ Example `maclaw.json`:
 ```
 
 `skillsDir` is optional. If you omit it, maclaw uses `.maclaw/skills` by default.
-
-Example project layout:
-
-```text
-my-project/
-  .maclaw/
-    maclaw.json
-    skills/
-      daily_summary.md
-    data/
-      sessions/
-        default.json
-      tasks.json
-      task-runs.jsonl
-```
 
 ## Commands
 
@@ -97,7 +96,7 @@ Environment variables:
 - `MACLAW_MODEL`: overrides the configured model
 - `OPENAI_API_KEY`: enables the OpenAI provider
 - `OPENAI_MODEL`: backward-compatible override for OpenAI model selection
-- `MACLAW_DATA_DIR`: overrides the default `projectFolder/.maclaw/data`
+- `MACLAW_DATA_DIR`: overrides the default `projectFolder/.maclaw`
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_SESSION_ID`: defaults to `default`
 - `MACLAW_RETENTION_DAYS`: defaults to `30`
@@ -113,8 +112,10 @@ Currently supported providers:
 
 ## Notes
 
-- Sessions are stored as JSON files under `.maclaw/data/sessions/`.
-- Scheduled tasks are stored in `.maclaw/data/tasks.json`.
+- Chats are stored as JSON files under `.maclaw/chats/`.
+- Scheduled tasks are stored in `.maclaw/tasks.json`.
+- If no `.maclaw/maclaw.json` exists, maclaw runs in a non-persistent mirage mode and does not write `.maclaw/` to disk.
+- `/project init` creates `.maclaw/maclaw.json` and `.maclaw/skills/`, then switches the current REPL into persistent project mode.
 - Compression is not implemented yet; `MACLAW_COMPRESSION_MODE=planned` is a forward-compatible placeholder.
 - If `OPENAI_API_KEY` is missing, the harness falls back to a local non-LLM response so the REPL still works.
 

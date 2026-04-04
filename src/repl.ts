@@ -1,10 +1,6 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import type { AppConfig } from "./config.js";
-import type { SessionStore } from "./sessions.js";
-import { loadSkills } from "./skills.js";
-import { MaclawAgent } from "./agent.js";
-import { TaskScheduler } from "./scheduler.js";
+import { Harness, type ProjectInfo } from "./harness.js";
 import { parseTaskSchedule } from "./task.js";
 import type { TaskSchedule } from "./types.js";
 
@@ -23,6 +19,7 @@ const projectHelpText = [
   "Command: /project",
   "  /project           Show the active project",
   "  /project show      Show the active project",
+  "  /project init      Create .maclaw/maclaw.json for this project",
 ].join("\n");
 
 const chatHelpText = [
@@ -64,15 +61,15 @@ const parseSessionId = (value: string): string | null => {
 };
 
 const buildForkSessionId = async (
-  agent: MaclawAgent,
+  harness: Harness,
   requestedId?: string,
 ): Promise<string | null> => {
   if (requestedId && requestedId.trim().length > 0) {
     return parseSessionId(requestedId);
   }
 
-  const baseId = `${agent.getCurrentSessionId()}-fork`;
-  const existingIds = new Set((await agent.listSessions()).map((session) => session.id));
+  const baseId = `${harness.getCurrentChatId()}-fork`;
+  const existingIds = new Set((await harness.listChats()).map((session) => session.id));
   if (!existingIds.has(baseId)) {
     return baseId;
   }
@@ -140,11 +137,7 @@ const formatSchedule = (schedule: TaskSchedule): string => {
   }
 };
 
-const renderTaskList = async (
-  scheduler: TaskScheduler,
-  sessionId: string,
-): Promise<string> => {
-  const tasks = await scheduler.listTasks(sessionId);
+const renderTaskList = async (tasks: Awaited<ReturnType<Harness["listCurrentChatTasks"]>>): Promise<string> => {
   if (tasks.length === 0) {
     return "No scheduled tasks.";
   }
@@ -192,31 +185,36 @@ const renderTaskList = async (
   return [header, separator, ...lines].join("\n");
 };
 
-const renderProjectInfo = (config: AppConfig, currentChatId: string): string => {
+const renderProjectInfo = (projectInfo: ProjectInfo): string => {
   return [
-    `name: ${config.projectName}`,
-    `createdAt: ${config.createdAt ?? "(not set)"}`,
-    `folder: ${config.projectFolder}`,
-    `config: ${config.projectConfigFile}`,
-    `provider: ${config.provider}`,
-    `model: ${config.model}`,
-    `retentionDays: ${config.retentionDays}`,
-    `currentChat: ${currentChatId}`,
-    `skillsDir: ${config.skillsDir}`,
+    `name: ${projectInfo.name}`,
+    `initialized: ${projectInfo.initialized ? "yes" : "no"}`,
+    `createdAt: ${projectInfo.createdAt ?? "(not set)"}`,
+    `folder: ${projectInfo.folder}`,
+    `config: ${projectInfo.configFile ?? "(not set)"}`,
+    `provider: ${projectInfo.provider}`,
+    `model: ${projectInfo.model}`,
+    `retentionDays: ${projectInfo.retentionDays}`,
+    `currentChat: ${projectInfo.currentChat}`,
+    `skillsDir: ${projectInfo.skillsDir}`,
   ].join("\n");
 };
 
 
 export const runRepl = async (
-  config: AppConfig,
-  agent: MaclawAgent,
-  scheduler: TaskScheduler,
-  sessionStore: SessionStore,
+  controls: {
+    getHarness: () => Harness;
+    setHarness: (harness: Harness) => void;
+  },
 ): Promise<void> => {
   const rl = readline.createInterface({ input, output });
+  let harness = controls.getHarness();
 
   output.write("maclaw REPL\n");
-  output.write(`session: ${agent.getCurrentSessionId()}\n`);
+  output.write(`chat: ${harness.getCurrentChatId()}\n`);
+  if (!harness.config.isProjectInitialized) {
+    output.write("warning: running without a project config; chats, tasks, and logs will not be saved\n");
+  }
   output.write("type /help for commands\n\n");
 
   while (true) {
@@ -251,23 +249,40 @@ export const runRepl = async (
     }
 
     if (line === "/chat") {
-      output.write(`${agent.getCurrentSessionId()}\n\n`);
+      output.write(`${harness.getCurrentChatId()}\n\n`);
       continue;
     }
 
     if (line === "/project" || line === "/project show") {
-      output.write(`${renderProjectInfo(config, agent.getCurrentSessionId())}\n\n`);
+      output.write(`${renderProjectInfo(harness.getProjectInfo())}\n\n`);
+      continue;
+    }
+
+    if (line === "/project init") {
+      if (harness.config.isProjectInitialized) {
+        output.write(`project already initialized: ${harness.config.projectConfigFile}\n\n`);
+        continue;
+      }
+
+      harness = await harness.initializeProject();
+      controls.setHarness(harness);
+
+      output.write(
+        `initialized project: ${harness.config.projectConfigFile}\n` +
+          `current chat: ${harness.getCurrentChatId()}\n` +
+          "switched this REPL into persistent project mode\n\n",
+      );
       continue;
     }
 
     if (line === "/chat list") {
-      const sessions = await agent.listSessions();
+      const sessions = await harness.listChats();
       const rendered =
         sessions.length === 0
           ? "No saved chats."
           : (() => {
               const rows = sessions.map((session) => ({
-                marker: session.id === agent.getCurrentSessionId() ? "*" : " ",
+                marker: session.id === harness.getCurrentChatId() ? "*" : " ",
                 id: session.id,
                 messages: String(session.messageCount),
                 created: formatChatTimestamp(session.createdAt),
@@ -329,14 +344,14 @@ export const runRepl = async (
         continue;
       }
 
-      const session = await agent.switchSession(requestedId);
+      const session = await harness.switchChat(requestedId);
       output.write(`switched to chat: ${session.id}\n\n`);
       continue;
     }
 
     if (line === "/chat fork" || line.startsWith("/chat fork ")) {
       const requestedId = await buildForkSessionId(
-        agent,
+        harness,
         line.slice("/chat fork".length).trim(),
       );
       if (!requestedId) {
@@ -344,13 +359,13 @@ export const runRepl = async (
         continue;
       }
 
-      const existingSessions = await agent.listSessions();
+      const existingSessions = await harness.listChats();
       if (existingSessions.some((session) => session.id === requestedId)) {
         output.write(`chat already exists: ${requestedId}\n\n`);
         continue;
       }
 
-      const session = await agent.forkSession(requestedId);
+      const session = await harness.forkChat(requestedId);
       output.write(`forked current chat to: ${session.id}\n\n`);
       continue;
     }
@@ -361,7 +376,7 @@ export const runRepl = async (
     }
 
     if (line === "/task list") {
-      const rendered = await renderTaskList(scheduler, agent.getCurrentSessionId());
+      const rendered = await renderTaskList(await harness.listCurrentChatTasks());
       output.write(`${rendered}\n\n`);
       continue;
     }
@@ -378,8 +393,7 @@ export const runRepl = async (
         continue;
       }
 
-      const task = await scheduler.createTask({
-        sessionId: agent.getCurrentSessionId(),
+      const task = await harness.createTaskForCurrentChat({
         title: parsed.title,
         prompt: parsed.prompt,
         schedule: parsed.schedule,
@@ -396,13 +410,13 @@ export const runRepl = async (
         continue;
       }
 
-      const deleted = await scheduler.deleteTask(taskId, agent.getCurrentSessionId());
+      const deleted = await harness.deleteTaskForCurrentChat(taskId);
       output.write(deleted ? `deleted task: ${taskId}\n\n` : `task not found: ${taskId}\n\n`);
       continue;
     }
 
     if (line === "/skills") {
-      const skills = await loadSkills(config.skillsDir);
+      const skills = await harness.listSkills();
       output.write(
         skills.length === 0
           ? "No skills found.\n\n"
@@ -412,26 +426,11 @@ export const runRepl = async (
     }
 
     if (line === "/history") {
-      const session = await sessionStore.loadSession(
-        agent.getCurrentSessionId(),
-        {
-          retentionDays: config.retentionDays,
-          compressionMode: config.compressionMode,
-        },
-      );
-
-      const transcript =
-        session.messages.length === 0
-          ? "No history yet."
-          : session.messages
-              .map((message) => `[${message.role}] ${message.content}`)
-              .join("\n");
-
-      output.write(`${transcript}\n\n`);
+      output.write(`${await harness.getCurrentChatTranscript()}\n\n`);
       continue;
     }
 
-    const reply = await agent.handleUserInput(line);
+    const reply = await harness.handleUserInput(line);
     output.write(`${reply.content}\n\n`);
   }
 };

@@ -1,60 +1,67 @@
 import { appendJsonLine, readJsonFile, writeJsonFile } from "./fs-utils.js";
 import type { ScheduledTask, TaskRunLogEntry, TaskSchedule, Weekday } from "./types.js";
 
-type LegacyScheduledTask = Omit<ScheduledTask, "nextRunAt" | "schedule"> & {
-  nextRunAt?: string;
-  runAt?: string;
-  schedule?: TaskSchedule;
-};
-
 const weekdayOrder: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const isWeekday = (value: string): value is Weekday => {
   return weekdayOrder.includes(value as Weekday);
 };
 
-const normalizeTask = (task: LegacyScheduledTask): ScheduledTask => {
-  const schedule =
-    task.schedule ??
-    (task.runAt
-      ? {
-          type: "once" as const,
-          runAt: task.runAt,
-        }
-      : undefined);
-
-  if (!schedule) {
-    throw new Error(`Task "${task.id}" is missing schedule information.`);
-  }
-
-  const nextRunAt = task.nextRunAt ?? (schedule.type === "once" ? schedule.runAt : undefined);
-  if (!nextRunAt) {
-    throw new Error(`Task "${task.id}" is missing nextRunAt.`);
-  }
-
-  return {
-    id: task.id,
-    sessionId: task.sessionId,
-    title: task.title,
-    prompt: task.prompt,
-    schedule,
-    nextRunAt,
-    status: task.status,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-    lastRunAt: task.lastRunAt,
-    lastError: task.lastError,
-  };
-};
-
 const readAllTasks = async (tasksFile: string): Promise<ScheduledTask[]> => {
-  const rawTasks = await readJsonFile<LegacyScheduledTask[]>(tasksFile, []);
-  return rawTasks.map(normalizeTask);
+  return readJsonFile<ScheduledTask[]>(tasksFile, []);
 };
 
 const writeAllTasks = async (tasksFile: string, tasks: ScheduledTask[]): Promise<void> => {
   await writeJsonFile(tasksFile, tasks);
 };
+
+export interface TaskStore {
+  loadTasks(): Promise<ScheduledTask[]>;
+  saveTasks(tasks: ScheduledTask[]): Promise<void>;
+  logTaskRun(entry: TaskRunLogEntry): Promise<void>;
+}
+
+export class JsonFileTaskStore implements TaskStore {
+  private readonly tasksFile: string;
+  private readonly taskRunsFile?: string;
+
+  constructor(tasksFile: string, taskRunsFile?: string) {
+    this.tasksFile = tasksFile;
+    this.taskRunsFile = taskRunsFile;
+  }
+
+  async loadTasks(): Promise<ScheduledTask[]> {
+    return readAllTasks(this.tasksFile);
+  }
+
+  async saveTasks(tasks: ScheduledTask[]): Promise<void> {
+    await writeAllTasks(this.tasksFile, tasks);
+  }
+
+  async logTaskRun(entry: TaskRunLogEntry): Promise<void> {
+    if (!this.taskRunsFile) {
+      return;
+    }
+
+    await appendJsonLine(this.taskRunsFile, entry);
+  }
+}
+
+export class MemoryTaskStore implements TaskStore {
+  private tasks: ScheduledTask[] = [];
+
+  async loadTasks(): Promise<ScheduledTask[]> {
+    return structuredClone(this.tasks);
+  }
+
+  async saveTasks(tasks: ScheduledTask[]): Promise<void> {
+    this.tasks = structuredClone(tasks);
+  }
+
+  async logTaskRun(_entry: TaskRunLogEntry): Promise<void> {
+    return;
+  }
+}
 
 const createTaskId = (tasks: ScheduledTask[]): string => {
   const existingIds = new Set(tasks.map((task) => task.id));
@@ -158,21 +165,35 @@ const advanceTaskAfterSuccess = (
 };
 
 export class TaskScheduler {
-  private readonly tasksFile: string;
-  private readonly taskRunsFile?: string;
+  private readonly taskStore: TaskStore;
 
-  constructor(tasksFile: string, taskRunsFile?: string) {
-    this.tasksFile = tasksFile;
-    this.taskRunsFile = taskRunsFile;
+  constructor(taskStore: TaskStore) {
+    this.taskStore = taskStore;
+  }
+
+  static createMemory(): TaskScheduler {
+    return new TaskScheduler(new MemoryTaskStore());
+  }
+
+  private async readTasks(): Promise<ScheduledTask[]> {
+    return this.taskStore.loadTasks();
+  }
+
+  private async writeTasks(tasks: ScheduledTask[]): Promise<void> {
+    await this.taskStore.saveTasks(tasks);
   }
 
   async listTasks(sessionId?: string): Promise<ScheduledTask[]> {
-    const tasks = await readAllTasks(this.tasksFile);
+    const tasks = await this.readTasks();
     const filtered = sessionId
       ? tasks.filter((task) => task.sessionId === sessionId)
       : tasks;
 
     return filtered.sort((left, right) => left.nextRunAt.localeCompare(right.nextRunAt));
+  }
+
+  async replaceTasks(tasks: ScheduledTask[]): Promise<void> {
+    await this.writeTasks(tasks);
   }
 
   async createTask(input: {
@@ -182,7 +203,7 @@ export class TaskScheduler {
     schedule?: TaskSchedule;
     runAt?: string;
   }): Promise<ScheduledTask> {
-    const tasks = await readAllTasks(this.tasksFile);
+    const tasks = await this.readTasks();
     const timestamp = new Date();
     const schedule =
       input.schedule ??
@@ -215,12 +236,12 @@ export class TaskScheduler {
     };
 
     tasks.push(task);
-    await writeAllTasks(this.tasksFile, tasks);
+    await this.writeTasks(tasks);
     return task;
   }
 
   async deleteTask(taskId: string, sessionId?: string): Promise<boolean> {
-    const tasks = await readAllTasks(this.tasksFile);
+    const tasks = await this.readTasks();
     const filtered = tasks.filter((task) => {
       if (task.id !== taskId) {
         return true;
@@ -237,7 +258,7 @@ export class TaskScheduler {
       return false;
     }
 
-    await writeAllTasks(this.tasksFile, filtered);
+    await this.writeTasks(filtered);
     return true;
   }
 
@@ -247,7 +268,7 @@ export class TaskScheduler {
       Pick<ScheduledTask, "lastError" | "lastRunAt" | "nextRunAt" | "status" | "updatedAt">
     >,
   ): Promise<void> {
-    const tasks = await readAllTasks(this.tasksFile);
+    const tasks = await this.readTasks();
     const updated = tasks.map((task) =>
       task.id === taskId
         ? {
@@ -258,13 +279,13 @@ export class TaskScheduler {
         : task,
     );
 
-    await writeAllTasks(this.tasksFile, updated);
+    await this.writeTasks(updated);
   }
 
   async runDueTasks(
     onTask: (task: ScheduledTask) => Promise<void>,
   ): Promise<void> {
-    const tasks = await readAllTasks(this.tasksFile);
+    const tasks = await this.readTasks();
     const now = new Date();
     let updatedTasks = tasks.slice();
 
@@ -287,7 +308,7 @@ export class TaskScheduler {
             }
           : candidate,
       );
-      await writeAllTasks(this.tasksFile, updatedTasks);
+      await this.writeTasks(updatedTasks);
 
       const startedAt = new Date().toISOString();
       try {
@@ -297,7 +318,7 @@ export class TaskScheduler {
         updatedTasks = updatedTasks.map((candidate) =>
           candidate.id === task.id ? advanced : candidate,
         );
-        await this.appendTaskRunLog({
+        await this.taskStore.logTaskRun({
           timestamp: finishedAt,
           taskId: task.id,
           sessionId: task.sessionId,
@@ -322,7 +343,7 @@ export class TaskScheduler {
               }
             : candidate,
         );
-        await this.appendTaskRunLog({
+        await this.taskStore.logTaskRun({
           timestamp: finishedAt,
           taskId: task.id,
           sessionId: task.sessionId,
@@ -337,15 +358,7 @@ export class TaskScheduler {
         });
       }
 
-      await writeAllTasks(this.tasksFile, updatedTasks);
+      await this.writeTasks(updatedTasks);
     }
-  }
-
-  private async appendTaskRunLog(entry: TaskRunLogEntry): Promise<void> {
-    if (!this.taskRunsFile) {
-      return;
-    }
-
-    await appendJsonLine(this.taskRunsFile, entry);
   }
 }

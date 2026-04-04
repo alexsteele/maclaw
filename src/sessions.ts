@@ -126,6 +126,52 @@ export class JsonFileSessionStore implements SessionStore {
   }
 }
 
+export class MemorySessionStore implements SessionStore {
+  private readonly sessions = new Map<string, SessionRecord>();
+
+  async loadSession(
+    sessionId: string,
+    options: SessionLoadOptions,
+  ): Promise<SessionRecord> {
+    const existing = this.sessions.get(sessionId);
+    if (!existing) {
+      const created = createEmptySession(sessionId, options);
+      this.sessions.set(sessionId, structuredClone(created));
+      return created;
+    }
+
+    const normalized = normalizeSession(structuredClone(existing), options);
+    this.sessions.set(sessionId, structuredClone(normalized));
+    return normalized;
+  }
+
+  async saveSession(session: SessionRecord): Promise<void> {
+    session.updatedAt = new Date().toISOString();
+    this.sessions.set(session.id, structuredClone(session));
+  }
+
+  async listSessions(): Promise<SessionSummary[]> {
+    return Array.from(this.sessions.values())
+      .map((session) => toSessionSummary(session))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async pruneExpiredSessions(retentionDays: number): Promise<number> {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    let removed = 0;
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      const updatedAt = Date.parse(session.updatedAt);
+      if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+        this.sessions.delete(sessionId);
+        removed += 1;
+      }
+    }
+
+    return removed;
+  }
+}
+
 export const appendMessage = (
   session: SessionRecord,
   role: Message["role"],

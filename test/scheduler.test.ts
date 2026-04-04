@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
-import { TaskScheduler } from "../src/scheduler.js";
+import { JsonFileTaskStore, MemoryTaskStore, TaskScheduler } from "../src/scheduler.js";
 import { parseTaskSchedule } from "../src/task.js";
 import type { TaskRunLogEntry } from "../src/types.js";
 
@@ -17,8 +17,10 @@ const createScheduler = async (): Promise<{
     cleanup: async () => rm(dir, { recursive: true, force: true }),
     dir,
     scheduler: new TaskScheduler(
-      path.join(dir, "tasks.json"),
-      path.join(dir, "task-runs.jsonl"),
+      new JsonFileTaskStore(
+        path.join(dir, "tasks.json"),
+        path.join(dir, "task-runs.jsonl"),
+      ),
     ),
   };
 };
@@ -229,4 +231,25 @@ test("runDueTasks writes a JSONL execution log entry", async () => {
   } finally {
     await cleanup();
   }
+});
+
+test("memory scheduler keeps tasks in memory without writing a task log", async () => {
+  const scheduler = new TaskScheduler(new MemoryTaskStore());
+  const task = await scheduler.createTask({
+    sessionId: "chat-a",
+    title: "Temporary task",
+    prompt: "Only keep this in memory",
+    runAt: new Date(Date.now() - 60_000).toISOString(),
+  });
+
+  let runCount = 0;
+  await scheduler.runDueTasks(async () => {
+    runCount += 1;
+  });
+
+  const tasks = await scheduler.listTasks("chat-a");
+  assert.equal(runCount, 1);
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0]?.id, task.id);
+  assert.equal(tasks[0]?.status, "completed");
 });

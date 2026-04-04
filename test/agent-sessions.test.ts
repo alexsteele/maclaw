@@ -5,8 +5,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { MaclawAgent } from "../src/agent.js";
 import type { AppConfig } from "../src/config.js";
+import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
 import { JsonFileSessionStore, appendMessage } from "../src/sessions.js";
-import { TaskScheduler } from "../src/scheduler.js";
 
 const createHarness = async (): Promise<{
   agent: MaclawAgent;
@@ -16,15 +16,16 @@ const createHarness = async (): Promise<{
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-"));
   const config: AppConfig = {
     createdAt: undefined,
-    dataDir: path.join(projectDir, ".maclaw", "data"),
+    dataDir: path.join(projectDir, ".maclaw"),
+    isProjectInitialized: true,
     model: "gpt-4.1-mini",
     provider: "local",
     projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
     projectFolder: projectDir,
     projectName: path.basename(projectDir),
-    sessionsDir: path.join(projectDir, ".maclaw", "data", "sessions"),
-    schedulerFile: path.join(projectDir, ".maclaw", "data", "tasks.json"),
-    taskRunsFile: path.join(projectDir, ".maclaw", "data", "task-runs.jsonl"),
+    sessionsDir: path.join(projectDir, ".maclaw", "chats"),
+    schedulerFile: path.join(projectDir, ".maclaw", "tasks.json"),
+    taskRunsFile: path.join(projectDir, ".maclaw", "task-runs.jsonl"),
     skillsDir: path.join(projectDir, ".maclaw", "skills"),
     sessionId: "default",
     retentionDays: 30,
@@ -33,7 +34,7 @@ const createHarness = async (): Promise<{
   };
 
   const sessionStore = new JsonFileSessionStore(config.sessionsDir);
-  const scheduler = new TaskScheduler(config.schedulerFile);
+  const scheduler = new TaskScheduler(new JsonFileTaskStore(config.schedulerFile));
   const agent = new MaclawAgent(config, scheduler, sessionStore);
 
   return {

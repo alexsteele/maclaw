@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { JsonFileSessionStore, appendMessage } from "../src/sessions.js";
+import { JsonFileSessionStore, MemorySessionStore, appendMessage } from "../src/sessions.js";
 
 const createStore = async (): Promise<{
   cleanup: () => Promise<void>;
@@ -133,4 +133,27 @@ test("listSessions returns saved sessions sorted by most recent update", async (
   } finally {
     await cleanup();
   }
+});
+
+test("MemorySessionStore keeps chats in memory without filesystem backing", async () => {
+  const store = new MemorySessionStore();
+
+  const session = await store.loadSession("alpha", {
+    retentionDays: 30,
+    compressionMode: "none",
+  });
+  appendMessage(session, "user", "hello");
+  await store.saveSession(session);
+
+  const reloaded = await store.loadSession("alpha", {
+    retentionDays: 7,
+    compressionMode: "planned",
+  });
+  const sessions = await store.listSessions();
+
+  assert.equal(reloaded.messages.length, 1);
+  assert.equal(reloaded.retentionDays, 7);
+  assert.equal(reloaded.compressionMode, "planned");
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0]?.id, "alpha");
 });

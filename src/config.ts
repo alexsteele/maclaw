@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { ensureDir, writeJsonFile } from "./fs-utils.js";
 
-type ProjectFileConfig = {
+export type ProjectFileConfig = {
   compressionMode?: "none" | "planned";
   createdAt?: string;
   model?: string;
@@ -15,6 +16,7 @@ type ProjectFileConfig = {
 export type AppConfig = {
   createdAt?: string;
   dataDir: string;
+  isProjectInitialized: boolean;
   model: string;
   provider: "local" | "openai";
   projectConfigFile: string;
@@ -50,18 +52,46 @@ const readProjectFileConfig = (cwd: string): ProjectFileConfig => {
   return JSON.parse(raw) as ProjectFileConfig;
 };
 
-export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
-  const projectFileConfig = readProjectFileConfig(cwd);
-  const projectConfigFile = path.join(cwd, ".maclaw", "maclaw.json");
+export const initProjectConfig = async (cwd: string = process.cwd()): Promise<ProjectFileConfig> => {
   const projectFolder = path.resolve(cwd);
+  const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
+  const existingConfig = readProjectFileConfig(projectFolder);
+  const createdAt = existingConfig.createdAt ?? new Date().toISOString();
+
+  const nextConfig: ProjectFileConfig = {
+    createdAt,
+    name: existingConfig.name ?? path.basename(projectFolder),
+    retentionDays: existingConfig.retentionDays ?? 30,
+    provider: existingConfig.provider ?? "openai",
+    model: existingConfig.model ?? "gpt-4.1-mini",
+    ...(existingConfig.skillsDir ? { skillsDir: existingConfig.skillsDir } : {}),
+    ...(existingConfig.compressionMode
+      ? { compressionMode: existingConfig.compressionMode }
+      : {}),
+    ...(existingConfig.schedulerPollMs
+      ? { schedulerPollMs: existingConfig.schedulerPollMs }
+      : {}),
+  };
+
+  await ensureDir(path.dirname(projectConfigFile));
+  await ensureDir(path.resolve(projectFolder, nextConfig.skillsDir ?? ".maclaw/skills"));
+  await writeJsonFile(projectConfigFile, nextConfig);
+  return nextConfig;
+};
+
+export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
+  const projectFolder = path.resolve(cwd);
+  const projectFileConfig = readProjectFileConfig(projectFolder);
+  const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
+  const isProjectInitialized = existsSync(projectConfigFile);
   const maclawDir = path.join(projectFolder, ".maclaw");
   const compressionModeValue =
     process.env.MACLAW_COMPRESSION_MODE ?? projectFileConfig.compressionMode ?? "none";
   const providerValue =
     process.env.MACLAW_PROVIDER ?? projectFileConfig.provider ?? "openai";
   const dataDir = path.resolve(
-    maclawDir,
-    process.env.MACLAW_DATA_DIR ?? "data",
+    projectFolder,
+    process.env.MACLAW_DATA_DIR ?? ".maclaw",
   );
   const skillsDir = path.resolve(
     projectFolder,
@@ -71,6 +101,7 @@ export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
   return {
     createdAt: projectFileConfig.createdAt,
     dataDir,
+    isProjectInitialized,
     model:
       process.env.MACLAW_MODEL ??
       process.env.OPENAI_MODEL ??
@@ -80,7 +111,7 @@ export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
     projectConfigFile,
     projectFolder,
     projectName: projectFileConfig.name ?? path.basename(projectFolder),
-    sessionsDir: path.join(dataDir, "sessions"),
+    sessionsDir: path.join(dataDir, "chats"),
     schedulerFile: path.join(dataDir, "tasks.json"),
     taskRunsFile: path.join(dataDir, "task-runs.jsonl"),
     skillsDir,

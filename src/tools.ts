@@ -144,6 +144,7 @@ export const createTools = (
             projectConfigFile: config.projectConfigFile,
             projectFolder: config.projectFolder,
             projectName: config.projectName,
+            isProjectInitialized: config.isProjectInitialized,
             provider: config.provider,
             sessionId,
             skillsDir: config.skillsDir,

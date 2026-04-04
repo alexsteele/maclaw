@@ -22,6 +22,7 @@ const buildSystemPrompt = async (
     "Keep answers concise and practical.",
     "Use tools when needed.",
     "Local skills are available as user-authored task descriptions. Read them when useful.",
+    `Project initialized: ${config.isProjectInitialized ? "yes" : "no"}.`,
     `Session retention: ${config.retentionDays} days.`,
     `Compression mode: ${config.compressionMode}. If set to planned, compression is not implemented yet.`,
     "",

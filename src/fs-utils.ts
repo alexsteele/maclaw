@@ -20,6 +20,7 @@ export const readJsonFile = async <T>(filePath: string, fallback: T): Promise<T>
 
 export const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
   const json = JSON.stringify(value, null, 2);
+  await ensureDir(path.dirname(filePath));
   await writeFile(filePath, `${json}\n`, "utf8");
 };
 
