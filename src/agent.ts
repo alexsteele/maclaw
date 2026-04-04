@@ -1,0 +1,142 @@
+import type { AppConfig } from "./config.js";
+import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
+import { appendMessage, loadSession, saveSession } from "./sessions.js";
+import { loadSkills } from "./skills.js";
+import { createTools } from "./tools.js";
+import type { Message, SessionRecord } from "./types.js";
+import { TaskScheduler } from "./scheduler.js";
+
+const buildSystemPrompt = async (
+  config: AppConfig,
+  session: SessionRecord,
+): Promise<string> => {
+  const skills = await loadSkills(config.skillsDir);
+  const skillsBlock =
+    skills.length === 0
+      ? "No local skills are available."
+      : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+
+  return [
+    "You are maclaw, a small local LLM harness.",
+    "Your goal is to help the user answer questions and complete tasks."
+    "Keep answers concise and practical.",
+    "Use tools when needed.",
+    "Local skills are available as user-authored task descriptions. Read them when useful.",
+    `Session retention: ${config.retentionDays} days.`,
+    `Compression mode: ${config.compressionMode}. If set to planned, compression is not implemented yet.`,
+    "",
+    "Available skills:",
+    skillsBlock,
+    "",
+    `Current session id: ${session.id}`,
+    `Current time: ${new Date().toISOString()}`,
+  ].join("\n");
+};
+
+const createProvider = (config: AppConfig): Provider => {
+  if (config.openAiApiKey) {
+    return new OpenAIResponsesProvider(config.openAiApiKey, config.openAiModel);
+  }
+
+  return new LocalFallbackProvider();
+};
+
+export class MaclawAgent {
+  private readonly config: AppConfig;
+  private readonly scheduler: TaskScheduler;
+  private readonly provider: Provider;
+  private activeSession?: SessionRecord;
+
+  constructor(config: AppConfig, scheduler: TaskScheduler) {
+    this.config = config;
+    this.scheduler = scheduler;
+    this.provider = createProvider(config);
+  }
+
+  async loadActiveSession(): Promise<SessionRecord> {
+    if (!this.activeSession) {
+      this.activeSession = await loadSession(
+        this.config.sessionsDir,
+        this.config.sessionId,
+        this.config.retentionDays,
+        this.config.compressionMode,
+      );
+    }
+
+    return this.activeSession;
+  }
+
+  async handleUserInput(userInput: string): Promise<Message> {
+    const session = await this.loadActiveSession();
+    appendMessage(session, "user", userInput);
+    await saveSession(this.config.sessionsDir, session);
+
+    let assistantMessage: Message;
+    try {
+      const systemPrompt = await buildSystemPrompt(this.config, session);
+      const tools = createTools(this.config, this.scheduler, session.id);
+      const result = await this.provider.generate({
+        session,
+        userInput,
+        systemPrompt,
+        tools,
+      });
+
+      assistantMessage = appendMessage(session, "assistant", result.outputText);
+    } catch (error) {
+      const content = `Request failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      assistantMessage = appendMessage(session, "assistant", content);
+    }
+
+    await saveSession(this.config.sessionsDir, session);
+    this.activeSession = session;
+    return assistantMessage;
+  }
+
+  async handleScheduledTask(
+    sessionId: string,
+    prompt: string,
+  ): Promise<Message> {
+    const session = await loadSession(
+      this.config.sessionsDir,
+      sessionId,
+      this.config.retentionDays,
+      this.config.compressionMode,
+    );
+
+    appendMessage(session, "system", `Scheduled task triggered: ${prompt}`, "scheduler");
+    await saveSession(this.config.sessionsDir, session);
+
+    let assistantMessage: Message;
+    try {
+      const systemPrompt = await buildSystemPrompt(this.config, session);
+      const tools = createTools(this.config, this.scheduler, session.id);
+      const result = await this.provider.generate({
+        session,
+        userInput: prompt,
+        systemPrompt,
+        tools,
+      });
+
+      assistantMessage = appendMessage(
+        session,
+        "assistant",
+        result.outputText,
+        "scheduler",
+      );
+    } catch (error) {
+      const content = `Scheduled task failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      assistantMessage = appendMessage(session, "assistant", content, "scheduler");
+    }
+
+    await saveSession(this.config.sessionsDir, session);
+    if (this.activeSession?.id === session.id) {
+      this.activeSession = session;
+    }
+    return assistantMessage;
+  }
+}
