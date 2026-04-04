@@ -13,17 +13,23 @@ const createHarness = async (): Promise<{
   cleanup: () => Promise<void>;
   sessionStore: JsonFileSessionStore;
 }> => {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-"));
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-"));
   const config: AppConfig = {
-    dataDir,
-    sessionsDir: path.join(dataDir, "sessions"),
-    schedulerFile: path.join(dataDir, "tasks.json"),
-    skillsDir: path.join(dataDir, "skills"),
+    createdAt: undefined,
+    dataDir: path.join(projectDir, ".maclaw", "data"),
+    model: "gpt-4.1-mini",
+    provider: "local",
+    projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+    projectFolder: projectDir,
+    projectName: path.basename(projectDir),
+    sessionsDir: path.join(projectDir, ".maclaw", "data", "sessions"),
+    schedulerFile: path.join(projectDir, ".maclaw", "data", "tasks.json"),
+    taskRunsFile: path.join(projectDir, ".maclaw", "data", "task-runs.jsonl"),
+    skillsDir: path.join(projectDir, ".maclaw", "skills"),
     sessionId: "default",
     retentionDays: 30,
     compressionMode: "none",
     schedulerPollMs: 1_000,
-    openAiModel: "gpt-4.1-mini",
   };
 
   const sessionStore = new JsonFileSessionStore(config.sessionsDir);
@@ -32,7 +38,7 @@ const createHarness = async (): Promise<{
 
   return {
     agent,
-    cleanup: async () => rm(dataDir, { recursive: true, force: true }),
+    cleanup: async () => rm(projectDir, { recursive: true, force: true }),
     sessionStore,
   };
 };

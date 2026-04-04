@@ -11,11 +11,18 @@ import type { TaskSchedule } from "./types.js";
 const helpText = [
   "Commands:",
   "  /help              Show this help",
+  "  /project           Project information commands",
   "  /chat              Chat management commands",
-  "  /task              Task scheduling commands",
-  "  /skills            List local skills",
   "  /history           Show the current session transcript",
+  "  /skills            List local skills",
+  "  /task              Task scheduling commands",
   "  /quit              Exit the REPL",
+].join("\n");
+
+const projectHelpText = [
+  "Command: /project",
+  "  /project           Show the active project",
+  "  /project show      Show the active project",
 ].join("\n");
 
 const chatHelpText = [
@@ -185,6 +192,20 @@ const renderTaskList = async (
   return [header, separator, ...lines].join("\n");
 };
 
+const renderProjectInfo = (config: AppConfig, currentChatId: string): string => {
+  return [
+    `name: ${config.projectName}`,
+    `createdAt: ${config.createdAt ?? "(not set)"}`,
+    `folder: ${config.projectFolder}`,
+    `config: ${config.projectConfigFile}`,
+    `provider: ${config.provider}`,
+    `model: ${config.model}`,
+    `retentionDays: ${config.retentionDays}`,
+    `currentChat: ${currentChatId}`,
+    `skillsDir: ${config.skillsDir}`,
+  ].join("\n");
+};
+
 
 export const runRepl = async (
   config: AppConfig,
@@ -214,6 +235,11 @@ export const runRepl = async (
       continue;
     }
 
+    if (line === "/help project") {
+      output.write(`${projectHelpText}\n\n`);
+      continue;
+    }
+
     if (line === "/help chat") {
       output.write(`${chatHelpText}\n\n`);
       continue;
@@ -226,6 +252,11 @@ export const runRepl = async (
 
     if (line === "/chat") {
       output.write(`${agent.getCurrentSessionId()}\n\n`);
+      continue;
+    }
+
+    if (line === "/project" || line === "/project show") {
+      output.write(`${renderProjectInfo(config, agent.getCurrentSessionId())}\n\n`);
       continue;
     }
 

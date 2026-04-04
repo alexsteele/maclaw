@@ -141,13 +141,17 @@ export const createTools = (
       execute: async () =>
         JSON.stringify(
           {
+            projectConfigFile: config.projectConfigFile,
+            projectFolder: config.projectFolder,
+            projectName: config.projectName,
+            provider: config.provider,
             sessionId,
             skillsDir: config.skillsDir,
             dataDir: config.dataDir,
             retentionDays: config.retentionDays,
             compressionMode: config.compressionMode,
             schedulerPollMs: config.schedulerPollMs,
-            model: config.openAiModel,
+            model: config.model,
           },
           null,
           2,

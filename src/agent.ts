@@ -34,8 +34,8 @@ const buildSystemPrompt = async (
 };
 
 const createProvider = (config: AppConfig): Provider => {
-  if (config.openAiApiKey) {
-    return new OpenAIResponsesProvider(config.openAiApiKey, config.openAiModel);
+  if (config.provider === "openai" && config.openAiApiKey) {
+    return new OpenAIResponsesProvider(config.openAiApiKey, config.model);
   }
 
   return new LocalFallbackProvider();
