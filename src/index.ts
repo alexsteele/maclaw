@@ -1,12 +1,31 @@
 import { Harness } from "./harness.js";
 import { runRepl } from "./repl.js";
+import { MaclawServer } from "./server.js";
+
+const runReplCommand = async (): Promise<void> => {
+  const harness = Harness.load();
+  await runRepl(harness);
+};
+
+const runServer = async (): Promise<void> => {
+  const server = MaclawServer.load();
+  await server.start();
+};
 
 const main = async (): Promise<void> => {
-  const harness = Harness.load();
+  const command = process.argv[2];
 
-  await harness.pruneExpiredChats();
+  if (!command || command === "repl") {
+    await runReplCommand();
+    return;
+  }
 
-  await runRepl(harness);
+  if (command === "server") {
+    await runServer();
+    return;
+  }
+
+  throw new Error(`Unknown command: ${command}`);
 };
 
 main().catch((error) => {

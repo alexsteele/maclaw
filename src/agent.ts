@@ -58,6 +58,17 @@ export class MaclawAgent {
     this.activeChatId = config.chatId;
   }
 
+  private getChatLoadOptions() {
+    return {
+      retentionDays: this.config.retentionDays,
+      compressionMode: this.config.compressionMode,
+    } as const;
+  }
+
+  private async loadChat(chatId: string): Promise<ChatRecord> {
+    return this.chatStore.loadChat(chatId, this.getChatLoadOptions());
+  }
+
   getCurrentChatId(): string {
     return this.activeChatId;
   }
@@ -68,10 +79,7 @@ export class MaclawAgent {
 
   async switchChat(chatId: string): Promise<ChatRecord> {
     this.activeChatId = chatId;
-    this.activeChat = await this.chatStore.loadChat(chatId, {
-      retentionDays: this.config.retentionDays,
-      compressionMode: this.config.compressionMode,
-    });
+    this.activeChat = await this.loadChat(chatId);
     return this.activeChat;
   }
 
@@ -93,13 +101,7 @@ export class MaclawAgent {
 
   async loadActiveChat(): Promise<ChatRecord> {
     if (!this.activeChat) {
-      this.activeChat = await this.chatStore.loadChat(
-        this.activeChatId,
-        {
-          retentionDays: this.config.retentionDays,
-          compressionMode: this.config.compressionMode,
-        },
-      );
+      this.activeChat = await this.loadChat(this.activeChatId);
     }
 
     return this.activeChat;
@@ -107,6 +109,13 @@ export class MaclawAgent {
 
   async handleUserInput(userInput: string): Promise<Message> {
     const chat = await this.loadActiveChat();
+    return this.handleUserInputForChat(chat.id, userInput);
+  }
+
+  async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
+    const chat =
+      chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
+
     appendMessage(chat, "user", userInput);
     await this.chatStore.saveChat(chat);
 
@@ -130,7 +139,9 @@ export class MaclawAgent {
     }
 
     await this.chatStore.saveChat(chat);
-    this.activeChat = chat;
+    if (this.activeChatId === chat.id) {
+      this.activeChat = chat;
+    }
     return assistantMessage;
   }
 
@@ -138,13 +149,7 @@ export class MaclawAgent {
     chatId: string,
     prompt: string,
   ): Promise<Message> {
-    const chat = await this.chatStore.loadChat(
-      chatId,
-      {
-        retentionDays: this.config.retentionDays,
-        compressionMode: this.config.compressionMode,
-      },
-    );
+    const chat = await this.loadChat(chatId);
 
     appendMessage(chat, "system", `Scheduled task triggered: ${prompt}`, "scheduler");
     await this.chatStore.saveChat(chat);

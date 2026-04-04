@@ -269,7 +269,7 @@ class Repl {
   }
 
   async run(): Promise<void> {
-    this.harness.start(async (task, message) => {
+    await this.harness.start(async (task, message) => {
       output.write(`\n[scheduled:${task.title}] ${message.content}\n\n> `);
     });
     this.showStartup();
@@ -487,9 +487,7 @@ class Repl {
   }
 }
 
-export const runRepl = async (
-  harness: Harness,
-): Promise<void> => {
+export const runRepl = async (harness: Harness): Promise<void> => {
   const repl = new Repl(harness);
   await repl.run();
 };

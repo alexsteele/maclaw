@@ -50,6 +50,8 @@ const createScheduler = (config: AppConfig): TaskScheduler => {
     : new TaskScheduler(new MemoryTaskStore());
 };
 
+// Harness orchestrates user interactions with a project.
+// A default harness has no project. initProject() creates one.
 export class Harness {
   private _config: AppConfig;
   private _scheduler: TaskScheduler;
@@ -74,11 +76,13 @@ export class Harness {
 
   start(
     onTaskMessage: (task: ScheduledTask, message: Message) => void | Promise<void>,
-  ): void {
+  ): Promise<void> {
     this._taskListener = onTaskMessage;
-    this._scheduler.start(this._config.schedulerPollMs, async (task) => {
-      const message = await this.handleScheduledTask(task.chatId, task.prompt);
-      await onTaskMessage(task, message);
+    return this.pruneExpiredChats().then(() => {
+      this._scheduler.start(this._config.schedulerPollMs, async (task) => {
+        const message = await this.handleScheduledTask(task.chatId, task.prompt);
+        await onTaskMessage(task, message);
+      });
     });
   }
 
@@ -125,7 +129,7 @@ export class Harness {
     this._agent = nextAgent;
 
     if (this._taskListener) {
-      this.start(this._taskListener);
+      await this.start(this._taskListener);
     }
 
     return this;
@@ -238,6 +242,10 @@ export class Harness {
 
   async handleUserInput(userInput: string): Promise<Message> {
     return this._agent.handleUserInput(userInput);
+  }
+
+  async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
+    return this._agent.handleUserInputForChat(chatId, userInput);
   }
 
   async handleScheduledTask(chatId: string, prompt: string): Promise<Message> {

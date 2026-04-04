@@ -18,6 +18,7 @@ maclaw is a small LLM harness built with OpenAI codex.
 - **Project**: the folder maclaw runs in, including its local config, skills,
   chats, tasks, and logs
 - **Chat**: a saved conversation thread with its own history and scheduled tasks
+- **Channel**: communication channel for talking to maclaw (whatsapp, sms, etc)
 - **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
 - **Tool**: a callable capability the harness can use, such as editing files,
   calling APIs, etc.
@@ -32,13 +33,73 @@ maclaw is a small LLM harness built with OpenAI codex.
 3. Set `OPENAI_API_KEY` if you want live model responses.
 4. Start the REPL with `npm run dev`.
 
+## REPL
+
+`npm run dev` starts a repl with the following commands.
+
+```text
+Commands:
+  /help              Show this help
+  /project           Project commands
+  /chat              Chat commands
+  /history           Show the current chat transcript
+  /skills            List local skills
+  /task              Task scheduling commands
+  /quit              Exit the REPL
+```
+
+
+## Server
+
+maclaw can also run as a long-lived server:
+
+- `npm run dev -- server`
+
+Server mode is currently WhatsApp-first and loads global server settings from:
+
+- `~/.maclaw/server.json`
+- `~/.maclaw/secrets.json`
+
+`server.json` is for non-secret settings such as projects, webhook path, and
+port. `secrets.json` is for private credentials such as WhatsApp access and
+verify tokens.
+
+Example `server.json`:
+
+```json
+{
+  "projects": [
+    { "name": "home", "folder": "/path/to/home-project" }
+  ],
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "defaultProject": "home",
+      "port": 3000,
+      "webhookPath": "/whatsapp/webhook"
+    }
+  }
+}
+```
+
+Example `secrets.json`:
+
+```json
+{
+  "whatsapp": {
+    "accessToken": "your-whatsapp-access-token",
+    "verifyToken": "your-whatsapp-verify-token"
+  }
+}
+```
+
 ## Projects
 
-maclaw projects encompass settings, chats, and tasks.
+maclaw organizes work into projects. Projects encompass settings, chats, and tasks.
 
 When you start the repl, maclaw runs in "headless" mode without a project by default.
 
-Run `project init` to set up a project in the current folder. 
+Run `/project init` to set up a project in the current folder.
 
 By default, project data goes in the `.maclaw/` folder.
 
@@ -69,18 +130,6 @@ my-project/
 
 `skillsDir` is optional. If you omit it, maclaw uses `.maclaw/skills` by default.
 
-## Commands
-
-```text
-Commands:
-  /help              Show this help
-  /project           Project information commands
-  /chat              Chat management commands
-  /history           Show the current chat transcript
-  /skills            List local skills
-  /task              Task scheduling commands
-  /quit              Exit the REPL
-```
 
 ## Configuration
 
@@ -110,15 +159,6 @@ Currently supported providers:
 - `openai`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
 - `local`: uses the built-in fallback provider for local testing without live model calls
 
-## Notes
-
-- Chats are stored as JSON files under `.maclaw/chats/`.
-- Scheduled tasks are stored in `.maclaw/tasks.json`.
-- If no `.maclaw/maclaw.json` exists, maclaw runs in a non-persistent mirage mode and does not write `.maclaw/` to disk.
-- `/project init` creates `.maclaw/maclaw.json` and `.maclaw/skills/`, then switches the current REPL into persistent project mode.
-- Compression is not implemented yet; `MACLAW_COMPRESSION_MODE=planned` is a forward-compatible placeholder.
-- If `OPENAI_API_KEY` is missing, the harness falls back to a local non-LLM response so the REPL still works.
-
 ## TODO
 
 - Chat support for WhatsApp, SMS, etc.
@@ -129,3 +169,4 @@ Currently supported providers:
 - MCP support
 - Tool approval and policy controls.
 - Tests and end-to-end dev workflow.
+- Consolidate server/repl command handling.

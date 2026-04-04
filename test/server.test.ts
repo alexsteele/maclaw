@@ -1,0 +1,107 @@
+import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import test from "node:test";
+import { initProjectConfig } from "../src/config.js";
+import { MaclawServer } from "../src/server.js";
+
+test("server handles project commands and routes chat messages by active project", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-"));
+  const homeDir = path.join(rootDir, "home");
+  const workDir = path.join(rootDir, "work");
+
+  try {
+    await initProjectConfig(homeDir, {
+      name: "home",
+      provider: "local",
+      model: "test-model",
+    });
+    await initProjectConfig(workDir, {
+      name: "work",
+      provider: "local",
+      model: "test-model",
+    });
+
+    const server = MaclawServer.create(
+      {
+        configFile: path.join(rootDir, "server.json"),
+        projects: [
+          { name: "home", folder: homeDir },
+          { name: "work", folder: workDir },
+        ],
+        channels: {
+          whatsapp: {
+            enabled: false,
+            defaultProject: "home",
+            graphApiVersion: "v23.0",
+            port: 3000,
+            webhookPath: "/whatsapp/webhook",
+          },
+        },
+      },
+      {
+        configFile: path.join(rootDir, "secrets.json"),
+        whatsapp: {},
+      },
+    );
+    await server.start();
+
+    const helpReply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/help",
+    });
+    assert.match(helpReply ?? "", /\/project switch <name>/u);
+
+    const listReply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/project list",
+    });
+    assert.equal(listReply, "home\nwork");
+
+    const projectReply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/project",
+    });
+    assert.equal(projectReply, "Current project: home");
+
+    const switchReply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/project switch work",
+    });
+    assert.equal(switchReply, "Switched to project: work");
+
+    const afterSwitchReply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/project",
+    });
+    assert.equal(afterSwitchReply, "Current project: work");
+
+    await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "remember this in work",
+    });
+
+    const workTranscript = await server
+      .getHarness("work")
+      .loadChat("whatsapp-15551234567")
+      .then((chat) => chat.messages.map((message) => message.content).join("\n"));
+    assert.match(workTranscript, /remember this in work/u);
+
+    const homeTranscript = await server
+      .getHarness("home")
+      .loadChat("whatsapp-15551234567")
+      .then((chat) => chat.messages.map((message) => message.content).join("\n"));
+    assert.doesNotMatch(homeTranscript, /remember this in work/u);
+
+    await server.stop();
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
