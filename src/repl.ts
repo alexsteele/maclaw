@@ -5,14 +5,15 @@ import type { SessionStore } from "./sessions.js";
 import { loadSkills } from "./skills.js";
 import { MaclawAgent } from "./agent.js";
 import { TaskScheduler } from "./scheduler.js";
+import type { TaskSchedule, Weekday } from "./types.js";
 
 const helpText = [
   "Commands:",
   "  /help              Show this help",
   "  /chat              Chat management commands",
+  "  /task              Task scheduling commands",
   "  /skills            List local skills",
   "  /history           Show the current session transcript",
-  "  /tasks             List scheduled tasks",
   "  /quit              Exit the REPL",
 ].join("\n");
 
@@ -22,6 +23,16 @@ const chatHelpText = [
   "  /chat list         List saved chats",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
+].join("\n");
+
+const taskHelpText = [
+  "Command: /task",
+  "  /task list",
+  "  /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>",
+  "  /task schedule hourly | <title> | <prompt>",
+  "  /task schedule daily 9:00 AM | <title> | <prompt>",
+  "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>",
+  "  /task delete <task id>",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -84,6 +95,289 @@ const formatChatTimestamp = (value: string): string => {
 };
 
 const padCell = (value: string, width: number): string => value.padEnd(width, " ");
+const weekdayNames: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+const formatTaskTimestamp = (value: string): string => {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  const now = new Date();
+  const isToday =
+    timestamp.getFullYear() === now.getFullYear() &&
+    timestamp.getMonth() === now.getMonth() &&
+    timestamp.getDate() === now.getDate();
+
+  return isToday
+    ? timeFormatter.format(timestamp)
+    : `${dateFormatter.format(timestamp)} ${timeFormatter.format(timestamp)}`;
+};
+
+const formatSchedule = (schedule: TaskSchedule): string => {
+  const renderTime = (hour: number, minute: number): string => {
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    return timeFormatter.format(date);
+  };
+
+  switch (schedule.type) {
+    case "once":
+      return "once";
+    case "hourly":
+      return `hourly @ :${String(schedule.minute).padStart(2, "0")}`;
+    case "daily":
+      return `daily ${renderTime(schedule.hour, schedule.minute)}`;
+    case "weekly":
+      return `${schedule.days.join(",")} ${renderTime(schedule.hour, schedule.minute)}`;
+  }
+};
+
+const renderTaskList = async (
+  scheduler: TaskScheduler,
+  sessionId: string,
+): Promise<string> => {
+  const tasks = await scheduler.listTasks(sessionId);
+  if (tasks.length === 0) {
+    return "No scheduled tasks.";
+  }
+
+  const rows = tasks.map((task) => ({
+    id: task.id,
+    status: task.status,
+    nextRunAt: formatTaskTimestamp(task.nextRunAt),
+    schedule: formatSchedule(task.schedule),
+    title: task.title,
+  }));
+
+  const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
+  const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
+  const nextRunWidth = Math.max("next run".length, ...rows.map((row) => row.nextRunAt.length));
+  const scheduleWidth = Math.max("schedule".length, ...rows.map((row) => row.schedule.length));
+  const titleWidth = Math.max("title".length, ...rows.map((row) => row.title.length));
+
+  const header = [
+    padCell("id", idWidth),
+    padCell("status", statusWidth),
+    padCell("next run", nextRunWidth),
+    padCell("schedule", scheduleWidth),
+    padCell("title", titleWidth),
+  ].join("  ");
+
+  const separator = [
+    "-".repeat(idWidth),
+    "-".repeat(statusWidth),
+    "-".repeat(nextRunWidth),
+    "-".repeat(scheduleWidth),
+    "-".repeat(titleWidth),
+  ].join("  ");
+
+  const lines = rows.map((row) =>
+    [
+      padCell(row.id, idWidth),
+      padCell(row.status, statusWidth),
+      padCell(row.nextRunAt, nextRunWidth),
+      padCell(row.schedule, scheduleWidth),
+      padCell(row.title, titleWidth),
+    ].join("  "),
+  );
+
+  return [header, separator, ...lines].join("\n");
+};
+
+const parseTimeOfDay = (value: string): { hour: number; minute: number } | null => {
+  const trimmed = value.trim();
+  const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
+  if (twelveHourMatch) {
+    const rawHour = Number.parseInt(twelveHourMatch[1] ?? "", 10);
+    const minute = Number.parseInt(twelveHourMatch[2] ?? "", 10);
+    const meridiem = (twelveHourMatch[3] ?? "").toUpperCase();
+
+    if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) {
+      return null;
+    }
+
+    let hour = rawHour % 12;
+    if (meridiem === "PM") {
+      hour += 12;
+    }
+
+    return { hour, minute };
+  }
+
+  const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/u.exec(trimmed);
+  if (!twentyFourHourMatch) {
+    return null;
+  }
+
+  const hour = Number.parseInt(twentyFourHourMatch[1] ?? "", 10);
+  const minute = Number.parseInt(twentyFourHourMatch[2] ?? "", 10);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  return { hour, minute };
+};
+
+const parseUsDateTime = (value: string): string | null => {
+  const trimmed = value.trim();
+  const match =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const month = Number.parseInt(match[1] ?? "", 10);
+  const day = Number.parseInt(match[2] ?? "", 10);
+  const year = Number.parseInt(match[3] ?? "", 10);
+  const rawHour = Number.parseInt(match[4] ?? "", 10);
+  const minute = Number.parseInt(match[5] ?? "", 10);
+  const meridiem = (match[6] ?? "").toUpperCase();
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    rawHour < 1 ||
+    rawHour > 12 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  let hour = rawHour % 12;
+  if (meridiem === "PM") {
+    hour += 12;
+  }
+
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const parseWeekdays = (value: string): Weekday[] | null => {
+  const parts = value
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const unique = new Set<Weekday>();
+  for (const part of parts) {
+    if (!weekdayNames.includes(part as Weekday)) {
+      return null;
+    }
+    unique.add(part as Weekday);
+  }
+
+  return weekdayNames.filter((day) => unique.has(day));
+};
+
+const parseTaskScheduleCommand = (
+  value: string,
+): { prompt: string; schedule: TaskSchedule; title: string } | null => {
+  const parts = value.split("|").map((part) => part.trim());
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [schedulePart, title, prompt] = parts;
+  if (!schedulePart || !title || !prompt) {
+    return null;
+  }
+
+  const usDateTime = parseUsDateTime(schedulePart);
+  if (usDateTime) {
+    return {
+      schedule: {
+        type: "once",
+        runAt: usDateTime,
+      },
+      title,
+      prompt,
+    };
+  }
+
+  const tokens = schedulePart.split(/\s+/u);
+  const kind = tokens[0]?.toLowerCase();
+
+  if (kind === "once" && tokens.length >= 2) {
+    const runAt = parseUsDateTime(tokens.slice(1).join(" "));
+    if (!runAt) {
+      return null;
+    }
+
+    return {
+      schedule: {
+        type: "once",
+        runAt,
+      },
+      title,
+      prompt,
+    };
+  }
+
+  if (kind === "hourly" && tokens.length === 1) {
+    return {
+      schedule: {
+        type: "hourly",
+        minute: new Date().getMinutes(),
+      },
+      title,
+      prompt,
+    };
+  }
+
+  if (kind === "daily" && tokens.length === 2) {
+    const time = parseTimeOfDay(tokens[1] ?? "");
+    if (!time) {
+      return null;
+    }
+
+    return {
+      schedule: {
+        type: "daily",
+        hour: time.hour,
+        minute: time.minute,
+      },
+      title,
+      prompt,
+    };
+  }
+
+  if (kind === "weekly" && tokens.length === 3) {
+    const days = parseWeekdays(tokens[1] ?? "");
+    const time = parseTimeOfDay(tokens[2] ?? "");
+    if (!days || !time) {
+      return null;
+    }
+
+    return {
+      schedule: {
+        type: "weekly",
+        days,
+        hour: time.hour,
+        minute: time.minute,
+      },
+      title,
+      prompt,
+    };
+  }
+
+  return null;
+};
 
 export const runRepl = async (
   config: AppConfig,
@@ -115,6 +409,11 @@ export const runRepl = async (
 
     if (line === "/help chat") {
       output.write(`${chatHelpText}\n\n`);
+      continue;
+    }
+
+    if (line === "/help task") {
+      output.write(`${taskHelpText}\n\n`);
       continue;
     }
 
@@ -218,6 +517,52 @@ export const runRepl = async (
       continue;
     }
 
+    if (line === "/task") {
+      output.write(`${taskHelpText}\n\n`);
+      continue;
+    }
+
+    if (line === "/task list") {
+      const rendered = await renderTaskList(scheduler, agent.getCurrentSessionId());
+      output.write(`${rendered}\n\n`);
+      continue;
+    }
+
+    if (line.startsWith("/task schedule ")) {
+      const parsed = parseTaskScheduleCommand(line.slice("/task schedule ".length).trim());
+      if (!parsed) {
+        output.write(
+          "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>\n" +
+            "       /task schedule hourly | <title> | <prompt>\n" +
+            "       /task schedule daily 9:00 AM | <title> | <prompt>\n" +
+            "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>\n\n",
+        );
+        continue;
+      }
+
+      const task = await scheduler.createTask({
+        sessionId: agent.getCurrentSessionId(),
+        title: parsed.title,
+        prompt: parsed.prompt,
+        schedule: parsed.schedule,
+      });
+
+      output.write(`scheduled task: ${task.id}\n\n`);
+      continue;
+    }
+
+    if (line.startsWith("/task delete ")) {
+      const taskId = line.slice("/task delete ".length).trim();
+      if (taskId.length === 0) {
+        output.write("Usage: /task delete <task id>\n\n");
+        continue;
+      }
+
+      const deleted = await scheduler.deleteTask(taskId, agent.getCurrentSessionId());
+      output.write(deleted ? `deleted task: ${taskId}\n\n` : `task not found: ${taskId}\n\n`);
+      continue;
+    }
+
     if (line === "/skills") {
       const skills = await loadSkills(config.skillsDir);
       output.write(
@@ -245,18 +590,6 @@ export const runRepl = async (
               .join("\n");
 
       output.write(`${transcript}\n\n`);
-      continue;
-    }
-
-    if (line === "/tasks") {
-      const tasks = await scheduler.listTasks(agent.getCurrentSessionId());
-      const rendered =
-        tasks.length === 0
-          ? "No scheduled tasks."
-          : tasks
-              .map((task) => `- [${task.status}] ${task.title} at ${task.runAt}`)
-              .join("\n");
-      output.write(`${rendered}\n\n`);
       continue;
     }
 

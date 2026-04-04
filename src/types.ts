@@ -32,15 +32,40 @@ export type Skill = {
   content: string;
 };
 
+export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+
+export type TaskSchedule =
+  | {
+      type: "once";
+      runAt: string;
+    }
+  | {
+      type: "hourly";
+      minute: number;
+    }
+  | {
+      type: "daily";
+      hour: number;
+      minute: number;
+    }
+  | {
+      type: "weekly";
+      days: Weekday[];
+      hour: number;
+      minute: number;
+    };
+
 export type ScheduledTask = {
   id: string;
   sessionId: string;
   title: string;
   prompt: string;
-  runAt: string;
+  schedule: TaskSchedule;
+  nextRunAt: string;
   status: "pending" | "running" | "completed" | "failed";
   createdAt: string;
   updatedAt: string;
+  lastRunAt?: string;
   lastError?: string;
 };
 

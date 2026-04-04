@@ -116,7 +116,7 @@ export const createTools = (
         }
 
         return tasks
-          .map((task) => `- [${task.status}] ${task.title} at ${task.runAt} (${task.id})`)
+          .map((task) => `- [${task.status}] ${task.title} next at ${task.nextRunAt} (${task.id})`)
           .join("\n");
       },
     },
