@@ -32,6 +32,11 @@ test("server handles project commands and routes chat messages by active project
         ],
         defaultProject: "home",
         channels: {
+          slack: {
+            enabled: false,
+            port: 3001,
+            webhookPath: "/slack/events",
+          },
           whatsapp: {
             enabled: false,
             graphApiVersion: "v23.0",
@@ -42,6 +47,7 @@ test("server handles project commands and routes chat messages by active project
       },
       {
         configFile: path.join(rootDir, "secrets.json"),
+        slack: {},
         whatsapp: {},
       },
     );
@@ -131,6 +137,11 @@ test("server prompts the user to choose a project when none is selected", async 
           { name: "work", folder: workDir },
         ],
         channels: {
+          slack: {
+            enabled: false,
+            port: 3001,
+            webhookPath: "/slack/events",
+          },
           whatsapp: {
             enabled: false,
             graphApiVersion: "v23.0",
@@ -141,6 +152,7 @@ test("server prompts the user to choose a project when none is selected", async 
       },
       {
         configFile: path.join(rootDir, "secrets.json"),
+        slack: {},
         whatsapp: {},
       },
     );

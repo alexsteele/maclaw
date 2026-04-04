@@ -55,14 +55,14 @@ maclaw can also run as a long-lived server:
 
 - `npm run dev -- server`
 
-Server mode is currently WhatsApp-first and loads global server settings from:
+Server mode currently supports WhatsApp and Slack channels, and loads global server settings from:
 
 - `~/.maclaw/server.json`
 - `~/.maclaw/secrets.json`
 
-`server.json` is for non-secret settings such as projects, webhook path, and
-port. `secrets.json` is for private credentials such as WhatsApp access and
-verify tokens.
+`server.json` is for non-secret settings such as projects, webhook paths, ports,
+and channel options. `secrets.json` is for private credentials such as
+WhatsApp tokens and Slack signing secrets.
 
 Example `server.json`:
 
@@ -73,6 +73,12 @@ Example `server.json`:
     { "name": "home", "folder": "/path/to/home-project" }
   ],
   "channels": {
+    "slack": {
+      "enabled": true,
+      "port": 3001,
+      "webhookPath": "/slack/events",
+      "botUserId": "U12345678"
+    },
     "whatsapp": {
       "enabled": true,
       "port": 3000,
@@ -86,6 +92,10 @@ Example `secrets.json`:
 
 ```json
 {
+  "slack": {
+    "botToken": "xoxb-your-slack-bot-token",
+    "signingSecret": "your-slack-signing-secret"
+  },
   "whatsapp": {
     "accessToken": "your-whatsapp-access-token",
     "verifyToken": "your-whatsapp-verify-token"

@@ -7,26 +7,17 @@ export type ServerProjectConfig = {
   name: string;
 };
 
-type RawWhatsAppConfig = {
-  enabled?: boolean;
-  graphApiVersion?: string;
-  phoneNumberId?: string;
-  port?: number;
-  webhookPath?: string;
-};
-
-type RawServerConfig = {
-  defaultProject?: string;
-  channels?: {
-    whatsapp?: RawWhatsAppConfig;
-  };
-  projects: ServerProjectConfig[];
-};
-
 export type WhatsAppConfig = {
   enabled: boolean;
   graphApiVersion: string;
   phoneNumberId?: string;
+  port: number;
+  webhookPath: string;
+};
+
+export type SlackConfig = {
+  enabled: boolean;
+  botUserId?: string;
   port: number;
   webhookPath: string;
 };
@@ -36,19 +27,17 @@ export type ServerConfig = {
   defaultProject?: string;
   projects: ServerProjectConfig[];
   channels: {
+    slack: SlackConfig;
     whatsapp: WhatsAppConfig;
-  };
-};
-
-type ServerSecretsFile = {
-  whatsapp?: {
-    accessToken?: string;
-    verifyToken?: string;
   };
 };
 
 export type ServerSecrets = {
   configFile: string;
+  slack: {
+    botToken?: string;
+    signingSecret?: string;
+  };
   whatsapp: {
     accessToken?: string;
     verifyToken?: string;
@@ -80,7 +69,14 @@ export const loadServerConfig = (
   }
 
   const raw = readFileSync(resolvedConfigFile, "utf8");
-  const parsed = JSON.parse(raw) as RawServerConfig;
+  const parsed = JSON.parse(raw) as {
+    defaultProject?: string;
+    channels?: {
+      slack?: Partial<SlackConfig>;
+      whatsapp?: Partial<WhatsAppConfig>;
+    };
+    projects?: ServerProjectConfig[];
+  };
   const projects = Array.isArray(parsed.projects) ? parsed.projects : [];
   const names = new Set<string>();
 
@@ -97,6 +93,7 @@ export const loadServerConfig = (
   }
 
   const whatsapp = parsed.channels?.whatsapp ?? {};
+  const slack = parsed.channels?.slack ?? {};
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
   }
@@ -109,6 +106,12 @@ export const loadServerConfig = (
       folder: path.resolve(project.folder),
     })),
     channels: {
+      slack: {
+        enabled: slack.enabled ?? false,
+        botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
+        port: toPositiveInt(slack.port, 3001),
+        webhookPath: slack.webhookPath ?? "/slack/events",
+      },
       whatsapp: {
         enabled: whatsapp.enabled ?? false,
         graphApiVersion: whatsapp.graphApiVersion ?? "v23.0",
@@ -125,12 +128,23 @@ export const loadServerSecrets = (
   secretsFile: string = defaultServerSecretsFile(),
 ): ServerSecrets => {
   const resolvedSecretsFile = path.resolve(secretsFile);
-  const parsed: ServerSecretsFile = existsSync(resolvedSecretsFile)
-    ? (JSON.parse(readFileSync(resolvedSecretsFile, "utf8")) as ServerSecretsFile)
+  const parsed = existsSync(resolvedSecretsFile)
+    ? (JSON.parse(readFileSync(resolvedSecretsFile, "utf8")) as {
+        slack?: Partial<ServerSecrets["slack"]>;
+        whatsapp?: Partial<ServerSecrets["whatsapp"]>;
+      })
     : {};
 
   return {
     configFile: resolvedSecretsFile,
+    slack: {
+      botToken:
+        process.env.MACLAW_SLACK_BOT_TOKEN ??
+        parsed.slack?.botToken,
+      signingSecret:
+        process.env.MACLAW_SLACK_SIGNING_SECRET ??
+        parsed.slack?.signingSecret,
+    },
     whatsapp: {
       accessToken:
         process.env.MACLAW_WHATSAPP_ACCESS_TOKEN ??

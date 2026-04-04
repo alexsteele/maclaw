@@ -11,6 +11,7 @@ import {
   type ServerSecrets,
 } from "./server-config.js";
 import type { Message, ScheduledTask } from "./types.js";
+import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
 
 const logScheduledTask = async (
@@ -180,6 +181,12 @@ export class MaclawServer {
 
     for (const project of this.config.projects) {
       this.projects.set(project.name, Harness.load(project.folder));
+    }
+
+    if (this.config.channels.slack.enabled) {
+      this.channels.push(
+        new SlackChannel(this.config.channels.slack, this.secrets.slack),
+      );
     }
 
     if (this.config.channels.whatsapp.enabled) {

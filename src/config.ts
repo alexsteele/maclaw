@@ -27,17 +27,6 @@ export type ProjectConfig = {
   chatsDir: string;
 };
 
-type RawProjectConfig = {
-  name?: string;
-  createdAt?: string;
-  provider?: "local" | "openai";
-  model?: string;
-  retentionDays?: number;
-  skillsDir?: string;
-  compressionMode?: "none" | "planned";
-  schedulerPollMs?: number;
-};
-
 
 const toPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -48,19 +37,19 @@ const toPositiveInt = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const readProjectFileConfig = (cwd: string): RawProjectConfig => {
+const readProjectFileConfig = (cwd: string): Partial<ProjectConfig> => {
   const projectConfigFile = path.join(cwd, ".maclaw", "maclaw.json");
   if (!existsSync(projectConfigFile)) {
     return {};
   }
 
   const raw = readFileSync(projectConfigFile, "utf8");
-  return JSON.parse(raw) as RawProjectConfig;
+  return JSON.parse(raw) as Partial<ProjectConfig>;
 };
 
 export const initProjectConfig = async (
   cwd: string = process.cwd(),
-  overrides: Partial<RawProjectConfig> = {},
+  overrides: Partial<ProjectConfig> = {},
 ): Promise<ProjectConfig> => {
   const projectFolder = path.resolve(cwd);
   const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
@@ -70,7 +59,7 @@ export const initProjectConfig = async (
     ...overrides,
   };
 
-  const nextFileConfig: RawProjectConfig = {
+  const nextFileConfig: Partial<ProjectConfig> = {
     createdAt: mergedConfig.createdAt ?? new Date().toISOString(),
     name: mergedConfig.name ?? path.basename(projectFolder),
     retentionDays: mergedConfig.retentionDays ?? 30,
