@@ -1,6 +1,6 @@
 import type { AppConfig } from "./config.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
-import { appendMessage, loadSession, saveSession } from "./sessions.js";
+import { appendMessage, type SessionStore } from "./sessions.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
 import type { Message, SessionRecord } from "./types.js";
@@ -18,7 +18,7 @@ const buildSystemPrompt = async (
 
   return [
     "You are maclaw, a small local LLM harness.",
-    "Your goal is to help the user answer questions and complete tasks."
+    "Your goal is to help the user answer questions and complete tasks.",
     "Keep answers concise and practical.",
     "Use tools when needed.",
     "Local skills are available as user-authored task descriptions. Read them when useful.",
@@ -44,22 +44,25 @@ const createProvider = (config: AppConfig): Provider => {
 export class MaclawAgent {
   private readonly config: AppConfig;
   private readonly scheduler: TaskScheduler;
+  private readonly sessionStore: SessionStore;
   private readonly provider: Provider;
   private activeSession?: SessionRecord;
 
-  constructor(config: AppConfig, scheduler: TaskScheduler) {
+  constructor(config: AppConfig, scheduler: TaskScheduler, sessionStore: SessionStore) {
     this.config = config;
     this.scheduler = scheduler;
+    this.sessionStore = sessionStore;
     this.provider = createProvider(config);
   }
 
   async loadActiveSession(): Promise<SessionRecord> {
     if (!this.activeSession) {
-      this.activeSession = await loadSession(
-        this.config.sessionsDir,
+      this.activeSession = await this.sessionStore.loadSession(
         this.config.sessionId,
-        this.config.retentionDays,
-        this.config.compressionMode,
+        {
+          retentionDays: this.config.retentionDays,
+          compressionMode: this.config.compressionMode,
+        },
       );
     }
 
@@ -69,7 +72,7 @@ export class MaclawAgent {
   async handleUserInput(userInput: string): Promise<Message> {
     const session = await this.loadActiveSession();
     appendMessage(session, "user", userInput);
-    await saveSession(this.config.sessionsDir, session);
+    await this.sessionStore.saveSession(session);
 
     let assistantMessage: Message;
     try {
@@ -90,7 +93,7 @@ export class MaclawAgent {
       assistantMessage = appendMessage(session, "assistant", content);
     }
 
-    await saveSession(this.config.sessionsDir, session);
+    await this.sessionStore.saveSession(session);
     this.activeSession = session;
     return assistantMessage;
   }
@@ -99,15 +102,16 @@ export class MaclawAgent {
     sessionId: string,
     prompt: string,
   ): Promise<Message> {
-    const session = await loadSession(
-      this.config.sessionsDir,
+    const session = await this.sessionStore.loadSession(
       sessionId,
-      this.config.retentionDays,
-      this.config.compressionMode,
+      {
+        retentionDays: this.config.retentionDays,
+        compressionMode: this.config.compressionMode,
+      },
     );
 
     appendMessage(session, "system", `Scheduled task triggered: ${prompt}`, "scheduler");
-    await saveSession(this.config.sessionsDir, session);
+    await this.sessionStore.saveSession(session);
 
     let assistantMessage: Message;
     try {
@@ -133,7 +137,7 @@ export class MaclawAgent {
       assistantMessage = appendMessage(session, "assistant", content, "scheduler");
     }
 
-    await saveSession(this.config.sessionsDir, session);
+    await this.sessionStore.saveSession(session);
     if (this.activeSession?.id === session.id) {
       this.activeSession = session;
     }

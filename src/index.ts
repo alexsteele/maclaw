@@ -3,7 +3,7 @@ import { ensureDir } from "./fs-utils.js";
 import { MaclawAgent } from "./agent.js";
 import { runRepl } from "./repl.js";
 import { TaskScheduler } from "./scheduler.js";
-import { pruneExpiredSessions } from "./sessions.js";
+import { JsonFileSessionStore } from "./sessions.js";
 
 const main = async (): Promise<void> => {
   const config = loadConfig();
@@ -12,9 +12,10 @@ const main = async (): Promise<void> => {
   await ensureDir(config.skillsDir);
 
   const scheduler = new TaskScheduler(config.schedulerFile);
-  const agent = new MaclawAgent(config, scheduler);
+  const sessionStore = new JsonFileSessionStore(config.sessionsDir);
+  const agent = new MaclawAgent(config, scheduler, sessionStore);
 
-  await pruneExpiredSessions(config.sessionsDir, config.retentionDays);
+  await sessionStore.pruneExpiredSessions(config.retentionDays);
 
   const timer = setInterval(() => {
     void scheduler.runDueTasks(async (task) => {
@@ -25,7 +26,7 @@ const main = async (): Promise<void> => {
 
   timer.unref();
 
-  await runRepl(config, agent, scheduler);
+  await runRepl(config, agent, scheduler, sessionStore);
 };
 
 main().catch((error) => {

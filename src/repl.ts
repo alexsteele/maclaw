@@ -1,7 +1,7 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { AppConfig } from "./config.js";
-import { loadSession } from "./sessions.js";
+import type { SessionStore } from "./sessions.js";
 import { loadSkills } from "./skills.js";
 import { MaclawAgent } from "./agent.js";
 import { TaskScheduler } from "./scheduler.js";
@@ -19,6 +19,7 @@ export const runRepl = async (
   config: AppConfig,
   agent: MaclawAgent,
   scheduler: TaskScheduler,
+  sessionStore: SessionStore,
 ): Promise<void> => {
   const rl = readline.createInterface({ input, output });
 
@@ -53,11 +54,12 @@ export const runRepl = async (
     }
 
     if (line === "/history") {
-      const session = await loadSession(
-        config.sessionsDir,
+      const session = await sessionStore.loadSession(
         config.sessionId,
-        config.retentionDays,
-        config.compressionMode,
+        {
+          retentionDays: config.retentionDays,
+          compressionMode: config.compressionMode,
+        },
       );
 
       const transcript =
