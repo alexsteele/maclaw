@@ -14,3 +14,4 @@
 - Use simple clear names focused on our domain concepts.
 - Put important commands/fields first in a readable order for users.
 - Keep functions focused and ask the user if you're unsure how to organize them.
+- Reserve exceptions for exceptional events like IO errors, not bad user input.

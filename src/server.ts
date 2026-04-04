@@ -2,6 +2,7 @@ import type {
   Channel,
   ChannelMessage,
 } from "./channels/channel.js";
+import { dispatchCommand } from "./commands.js";
 import { Harness } from "./harness.js";
 import {
   loadServerConfig,
@@ -161,6 +162,13 @@ export class MaclawServer {
     }
 
     const harness = this.getHarness(projectName);
+    const commandReply = await dispatchCommand(harness, message.text, {
+      chatId: message.userId,
+    });
+    if (commandReply !== null) {
+      return commandReply;
+    }
+
     const reply = await harness.handleUserInputForChat(message.userId, message.text);
     return reply.content;
   }

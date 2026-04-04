@@ -45,3 +45,19 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("forkChat creates a default fork id when none is provided", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-fork-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const result = await harness.forkChat();
+
+    assert.ok(result.chat);
+    assert.equal(result.chat.id, "default-fork");
+    assert.equal(harness.getCurrentChatId(), "default-fork");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

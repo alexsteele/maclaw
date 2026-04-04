@@ -26,6 +26,10 @@ import type {
   Skill,
 } from "./types.js";
 
+type ForkChatResult =
+  | { chat: ChatRecord; error?: undefined }
+  | { chat?: undefined; error: string };
+
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.isProjectInitialized
     ? new JsonFileChatStore(config.chatsDir)
@@ -155,8 +159,48 @@ export class Harness {
     return this._agent.switchChat(chatId);
   }
 
-  async forkChat(newChatId: string): Promise<ChatRecord> {
-    return this._agent.forkChat(newChatId);
+  private parseRequestedChatId(value: string): string | null {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    return /^[A-Za-z0-9._-]+$/u.test(trimmed) ? trimmed : null;
+  }
+
+  private async buildForkChatId(requestedId?: string): Promise<string | null> {
+    if (requestedId && requestedId.trim().length > 0) {
+      return this.parseRequestedChatId(requestedId);
+    }
+
+    const baseId = `${this.getCurrentChatId()}-fork`;
+    const existingIds = new Set((await this.listChats()).map((chat) => chat.id));
+    if (!existingIds.has(baseId)) {
+      return baseId;
+    }
+
+    for (let index = 2; index < 10_000; index += 1) {
+      const candidate = `${baseId}-${index}`;
+      if (!existingIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  async forkChat(requestedId?: string): Promise<ForkChatResult> {
+    const newChatId = await this.buildForkChatId(requestedId);
+    if (!newChatId) {
+      return { error: "Could not create a valid chat id for the fork." };
+    }
+
+    const existingChats = await this.listChats();
+    if (existingChats.some((chat) => chat.id === newChatId)) {
+      return { error: `chat already exists: ${newChatId}` };
+    }
+
+    return { chat: await this._agent.forkChat(newChatId) };
   }
 
   async loadCurrentChat(): Promise<ChatRecord> {
@@ -164,7 +208,11 @@ export class Harness {
   }
 
   async getCurrentChatTranscript(): Promise<string> {
-    const chat = await this.loadCurrentChat();
+    return this.getChatTranscript();
+  }
+
+  async getChatTranscript(chatId?: string): Promise<string> {
+    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
     return chat.messages.length === 0
       ? "No history yet."
       : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
