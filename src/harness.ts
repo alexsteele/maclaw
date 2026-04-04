@@ -1,4 +1,9 @@
-import { initProjectConfig, loadConfig, type AppConfig } from "./config.js";
+import {
+  initProjectConfig,
+  loadConfig,
+  type AppConfig,
+  type ProjectConfig,
+} from "./config.js";
 import { MaclawAgent } from "./agent.js";
 import { loadSkills } from "./skills.js";
 import {
@@ -46,24 +51,88 @@ const createScheduler = (config: AppConfig): TaskScheduler => {
 };
 
 export class Harness {
-  readonly config: AppConfig;
-  readonly scheduler: TaskScheduler;
-  readonly sessionStore: SessionStore;
-  readonly agent: MaclawAgent;
+  private _config: AppConfig;
+  private _scheduler: TaskScheduler;
+  private _sessionStore: SessionStore;
+  private _agent: MaclawAgent;
+  private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
 
   constructor(config: AppConfig) {
-    this.config = config;
-    this.scheduler = createScheduler(config);
-    this.sessionStore = createSessionStore(config);
-    this.agent = new MaclawAgent(config, this.scheduler, this.sessionStore);
+    this._config = config;
+    this._scheduler = createScheduler(config);
+    this._sessionStore = createSessionStore(config);
+    this._agent = new MaclawAgent(config, this._scheduler, this._sessionStore);
   }
 
   static load(cwd?: string): Harness {
     return new Harness(loadConfig(cwd));
   }
 
+  get config(): AppConfig {
+    return this._config;
+  }
+
+  start(
+    onTaskMessage: (task: ScheduledTask, message: Message) => void | Promise<void>,
+  ): void {
+    this._taskListener = onTaskMessage;
+    this._scheduler.start(this._config.schedulerPollMs, async (task) => {
+      const message = await this.handleScheduledTask(task.sessionId, task.prompt);
+      await onTaskMessage(task, message);
+    });
+  }
+
+  teardown(): void {
+    this._scheduler.stop();
+  }
+
+  async initProject(configPatch: Partial<ProjectConfig> = {}): Promise<Harness> {
+    if (this.config.isProjectInitialized) {
+      return this;
+    }
+
+    await initProjectConfig(this.config.projectFolder, {
+      ...configPatch,
+      createdAt: this.config.createdAt ?? new Date().toISOString(),
+    });
+    const nextConfig: AppConfig = {
+      ...loadConfig(this._config.projectFolder),
+      sessionId: this.getCurrentChatId(),
+    };
+    const nextSessionStore = createSessionStore(nextConfig);
+    const nextScheduler = createScheduler(nextConfig);
+    const nextAgent = new MaclawAgent(nextConfig, nextScheduler, nextSessionStore);
+
+    const activeSession = await this.loadCurrentChat();
+    await nextSessionStore.saveSession(activeSession);
+
+    const sessions = await this.listChats();
+    for (const summary of sessions) {
+      const session = await this.loadChat(summary.id);
+      await nextSessionStore.saveSession(session);
+    }
+
+    const tasks = await this.listTasks();
+    await nextScheduler.replaceTasks(tasks);
+
+    if (this._taskListener) {
+      this.teardown();
+    }
+
+    this._config = nextConfig;
+    this._sessionStore = nextSessionStore;
+    this._scheduler = nextScheduler;
+    this._agent = nextAgent;
+
+    if (this._taskListener) {
+      this.start(this._taskListener);
+    }
+
+    return this;
+  }
+
   getCurrentChatId(): string {
-    return this.agent.getCurrentSessionId();
+    return this._agent.getCurrentSessionId();
   }
 
   getProjectInfo(): ProjectInfo {
@@ -91,27 +160,27 @@ export class Harness {
   }
 
   async pruneExpiredChats(): Promise<number> {
-    return this.sessionStore.pruneExpiredSessions(this.config.retentionDays);
+    return this._sessionStore.pruneExpiredSessions(this._config.retentionDays);
   }
 
   async listChats(): Promise<SessionSummary[]> {
-    return this.agent.listSessions();
+    return this._agent.listSessions();
   }
 
   async listSkills(): Promise<Skill[]> {
-    return loadSkills(this.config.skillsDir);
+    return loadSkills(this._config.skillsDir);
   }
 
   async switchChat(chatId: string): Promise<SessionRecord> {
-    return this.agent.switchSession(chatId);
+    return this._agent.switchSession(chatId);
   }
 
   async forkChat(newChatId: string): Promise<SessionRecord> {
-    return this.agent.forkSession(newChatId);
+    return this._agent.forkSession(newChatId);
   }
 
   async loadCurrentChat(): Promise<SessionRecord> {
-    return this.agent.loadActiveSession();
+    return this._agent.loadActiveSession();
   }
 
   async getCurrentChatTranscript(): Promise<string> {
@@ -122,11 +191,11 @@ export class Harness {
   }
 
   async loadChat(chatId: string): Promise<SessionRecord> {
-    return this.sessionStore.loadSession(chatId, this.getSessionOptions());
+    return this._sessionStore.loadSession(chatId, this.getSessionOptions());
   }
 
   async listTasks(chatId?: string): Promise<ScheduledTask[]> {
-    return this.scheduler.listTasks(chatId);
+    return this._scheduler.listTasks(chatId);
   }
 
   async listCurrentChatTasks(): Promise<ScheduledTask[]> {
@@ -134,7 +203,7 @@ export class Harness {
   }
 
   async replaceTasks(tasks: ScheduledTask[]): Promise<void> {
-    await this.scheduler.replaceTasks(tasks);
+    await this._scheduler.replaceTasks(tasks);
   }
 
   async createTask(input: {
@@ -144,7 +213,7 @@ export class Harness {
     schedule?: ScheduledTask["schedule"];
     runAt?: string;
   }): Promise<ScheduledTask> {
-    return this.scheduler.createTask(input);
+    return this._scheduler.createTask(input);
   }
 
   async createTaskForCurrentChat(input: {
@@ -160,7 +229,7 @@ export class Harness {
   }
 
   async deleteTask(taskId: string, chatId?: string): Promise<boolean> {
-    return this.scheduler.deleteTask(taskId, chatId);
+    return this._scheduler.deleteTask(taskId, chatId);
   }
 
   async deleteTaskForCurrentChat(taskId: string): Promise<boolean> {
@@ -168,42 +237,16 @@ export class Harness {
   }
 
   async handleUserInput(userInput: string): Promise<Message> {
-    return this.agent.handleUserInput(userInput);
+    return this._agent.handleUserInput(userInput);
   }
 
   async handleScheduledTask(sessionId: string, prompt: string): Promise<Message> {
-    return this.agent.handleScheduledTask(sessionId, prompt);
+    return this._agent.handleScheduledTask(sessionId, prompt);
   }
 
   async runDueTasks(
     onTask: (task: ScheduledTask) => Promise<void>,
   ): Promise<void> {
-    return this.scheduler.runDueTasks(onTask);
-  }
-
-  async initializeProject(): Promise<Harness> {
-    if (this.config.isProjectInitialized) {
-      return this;
-    }
-
-    await initProjectConfig(this.config.projectFolder);
-    const nextHarness = new Harness({
-      ...loadConfig(this.config.projectFolder),
-      sessionId: this.getCurrentChatId(),
-    });
-
-    const activeSession = await this.loadCurrentChat();
-    await nextHarness.sessionStore.saveSession(activeSession);
-
-    const sessions = await this.listChats();
-    for (const summary of sessions) {
-      const session = await this.loadChat(summary.id);
-      await nextHarness.sessionStore.saveSession(session);
-    }
-
-    const tasks = await this.listTasks();
-    await nextHarness.replaceTasks(tasks);
-
-    return nextHarness;
+    return this._scheduler.runDueTasks(onTask);
   }
 }

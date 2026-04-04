@@ -2,16 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";
 
-export type ProjectFileConfig = {
-  compressionMode?: "none" | "planned";
-  createdAt?: string;
-  model?: string;
-  name?: string;
-  provider?: "local" | "openai";
-  retentionDays?: number;
-  schedulerPollMs?: number;
-  skillsDir?: string;
-};
 
 export type AppConfig = {
   createdAt?: string;
@@ -33,6 +23,18 @@ export type AppConfig = {
   openAiApiKey?: string;
 };
 
+export type ProjectConfig = {
+  compressionMode?: "none" | "planned";
+  createdAt?: string;
+  model?: string;
+  name?: string;
+  provider?: "local" | "openai";
+  retentionDays?: number;
+  schedulerPollMs?: number;
+  skillsDir?: string;
+};
+
+
 const toPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
     return fallback;
@@ -42,34 +44,40 @@ const toPositiveInt = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const readProjectFileConfig = (cwd: string): ProjectFileConfig => {
+const readProjectFileConfig = (cwd: string): ProjectConfig => {
   const projectConfigFile = path.join(cwd, ".maclaw", "maclaw.json");
   if (!existsSync(projectConfigFile)) {
     return {};
   }
 
   const raw = readFileSync(projectConfigFile, "utf8");
-  return JSON.parse(raw) as ProjectFileConfig;
+  return JSON.parse(raw) as ProjectConfig;
 };
 
-export const initProjectConfig = async (cwd: string = process.cwd()): Promise<ProjectFileConfig> => {
+export const initProjectConfig = async (
+  cwd: string = process.cwd(),
+  overrides: Partial<ProjectConfig> = {},
+): Promise<ProjectConfig> => {
   const projectFolder = path.resolve(cwd);
   const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
   const existingConfig = readProjectFileConfig(projectFolder);
-  const createdAt = existingConfig.createdAt ?? new Date().toISOString();
+  const mergedConfig = {
+    ...existingConfig,
+    ...overrides,
+  };
 
-  const nextConfig: ProjectFileConfig = {
-    createdAt,
-    name: existingConfig.name ?? path.basename(projectFolder),
-    retentionDays: existingConfig.retentionDays ?? 30,
-    provider: existingConfig.provider ?? "openai",
-    model: existingConfig.model ?? "gpt-4.1-mini",
-    ...(existingConfig.skillsDir ? { skillsDir: existingConfig.skillsDir } : {}),
-    ...(existingConfig.compressionMode
-      ? { compressionMode: existingConfig.compressionMode }
+  const nextConfig: ProjectConfig = {
+    createdAt: mergedConfig.createdAt ?? new Date().toISOString(),
+    name: mergedConfig.name ?? path.basename(projectFolder),
+    retentionDays: mergedConfig.retentionDays ?? 30,
+    provider: mergedConfig.provider ?? "openai",
+    model: mergedConfig.model ?? "gpt-4.1-mini",
+    ...(mergedConfig.skillsDir ? { skillsDir: mergedConfig.skillsDir } : {}),
+    ...(mergedConfig.compressionMode
+      ? { compressionMode: mergedConfig.compressionMode }
       : {}),
-    ...(existingConfig.schedulerPollMs
-      ? { schedulerPollMs: existingConfig.schedulerPollMs }
+    ...(mergedConfig.schedulerPollMs
+      ? { schedulerPollMs: mergedConfig.schedulerPollMs }
       : {}),
   };
 

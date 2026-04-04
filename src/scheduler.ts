@@ -166,6 +166,7 @@ const advanceTaskAfterSuccess = (
 
 export class TaskScheduler {
   private readonly taskStore: TaskStore;
+  private timer?: NodeJS.Timeout;
 
   constructor(taskStore: TaskStore) {
     this.taskStore = taskStore;
@@ -359,6 +360,24 @@ export class TaskScheduler {
       }
 
       await this.writeTasks(updatedTasks);
+    }
+  }
+
+  start(
+    pollMs: number,
+    onTask: (task: ScheduledTask) => Promise<void>,
+  ): void {
+    this.stop();
+    this.timer = setInterval(() => {
+      void this.runDueTasks(onTask);
+    }, pollMs);
+    this.timer.unref();
+  }
+
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
     }
   }
 }

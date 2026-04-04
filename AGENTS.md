@@ -6,3 +6,10 @@
 - Confirm large architectural changes and new interfaces with the user.
 - Confirm new package dependencies with the user. Avoid adding unnecessary dependencies.
 - Format files and avoid trailing whitespace.
+- Put key lifecycle methods towards the top of classes.
+
+## Code Style
+
+- Use simple clear names focused on our domain concepts.
+- Put important commands/fields first in a readable order for users.
+- Keep functions focused and ask the user if you're unsure how to organize them.

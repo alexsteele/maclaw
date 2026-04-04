@@ -115,3 +115,24 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("initProjectConfig merges overrides into the saved project config", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-override-"));
+
+  try {
+    const projectConfig = await initProjectConfig(rootDir, {
+      name: "override-project",
+      provider: "local",
+      model: "override-model",
+      retentionDays: 7,
+    });
+
+    assert.ok(projectConfig.createdAt);
+    assert.equal(projectConfig.name, "override-project");
+    assert.equal(projectConfig.provider, "local");
+    assert.equal(projectConfig.model, "override-model");
+    assert.equal(projectConfig.retentionDays, 7);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

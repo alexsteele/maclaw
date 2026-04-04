@@ -200,237 +200,294 @@ const renderProjectInfo = (projectInfo: ProjectInfo): string => {
   ].join("\n");
 };
 
-
-export const runRepl = async (
-  controls: {
-    getHarness: () => Harness;
-    setHarness: (harness: Harness) => void;
-  },
-): Promise<void> => {
-  const rl = readline.createInterface({ input, output });
-  let harness = controls.getHarness();
-
-  output.write("maclaw REPL\n");
-  output.write(`chat: ${harness.getCurrentChatId()}\n`);
-  if (!harness.config.isProjectInitialized) {
-    output.write("warning: running without a project config; chats, tasks, and logs will not be saved\n");
+const renderChatList = (
+  chats: Awaited<ReturnType<Harness["listChats"]>>,
+  currentChatId: string,
+): string => {
+  if (chats.length === 0) {
+    return "No saved chats.";
   }
-  output.write("type /help for commands\n\n");
 
-  while (true) {
-    const line = (await rl.question("> ")).trim();
-    if (line.length === 0) {
-      continue;
-    }
+  const rows = chats.map((chat) => ({
+    marker: chat.id === currentChatId ? "*" : " ",
+    id: chat.id,
+    messages: String(chat.messageCount),
+    created: formatChatTimestamp(chat.createdAt),
+    lastActivity: formatChatTimestamp(chat.updatedAt),
+  }));
 
-    if (line === "/quit") {
-      rl.close();
-      break;
-    }
+  const markerWidth = 1;
+  const idWidth = Math.max("chat".length, ...rows.map((row) => row.id.length));
+  const messagesWidth = Math.max(
+    "messages".length,
+    ...rows.map((row) => row.messages.length),
+  );
+  const createdWidth = Math.max(
+    "created".length,
+    ...rows.map((row) => row.created.length),
+  );
+  const activityWidth = Math.max(
+    "last activity".length,
+    ...rows.map((row) => row.lastActivity.length),
+  );
 
-    if (line === "/help") {
-      output.write(`${helpText}\n\n`);
-      continue;
-    }
+  const header = [
+    padCell("", markerWidth),
+    padCell("chat", idWidth),
+    padCell("messages", messagesWidth),
+    padCell("created", createdWidth),
+    padCell("last activity", activityWidth),
+  ].join("  ");
 
-    if (line === "/help project") {
-      output.write(`${projectHelpText}\n\n`);
-      continue;
-    }
+  const separator = [
+    "-".repeat(markerWidth),
+    "-".repeat(idWidth),
+    "-".repeat(messagesWidth),
+    "-".repeat(createdWidth),
+    "-".repeat(activityWidth),
+  ].join("  ");
 
-    if (line === "/help chat") {
-      output.write(`${chatHelpText}\n\n`);
-      continue;
-    }
+  const lines = rows.map((row) =>
+    [
+      padCell(row.marker, markerWidth),
+      padCell(row.id, idWidth),
+      padCell(row.messages, messagesWidth),
+      padCell(row.created, createdWidth),
+      padCell(row.lastActivity, activityWidth),
+    ].join("  "),
+  );
 
-    if (line === "/help task") {
-      output.write(`${taskHelpText}\n\n`);
-      continue;
-    }
+  return [header, separator, ...lines].join("\n");
+};
 
-    if (line === "/chat") {
-      output.write(`${harness.getCurrentChatId()}\n\n`);
-      continue;
-    }
+class Repl {
+  private readonly rl = readline.createInterface({ input, output });
+  private harness: Harness;
 
-    if (line === "/project" || line === "/project show") {
-      output.write(`${renderProjectInfo(harness.getProjectInfo())}\n\n`);
-      continue;
-    }
+  constructor(harness: Harness) {
+    this.harness = harness;
+  }
 
-    if (line === "/project init") {
-      if (harness.config.isProjectInitialized) {
-        output.write(`project already initialized: ${harness.config.projectConfigFile}\n\n`);
+  async run(): Promise<void> {
+    this.harness.start(async (task, message) => {
+      output.write(`\n[scheduled:${task.title}] ${message.content}\n\n> `);
+    });
+    this.showStartup();
+
+    while (true) {
+      const line = (await this.rl.question("> ")).trim();
+      if (line.length === 0) {
         continue;
       }
 
-      harness = await harness.initializeProject();
-      controls.setHarness(harness);
+      const shouldExit = await this.handleLine(line);
+      if (shouldExit) {
+        this.harness.teardown();
+        this.rl.close();
+        break;
+      }
+    }
+  }
 
-      output.write(
-        `initialized project: ${harness.config.projectConfigFile}\n` +
-          `current chat: ${harness.getCurrentChatId()}\n` +
-          "switched this REPL into persistent project mode\n\n",
-      );
-      continue;
+  private showStartup(): void {
+    output.write("maclaw REPL\n");
+    output.write(`chat: ${this.harness.getCurrentChatId()}\n`);
+    if (!this.harness.config.isProjectInitialized) {
+      output.write("warning: running without a project config; chats, tasks, and logs will not be saved\n");
+    }
+    output.write("type /help for commands\n\n");
+  }
+
+  private writeLine(text: string): void {
+    output.write(`${text}\n\n`);
+  }
+
+  private async handleLine(line: string): Promise<boolean> {
+    if (line === "/quit") {
+      return true;
     }
 
+    if (line === "/help") {
+      this.writeLine(helpText);
+      return false;
+    }
+
+    if (line === "/help project") {
+      this.writeLine(projectHelpText);
+      return false;
+    }
+
+    if (line === "/help chat") {
+      this.writeLine(chatHelpText);
+      return false;
+    }
+
+    if (line === "/help task") {
+      this.writeLine(taskHelpText);
+      return false;
+    }
+
+    if (line === "/chat") {
+      this.writeLine(this.harness.getCurrentChatId());
+      return false;
+    }
+
+    if (line.startsWith("/project")) {
+      await this.handleProjectCommand(line);
+      return false;
+    }
+
+    if (line.startsWith("/chat")) {
+      await this.handleChatCommand(line);
+      return false;
+    }
+
+    if (line.startsWith("/task")) {
+      await this.handleTaskCommand(line);
+      return false;
+    }
+
+    if (line === "/skills") {
+      const skills = await this.harness.listSkills();
+      this.writeLine(
+        skills.length === 0
+          ? "No skills found."
+          : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n"),
+      );
+      return false;
+    }
+
+    if (line === "/history") {
+      this.writeLine(await this.harness.getCurrentChatTranscript());
+      return false;
+    }
+
+    const reply = await this.harness.handleUserInput(line);
+    this.writeLine(reply.content);
+    return false;
+  }
+
+  private async handleProjectCommand(line: string): Promise<void> {
+    if (line === "/project" || line === "/project show") {
+      this.writeLine(renderProjectInfo(this.harness.getProjectInfo()));
+      return;
+    }
+
+    if (line === "/project init") {
+      if (this.harness.config.isProjectInitialized) {
+        this.writeLine(`project already initialized: ${this.harness.config.projectConfigFile}`);
+        return;
+      }
+
+      const nextHarness = await this.harness.initProject();
+      this.harness = nextHarness;
+      this.writeLine(
+        `initialized project: ${this.harness.config.projectConfigFile}\n` +
+          `current chat: ${this.harness.getCurrentChatId()}\n` +
+          "switched this REPL into persistent project mode",
+      );
+      return;
+    }
+
+    this.writeLine(projectHelpText);
+  }
+
+  private async handleChatCommand(line: string): Promise<void> {
     if (line === "/chat list") {
-      const sessions = await harness.listChats();
-      const rendered =
-        sessions.length === 0
-          ? "No saved chats."
-          : (() => {
-              const rows = sessions.map((session) => ({
-                marker: session.id === harness.getCurrentChatId() ? "*" : " ",
-                id: session.id,
-                messages: String(session.messageCount),
-                created: formatChatTimestamp(session.createdAt),
-                lastActivity: formatChatTimestamp(session.updatedAt),
-              }));
-
-              const markerWidth = 1;
-              const idWidth = Math.max("chat".length, ...rows.map((row) => row.id.length));
-              const messagesWidth = Math.max(
-                "messages".length,
-                ...rows.map((row) => row.messages.length),
-              );
-              const createdWidth = Math.max(
-                "created".length,
-                ...rows.map((row) => row.created.length),
-              );
-              const activityWidth = Math.max(
-                "last activity".length,
-                ...rows.map((row) => row.lastActivity.length),
-              );
-
-              const header = [
-                padCell("", markerWidth),
-                padCell("chat", idWidth),
-                padCell("messages", messagesWidth),
-                padCell("created", createdWidth),
-                padCell("last activity", activityWidth),
-              ].join("  ");
-
-              const separator = [
-                "-".repeat(markerWidth),
-                "-".repeat(idWidth),
-                "-".repeat(messagesWidth),
-                "-".repeat(createdWidth),
-                "-".repeat(activityWidth),
-              ].join("  ");
-
-              const lines = rows.map((row) =>
-                [
-                  padCell(row.marker, markerWidth),
-                  padCell(row.id, idWidth),
-                  padCell(row.messages, messagesWidth),
-                  padCell(row.created, createdWidth),
-                  padCell(row.lastActivity, activityWidth),
-                ].join("  "),
-              );
-
-              return [header, separator, ...lines].join("\n");
-            })();
-
-      output.write(`${rendered}\n\n`);
-      continue;
+      this.writeLine(
+        renderChatList(await this.harness.listChats(), this.harness.getCurrentChatId()),
+      );
+      return;
     }
 
     if (line.startsWith("/chat switch ")) {
       const requestedId = parseSessionId(line.slice("/chat switch ".length));
       if (!requestedId) {
-        output.write("Chat ids may only contain letters, numbers, dots, underscores, and hyphens.\n\n");
-        continue;
+        this.writeLine("Chat ids may only contain letters, numbers, dots, underscores, and hyphens.");
+        return;
       }
 
-      const session = await harness.switchChat(requestedId);
-      output.write(`switched to chat: ${session.id}\n\n`);
-      continue;
+      const session = await this.harness.switchChat(requestedId);
+      this.writeLine(`switched to chat: ${session.id}`);
+      return;
     }
 
     if (line === "/chat fork" || line.startsWith("/chat fork ")) {
       const requestedId = await buildForkSessionId(
-        harness,
+        this.harness,
         line.slice("/chat fork".length).trim(),
       );
       if (!requestedId) {
-        output.write("Could not create a valid chat id for the fork.\n\n");
-        continue;
+        this.writeLine("Could not create a valid chat id for the fork.");
+        return;
       }
 
-      const existingSessions = await harness.listChats();
+      const existingSessions = await this.harness.listChats();
       if (existingSessions.some((session) => session.id === requestedId)) {
-        output.write(`chat already exists: ${requestedId}\n\n`);
-        continue;
+        this.writeLine(`chat already exists: ${requestedId}`);
+        return;
       }
 
-      const session = await harness.forkChat(requestedId);
-      output.write(`forked current chat to: ${session.id}\n\n`);
-      continue;
+      const session = await this.harness.forkChat(requestedId);
+      this.writeLine(`forked current chat to: ${session.id}`);
+      return;
     }
 
+    this.writeLine(chatHelpText);
+  }
+
+  private async handleTaskCommand(line: string): Promise<void> {
     if (line === "/task") {
-      output.write(`${taskHelpText}\n\n`);
-      continue;
+      this.writeLine(taskHelpText);
+      return;
     }
 
     if (line === "/task list") {
-      const rendered = await renderTaskList(await harness.listCurrentChatTasks());
-      output.write(`${rendered}\n\n`);
-      continue;
+      this.writeLine(await renderTaskList(await this.harness.listCurrentChatTasks()));
+      return;
     }
 
     if (line.startsWith("/task schedule ")) {
       const parsed = parseTaskSchedule(line.slice("/task schedule ".length).trim());
       if (!parsed) {
-        output.write(
+        this.writeLine(
           "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>\n" +
             "       /task schedule hourly | <title> | <prompt>\n" +
             "       /task schedule daily 9:00 AM | <title> | <prompt>\n" +
-            "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>\n\n",
+            "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>",
         );
-        continue;
+        return;
       }
 
-      const task = await harness.createTaskForCurrentChat({
+      const task = await this.harness.createTaskForCurrentChat({
         title: parsed.title,
         prompt: parsed.prompt,
         schedule: parsed.schedule,
       });
 
-      output.write(`scheduled task: ${task.id}\n\n`);
-      continue;
+      this.writeLine(`scheduled task: ${task.id}`);
+      return;
     }
 
     if (line.startsWith("/task delete ")) {
       const taskId = line.slice("/task delete ".length).trim();
       if (taskId.length === 0) {
-        output.write("Usage: /task delete <task id>\n\n");
-        continue;
+        this.writeLine("Usage: /task delete <task id>");
+        return;
       }
 
-      const deleted = await harness.deleteTaskForCurrentChat(taskId);
-      output.write(deleted ? `deleted task: ${taskId}\n\n` : `task not found: ${taskId}\n\n`);
-      continue;
+      const deleted = await this.harness.deleteTaskForCurrentChat(taskId);
+      this.writeLine(deleted ? `deleted task: ${taskId}` : `task not found: ${taskId}`);
+      return;
     }
 
-    if (line === "/skills") {
-      const skills = await harness.listSkills();
-      output.write(
-        skills.length === 0
-          ? "No skills found.\n\n"
-          : `${skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n")}\n\n`,
-      );
-      continue;
-    }
-
-    if (line === "/history") {
-      output.write(`${await harness.getCurrentChatTranscript()}\n\n`);
-      continue;
-    }
-
-    const reply = await harness.handleUserInput(line);
-    output.write(`${reply.content}\n\n`);
+    this.writeLine(taskHelpText);
   }
+}
+
+export const runRepl = async (
+  harness: Harness,
+): Promise<void> => {
+  const repl = new Repl(harness);
+  await repl.run();
 };
