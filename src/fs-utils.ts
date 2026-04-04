@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 
 export const ensureDir = async (dirPath: string): Promise<void> => {
   await mkdir(dirPath, { recursive: true });
@@ -20,6 +21,11 @@ export const readJsonFile = async <T>(filePath: string, fallback: T): Promise<T>
 export const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
   const json = JSON.stringify(value, null, 2);
   await writeFile(filePath, `${json}\n`, "utf8");
+};
+
+export const appendJsonLine = async (filePath: string, value: unknown): Promise<void> => {
+  await ensureDir(path.dirname(filePath));
+  await appendFile(filePath, `${JSON.stringify(value)}\n`, "utf8");
 };
 
 export const makeId = (prefix: string): string => {

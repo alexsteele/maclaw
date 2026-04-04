@@ -1,6 +1,6 @@
 # maclaw
 
-<!-- HUMAN ONLY -->
+<!-- HUMAN -->
 
 maclaw is a small LLM harness built with OpenAI codex.
 
@@ -22,6 +22,20 @@ maclaw is a small LLM harness built with OpenAI codex.
 3. Set `OPENAI_API_KEY` if you want live model responses.
 4. Start the REPL with `npm run dev`.
 
+## REPL Commands
+
+- `/help`
+- `/skills`
+- `/history`
+- `/tasks`
+- `/quit`
+
+### Tasks
+
+Tasks can be scheduled once, hourly, daily, or weekly.
+
+Tasks are saved in `data/tasks.json` and logged in `data/task-runs.jsonl`
+
 ## Configuration
 
 Environment variables:
@@ -35,13 +49,26 @@ Environment variables:
 - `MACLAW_COMPRESSION_MODE`: `none` or `planned`
 - `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`
 
-## REPL Commands
+## Data Storage
 
-- `/help`
-- `/skills`
-- `/history`
-- `/tasks`
-- `/quit`
+By default, maclaw stores local data in a `data/` folder at the project root. You can change this with `MACLAW_DATA_DIR`.
+
+Example default layout:
+
+```text
+data/
+  sessions/
+    default.json
+    research-fork.json
+  tasks.json
+  task-runs.jsonl
+```
+
+What is stored there:
+
+- `data/sessions/`: saved chat histories, one JSON file per chat
+- `data/tasks.json`: the current scheduled task state
+- `data/task-runs.jsonl`: append-only task execution log
 
 ## Notes
 
@@ -55,6 +82,7 @@ Environment variables:
 - Chat support for WhatsApp, SMS, etc.
 - Support other LLMs
 - Improve session storage and retention policies (sqlite)
+- Better project management.
 - Session compression and summarization.
 - MCP support
 - Tool approval and policy controls.

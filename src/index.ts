@@ -11,7 +11,7 @@ const main = async (): Promise<void> => {
   await ensureDir(config.sessionsDir);
   await ensureDir(config.skillsDir);
 
-  const scheduler = new TaskScheduler(config.schedulerFile);
+  const scheduler = new TaskScheduler(config.schedulerFile, config.taskRunsFile);
   const sessionStore = new JsonFileSessionStore(config.sessionsDir);
   const agent = new MaclawAgent(config, scheduler, sessionStore);
 

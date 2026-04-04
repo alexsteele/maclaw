@@ -1,19 +1,25 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { TaskScheduler } from "../src/scheduler.js";
 import { parseTaskSchedule } from "../src/task.js";
+import type { TaskRunLogEntry } from "../src/types.js";
 
 const createScheduler = async (): Promise<{
   cleanup: () => Promise<void>;
+  dir: string;
   scheduler: TaskScheduler;
 }> => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-scheduler-"));
   return {
     cleanup: async () => rm(dir, { recursive: true, force: true }),
-    scheduler: new TaskScheduler(path.join(dir, "tasks.json")),
+    dir,
+    scheduler: new TaskScheduler(
+      path.join(dir, "tasks.json"),
+      path.join(dir, "task-runs.jsonl"),
+    ),
   };
 };
 
@@ -192,4 +198,35 @@ test("parseTaskSchedule rejects invalid schedule text", () => {
   );
 
   assert.equal(parsed, null);
+});
+
+test("runDueTasks writes a JSONL execution log entry", async () => {
+  const { cleanup, dir, scheduler } = await createScheduler();
+
+  try {
+    const task = await scheduler.createTask({
+      sessionId: "chat-a",
+      title: "Log me",
+      prompt: "Record this run",
+      runAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await scheduler.runDueTasks(async () => {
+      return;
+    });
+
+    const raw = await readFile(path.join(dir, "task-runs.jsonl"), "utf8");
+    const lines = raw.trim().split("\n");
+    assert.equal(lines.length, 1);
+
+    const entry = JSON.parse(lines[0] ?? "{}") as TaskRunLogEntry;
+    assert.equal(entry.taskId, task.id);
+    assert.equal(entry.sessionId, "chat-a");
+    assert.equal(entry.title, "Log me");
+    assert.equal(entry.prompt, "Record this run");
+    assert.equal(entry.status, "completed");
+    assert.equal(entry.scheduledFor, task.nextRunAt);
+  } finally {
+    await cleanup();
+  }
 });

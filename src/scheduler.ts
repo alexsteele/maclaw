@@ -1,5 +1,5 @@
-import { readJsonFile, writeJsonFile } from "./fs-utils.js";
-import type { ScheduledTask, TaskSchedule, Weekday } from "./types.js";
+import { appendJsonLine, readJsonFile, writeJsonFile } from "./fs-utils.js";
+import type { ScheduledTask, TaskRunLogEntry, TaskSchedule, Weekday } from "./types.js";
 
 type LegacyScheduledTask = Omit<ScheduledTask, "nextRunAt" | "schedule"> & {
   nextRunAt?: string;
@@ -159,9 +159,11 @@ const advanceTaskAfterSuccess = (
 
 export class TaskScheduler {
   private readonly tasksFile: string;
+  private readonly taskRunsFile?: string;
 
-  constructor(tasksFile: string) {
+  constructor(tasksFile: string, taskRunsFile?: string) {
     this.tasksFile = tasksFile;
+    this.taskRunsFile = taskRunsFile;
   }
 
   async listTasks(sessionId?: string): Promise<ScheduledTask[]> {
@@ -287,26 +289,63 @@ export class TaskScheduler {
       );
       await writeAllTasks(this.tasksFile, updatedTasks);
 
+      const startedAt = new Date().toISOString();
       try {
         await onTask(task);
-        const advanced = advanceTaskAfterSuccess(task, new Date());
+        const finishedAt = new Date().toISOString();
+        const advanced = advanceTaskAfterSuccess(task, new Date(finishedAt));
         updatedTasks = updatedTasks.map((candidate) =>
           candidate.id === task.id ? advanced : candidate,
         );
+        await this.appendTaskRunLog({
+          timestamp: finishedAt,
+          taskId: task.id,
+          sessionId: task.sessionId,
+          title: task.title,
+          prompt: task.prompt,
+          schedule: task.schedule,
+          scheduledFor: task.nextRunAt,
+          startedAt,
+          finishedAt,
+          status: "completed",
+        });
       } catch (error) {
+        const finishedAt = new Date().toISOString();
+        const errorMessage = error instanceof Error ? error.message : String(error);
         updatedTasks = updatedTasks.map((candidate) =>
           candidate.id === task.id
             ? {
                 ...candidate,
                 status: "failed",
-                lastError: error instanceof Error ? error.message : String(error),
-                updatedAt: new Date().toISOString(),
+                lastError: errorMessage,
+                updatedAt: finishedAt,
               }
             : candidate,
         );
+        await this.appendTaskRunLog({
+          timestamp: finishedAt,
+          taskId: task.id,
+          sessionId: task.sessionId,
+          title: task.title,
+          prompt: task.prompt,
+          schedule: task.schedule,
+          scheduledFor: task.nextRunAt,
+          startedAt,
+          finishedAt,
+          status: "failed",
+          error: errorMessage,
+        });
       }
 
       await writeAllTasks(this.tasksFile, updatedTasks);
     }
+  }
+
+  private async appendTaskRunLog(entry: TaskRunLogEntry): Promise<void> {
+    if (!this.taskRunsFile) {
+      return;
+    }
+
+    await appendJsonLine(this.taskRunsFile, entry);
   }
 }

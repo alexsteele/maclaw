@@ -69,6 +69,20 @@ export type ScheduledTask = {
   lastError?: string;
 };
 
+export type TaskRunLogEntry = {
+  timestamp: string;
+  taskId: string;
+  sessionId: string;
+  title: string;
+  prompt: string;
+  schedule: TaskSchedule;
+  scheduledFor: string;
+  startedAt: string;
+  finishedAt: string;
+  status: "completed" | "failed";
+  error?: string;
+};
+
 export type ToolDefinition = {
   name: string;
   description: string;

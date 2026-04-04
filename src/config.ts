@@ -4,6 +4,7 @@ export type AppConfig = {
   dataDir: string;
   sessionsDir: string;
   schedulerFile: string;
+  taskRunsFile: string;
   skillsDir: string;
   sessionId: string;
   retentionDays: number;
@@ -29,6 +30,7 @@ export const loadConfig = (cwd: string = process.cwd()): AppConfig => {
     dataDir,
     sessionsDir: path.join(dataDir, "sessions"),
     schedulerFile: path.join(dataDir, "tasks.json"),
+    taskRunsFile: path.join(dataDir, "task-runs.jsonl"),
     skillsDir: path.resolve(cwd, process.env.MACLAW_SKILLS_DIR ?? "skills"),
     sessionId: process.env.MACLAW_SESSION_ID ?? "default",
     retentionDays: toPositiveInt(process.env.MACLAW_RETENTION_DAYS, 30),
