@@ -141,7 +141,7 @@ export const createTools = (
       execute: async () =>
         JSON.stringify(
           {
-            sessionId: config.sessionId,
+            sessionId,
             skillsDir: config.skillsDir,
             dataDir: config.dataDir,
             retentionDays: config.retentionDays,

@@ -18,6 +18,13 @@ export type SessionRecord = {
   messages: Message[];
 };
 
+export type SessionSummary = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+};
+
 export type Skill = {
   name: string;
   path: string;

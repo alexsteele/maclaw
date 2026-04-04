@@ -3,7 +3,7 @@ import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from ".
 import { appendMessage, type SessionStore } from "./sessions.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
-import type { Message, SessionRecord } from "./types.js";
+import type { Message, SessionRecord, SessionSummary } from "./types.js";
 import { TaskScheduler } from "./scheduler.js";
 
 const buildSystemPrompt = async (
@@ -46,6 +46,7 @@ export class MaclawAgent {
   private readonly scheduler: TaskScheduler;
   private readonly sessionStore: SessionStore;
   private readonly provider: Provider;
+  private activeSessionId: string;
   private activeSession?: SessionRecord;
 
   constructor(config: AppConfig, scheduler: TaskScheduler, sessionStore: SessionStore) {
@@ -53,12 +54,46 @@ export class MaclawAgent {
     this.scheduler = scheduler;
     this.sessionStore = sessionStore;
     this.provider = createProvider(config);
+    this.activeSessionId = config.sessionId;
+  }
+
+  getCurrentSessionId(): string {
+    return this.activeSessionId;
+  }
+
+  async listSessions(): Promise<SessionSummary[]> {
+    return this.sessionStore.listSessions();
+  }
+
+  async switchSession(sessionId: string): Promise<SessionRecord> {
+    this.activeSessionId = sessionId;
+    this.activeSession = await this.sessionStore.loadSession(sessionId, {
+      retentionDays: this.config.retentionDays,
+      compressionMode: this.config.compressionMode,
+    });
+    return this.activeSession;
+  }
+
+  async forkSession(newSessionId: string): Promise<SessionRecord> {
+    const sourceSession = await this.loadActiveSession();
+    const now = new Date().toISOString();
+    const forkedSession: SessionRecord = {
+      ...structuredClone(sourceSession),
+      id: newSessionId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.sessionStore.saveSession(forkedSession);
+    this.activeSessionId = newSessionId;
+    this.activeSession = forkedSession;
+    return forkedSession;
   }
 
   async loadActiveSession(): Promise<SessionRecord> {
     if (!this.activeSession) {
       this.activeSession = await this.sessionStore.loadSession(
-        this.config.sessionId,
+        this.activeSessionId,
         {
           retentionDays: this.config.retentionDays,
           compressionMode: this.config.compressionMode,
@@ -138,7 +173,7 @@ export class MaclawAgent {
     }
 
     await this.sessionStore.saveSession(session);
-    if (this.activeSession?.id === session.id) {
+    if (this.activeSessionId === session.id) {
       this.activeSession = session;
     }
     return assistantMessage;
