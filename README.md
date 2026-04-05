@@ -6,7 +6,7 @@ maclaw is a small LLM harness built with OpenAI codex.
 
 The goal of this project is to understand and test the limits of this
 technology. I make no strong claims about the reliablity, security, or
-robustness, though I do guide, review, and curate all AI code. 
+robustness, though I do guide, review, and curate all AI code.
 No AI slop hits `origin/main` without human eyes in the loop.
 
 Happy hacking friends. May your claws forever be ma'd and your way paved with
@@ -41,12 +41,24 @@ Alex, your dedicated human-in-the-loop
 - **Task**: a scheduled job that re-enters the harness later, either once or on
   a recurring schedule
 
-## Getting Started
+## Setup
 
 1. Install Node.js 20+.
 2. Install dependencies with `npm install`.
 3. Set `OPENAI_API_KEY` if you want live model responses.
 4. Start the REPL with `npm run dev`.
+
+## Message Flow
+
+- You create a maclaw project `/project init`
+- You configure a connector
+- You start a maclaw server
+- You message maclaw
+- The connector receives, normalizes, and forwards the message to `MaclawServer`
+- `MaclawServer` checks for `/commands` and forwards messages to the right
+  `Harness` for the current project and chat
+- The harness constructs and sends the prompt to the AI model.
+- The harness logs the messages and the connector sends the response back to you
 
 ## REPL
 
@@ -63,7 +75,6 @@ Commands:
   /task              Task scheduling commands
   /quit              Exit the REPL
 ```
-
 
 ## Server
 
@@ -85,9 +96,7 @@ Example `server.json`:
 ```json
 {
   "defaultProject": "home",
-  "projects": [
-    { "name": "home", "folder": "/path/to/home-project" }
-  ],
+  "projects": [{ "name": "home", "folder": "/path/to/home-project" }],
   "channels": {
     "slack": {
       "enabled": true,
@@ -108,7 +117,7 @@ Example `secrets.json`:
 {
   "slack": {
     "appToken": "xapp-your-slack-app-token",
-    "botToken": "xoxb-your-slack-bot-token",
+    "botToken": "xoxb-your-slack-bot-token"
   },
   "whatsapp": {
     "accessToken": "your-whatsapp-access-token",
@@ -154,7 +163,6 @@ my-project/
 
 `skillsDir` is optional. If you omit it, maclaw uses `.maclaw/skills` by default.
 
-
 ## Configuration
 
 Config precedence is:
@@ -178,7 +186,7 @@ Environment variables:
 
 ## Providers
 
-Currently supported providers:
+Providers provide your AI model. You can configure both these variables.
 
 - `openai`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
 - `local`: uses the built-in fallback provider for local testing without live model calls
@@ -187,9 +195,10 @@ Currently supported providers:
 
 Connectors are how you talk to maclaw. maclaw server currently supports:
 
-* REPL (no server needed)
-* whatsapp via webhooks (be careful)
-* slack via websocket
+- REPL (no server needed)
+- whatsapp via webhooks (be careful)
+- slack via websocket
+
 
 ## TODO
 
