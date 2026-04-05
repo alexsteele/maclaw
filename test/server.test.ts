@@ -34,8 +34,6 @@ test("server handles project commands and routes chat messages by active project
         channels: {
           slack: {
             enabled: false,
-            port: 3001,
-            webhookPath: "/slack/events",
           },
           whatsapp: {
             enabled: false,
@@ -139,8 +137,6 @@ test("server prompts the user to choose a project when none is selected", async 
         channels: {
           slack: {
             enabled: false,
-            port: 3001,
-            webhookPath: "/slack/events",
           },
           whatsapp: {
             enabled: false,

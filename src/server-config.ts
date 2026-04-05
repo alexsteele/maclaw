@@ -18,8 +18,6 @@ export type WhatsAppConfig = {
 export type SlackConfig = {
   enabled: boolean;
   botUserId?: string;
-  port: number;
-  webhookPath: string;
 };
 
 export type ServerConfig = {
@@ -35,8 +33,8 @@ export type ServerConfig = {
 export type ServerSecrets = {
   configFile: string;
   slack: {
+    appToken?: string;
     botToken?: string;
-    signingSecret?: string;
   };
   whatsapp: {
     accessToken?: string;
@@ -109,8 +107,6 @@ export const loadServerConfig = (
       slack: {
         enabled: slack.enabled ?? false,
         botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
-        port: toPositiveInt(slack.port, 3001),
-        webhookPath: slack.webhookPath ?? "/slack/events",
       },
       whatsapp: {
         enabled: whatsapp.enabled ?? false,
@@ -138,12 +134,12 @@ export const loadServerSecrets = (
   return {
     configFile: resolvedSecretsFile,
     slack: {
+      appToken:
+        process.env.MACLAW_SLACK_APP_TOKEN ??
+        parsed.slack?.appToken,
       botToken:
         process.env.MACLAW_SLACK_BOT_TOKEN ??
         parsed.slack?.botToken,
-      signingSecret:
-        process.env.MACLAW_SLACK_SIGNING_SECRET ??
-        parsed.slack?.signingSecret,
     },
     whatsapp: {
       accessToken:

@@ -1,9 +1,8 @@
-import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createSlackSocketAck,
   extractSlackTextEvent,
-  verifySlackSignature,
 } from "../src/channels/slack.js";
 
 test("extractSlackTextEvent returns an app mention as a normalized text event", () => {
@@ -50,24 +49,9 @@ test("extractSlackTextEvent ignores bot events", () => {
   assert.equal(event, null);
 });
 
-test("verifySlackSignature validates a matching v0 signature", () => {
-  const body = JSON.stringify({ hello: "world" });
-  const signingSecret = "secret";
-  const timestamp = "1712345678";
-  const base = `v0:${timestamp}:${body}`;
-  const digest = createHmac("sha256", signingSecret)
-    .update(base)
-    .digest("hex");
-
-  const valid = verifySlackSignature(
-    body,
-    {
-      "x-slack-request-timestamp": timestamp,
-      "x-slack-signature": `v0=${digest}`,
-    },
-    signingSecret,
-    1712345678,
+test("createSlackSocketAck builds a valid Socket Mode ack payload", () => {
+  assert.equal(
+    createSlackSocketAck("123.abc"),
+    JSON.stringify({ envelope_id: "123.abc" }),
   );
-
-  assert.equal(valid, true);
 });

@@ -76,9 +76,9 @@ Server mode currently supports WhatsApp and Slack channels, and loads global ser
 - `~/.maclaw/server.json`
 - `~/.maclaw/secrets.json`
 
-`server.json` is for non-secret settings such as projects, webhook paths, ports,
+`server.json` is for non-secret settings such as projects, ports, webhook paths,
 and channel options. `secrets.json` is for private credentials such as
-WhatsApp tokens and Slack signing secrets.
+WhatsApp tokens and Slack app/bot tokens.
 
 Example `server.json`:
 
@@ -91,8 +91,6 @@ Example `server.json`:
   "channels": {
     "slack": {
       "enabled": true,
-      "port": 3001,
-      "webhookPath": "/slack/events",
       "botUserId": "U12345678"
     },
     "whatsapp": {
@@ -109,8 +107,8 @@ Example `secrets.json`:
 ```json
 {
   "slack": {
+    "appToken": "xapp-your-slack-app-token",
     "botToken": "xoxb-your-slack-bot-token",
-    "signingSecret": "your-slack-signing-secret"
   },
   "whatsapp": {
     "accessToken": "your-whatsapp-access-token",
@@ -185,9 +183,16 @@ Currently supported providers:
 - `openai`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
 - `local`: uses the built-in fallback provider for local testing without live model calls
 
+## Connectors
+
+Connectors are how you talk to maclaw. maclaw server currently supports:
+
+* REPL (no server needed)
+* whatsapp via webhooks (be careful)
+* slack via websocket
+
 ## TODO
 
-- Chat support for WhatsApp, SMS, etc.
 - Support other LLMs
 - Improve chat storage and retention policies (sqlite)
 - Better project management.

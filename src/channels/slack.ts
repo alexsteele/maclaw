@@ -1,7 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import type { IncomingHttpHeaders } from "node:http";
-import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { URL } from "node:url";
 import type { Channel, ChannelMessageHandler } from "./channel.js";
 import type { SlackConfig, ServerSecrets } from "../server-config.js";
 
@@ -20,6 +16,12 @@ type SlackEventEnvelope = {
   type?: string;
 };
 
+type SlackSocketEnvelope = {
+  envelope_id?: string;
+  payload?: SlackEventEnvelope;
+  type?: string;
+};
+
 type SlackTextEvent = {
   channel: string;
   teamId: string;
@@ -28,25 +30,20 @@ type SlackTextEvent = {
   userId: string;
 };
 
-const readRequestBody = async (request: IncomingMessage): Promise<string> => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  return Buffer.concat(chunks).toString("utf8");
+type SlackOpenConnectionResponse = {
+  error?: string;
+  ok?: boolean;
+  url?: string;
 };
 
-const json = (response: ServerResponse, statusCode: number, body: unknown): void => {
-  response.statusCode = statusCode;
-  response.setHeader("content-type", "application/json; charset=utf-8");
-  response.end(`${JSON.stringify(body)}\n`);
-};
-
-const text = (response: ServerResponse, statusCode: number, body: string): void => {
-  response.statusCode = statusCode;
-  response.setHeader("content-type", "text/plain; charset=utf-8");
-  response.end(body);
+type WebSocketLike = {
+  addEventListener(
+    type: string,
+    listener: (event: { data?: unknown }) => void | Promise<void>,
+  ): void;
+  close(): void;
+  readyState?: number;
+  send(data: string): void;
 };
 
 const normalizeUserId = (teamId: string, userId: string): string =>
@@ -94,47 +91,27 @@ export const extractSlackTextEvent = (
   };
 };
 
-export const verifySlackSignature = (
-  body: string,
-  headers: IncomingHttpHeaders,
-  signingSecret: string,
-  nowSeconds: number = Math.floor(Date.now() / 1000),
-): boolean => {
-  const timestampHeader = headers["x-slack-request-timestamp"];
-  const signatureHeader = headers["x-slack-signature"];
+export const createSlackSocketAck = (envelopeId: string): string =>
+  JSON.stringify({ envelope_id: envelopeId });
 
-  const timestamp = Array.isArray(timestampHeader) ? timestampHeader[0] : timestampHeader;
-  const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-  if (!timestamp || !signature) {
-    return false;
+const getSocketModeWebSocket = (): new (url: string) => WebSocketLike => {
+  const ctor = (globalThis as typeof globalThis & { WebSocket?: new (url: string) => WebSocketLike })
+    .WebSocket;
+  if (!ctor) {
+    throw new Error("WebSocket is not available in this Node runtime.");
   }
 
-  const parsedTimestamp = Number.parseInt(timestamp, 10);
-  if (!Number.isFinite(parsedTimestamp)) {
-    return false;
-  }
-
-  if (Math.abs(nowSeconds - parsedTimestamp) > 60 * 5) {
-    return false;
-  }
-
-  const base = `v0:${timestamp}:${body}`;
-  const digest = createHmac("sha256", signingSecret).update(base).digest("hex");
-  const expected = Buffer.from(`v0=${digest}`, "utf8");
-  const actual = Buffer.from(signature, "utf8");
-  if (expected.length !== actual.length) {
-    return false;
-  }
-
-  return timingSafeEqual(expected, actual);
+  return ctor;
 };
 
 export class SlackChannel implements Channel {
   readonly name = "slack";
   private readonly config: SlackConfig;
   private readonly secrets: ServerSecrets["slack"];
-  private httpServer?: http.Server;
   private messageHandler?: ChannelMessageHandler;
+  private websocket?: WebSocketLike;
+  private reconnectTimer?: NodeJS.Timeout;
+  private stopping = false;
 
   constructor(config: SlackConfig, secrets: ServerSecrets["slack"]) {
     this.config = config;
@@ -147,10 +124,11 @@ export class SlackChannel implements Channel {
     }
 
     this.messageHandler = messageHandler;
+    this.stopping = false;
 
-    if (!this.secrets.signingSecret) {
+    if (!this.secrets.appToken) {
       throw new Error(
-        "Slack signing secret is required. Set MACLAW_SLACK_SIGNING_SECRET or ~/.maclaw/secrets.json.",
+        "Slack app token is required. Set MACLAW_SLACK_APP_TOKEN or ~/.maclaw/secrets.json.",
       );
     }
 
@@ -160,85 +138,94 @@ export class SlackChannel implements Channel {
       );
     }
 
-    this.httpServer = http.createServer(async (request, response) => {
-      try {
-        await this.handleRequest(request, response);
-      } catch (error) {
-        json(response, 500, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      this.httpServer?.once("error", reject);
-      this.httpServer?.listen(this.config.port, resolve);
-    });
-
-    process.stdout.write(
-      `Slack channel listening on http://localhost:${this.config.port}${this.config.webhookPath}\n`,
-    );
+    await this.connect();
+    process.stdout.write("Slack channel connected with Socket Mode\n");
   }
 
   async stop(): Promise<void> {
-    if (!this.httpServer) {
-      return;
+    this.stopping = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
     }
 
-    const server = this.httpServer;
-    this.httpServer = undefined;
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    this.websocket?.close();
+    this.websocket = undefined;
+  }
 
-        resolve();
-      });
+  private async connect(): Promise<void> {
+    const socketUrl = await this.openSocketUrl();
+    const WebSocketCtor = getSocketModeWebSocket();
+    const socket = new WebSocketCtor(socketUrl);
+    this.websocket = socket;
+
+    socket.addEventListener("message", (event) => {
+      void this.handleSocketMessage(event.data);
+    });
+    socket.addEventListener("close", () => {
+      this.websocket = undefined;
+      this.scheduleReconnect();
+    });
+    socket.addEventListener("error", () => {
+      this.websocket = undefined;
+      this.scheduleReconnect();
     });
   }
 
-  private async handleRequest(
-    request: IncomingMessage,
-    response: ServerResponse,
-  ): Promise<void> {
-    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-    if (url.pathname !== this.config.webhookPath) {
-      json(response, 404, { error: "not_found" });
+  private scheduleReconnect(): void {
+    if (this.stopping || this.reconnectTimer) {
       return;
     }
 
-    if (request.method !== "POST") {
-      json(response, 405, { error: "method_not_allowed" });
-      return;
-    }
-
-    await this.handleWebhook(request, response);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect().catch((error) => {
+        process.stderr.write(
+          `Slack Socket Mode reconnect failed: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+        this.scheduleReconnect();
+      });
+    }, 1_000);
+    this.reconnectTimer.unref?.();
   }
 
-  private async handleWebhook(
-    request: IncomingMessage,
-    response: ServerResponse,
-  ): Promise<void> {
-    const raw = await readRequestBody(request);
-    if (
-      !this.secrets.signingSecret ||
-      !verifySlackSignature(raw, request.headers, this.secrets.signingSecret)
-    ) {
-      json(response, 403, { error: "verification_failed" });
+  private async openSocketUrl(): Promise<string> {
+    const response = await fetch("https://slack.com/api/apps.connections.open", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.secrets.appToken}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Slack socket open failed: ${response.status} ${await response.text()}`);
+    }
+
+    const payload = (await response.json()) as SlackOpenConnectionResponse;
+    if (!payload.ok || !payload.url) {
+      throw new Error(`Slack socket open failed: ${payload.error ?? "unknown_error"}`);
+    }
+
+    return payload.url;
+  }
+
+  private async handleSocketMessage(raw: unknown): Promise<void> {
+    if (typeof raw !== "string") {
       return;
     }
 
-    const payload = JSON.parse(raw) as SlackEventEnvelope;
-    if (payload.type === "url_verification" && payload.challenge) {
-      text(response, 200, payload.challenge);
+    const payload = JSON.parse(raw) as SlackSocketEnvelope;
+    if (!payload.envelope_id) {
       return;
     }
 
-    const event = extractSlackTextEvent(payload, this.config);
+    this.websocket?.send(createSlackSocketAck(payload.envelope_id));
+
+    const event = extractSlackTextEvent(payload.payload ?? {}, this.config);
     if (!event) {
-      json(response, 200, { ok: true, processed: 0 });
       return;
     }
 
@@ -251,8 +238,6 @@ export class SlackChannel implements Channel {
     if (reply) {
       await this.sendTextMessage(event.channel, reply, event.threadTs);
     }
-
-    json(response, 200, { ok: true, processed: 1 });
   }
 
   private async sendTextMessage(
