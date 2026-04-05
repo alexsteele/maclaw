@@ -51,14 +51,14 @@ Alex, your dedicated human-in-the-loop
 ## Message Flow
 
 - You create a maclaw project `/project init`
-- You configure a connector
+- You configure a channel
 - You start a maclaw server
 - You message maclaw
-- The connector receives, normalizes, and forwards the message to `MaclawServer`
+- The channel receives, normalizes, and forwards the message to `MaclawServer`
 - `MaclawServer` checks for `/commands` and forwards messages to the right
   `Harness` for the current project and chat
 - The harness constructs and sends the prompt to the AI model.
-- The harness logs the messages and the connector sends the response back to you
+- The harness logs the messages and the channel sends the response back to you
 
 ## REPL
 
@@ -82,14 +82,14 @@ maclaw can also run as a long-lived server:
 
 - `npm run dev -- server`
 
-Server mode currently supports WhatsApp and Slack channels, and loads global server settings from:
+Server mode currently supports WhatsApp, Slack, and Discord channels, and loads global server settings from:
 
 - `~/.maclaw/server.json`
 - `~/.maclaw/secrets.json`
 
 `server.json` is for non-secret settings such as projects, ports, webhook paths,
 and channel options. `secrets.json` is for private credentials such as
-WhatsApp tokens and Slack app/bot tokens.
+WhatsApp tokens, Slack app/bot tokens, and Discord bot tokens.
 
 Example `server.json`:
 
@@ -98,6 +98,9 @@ Example `server.json`:
   "defaultProject": "home",
   "projects": [{ "name": "home", "folder": "/path/to/home-project" }],
   "channels": {
+    "discord": {
+      "enabled": true
+    },
     "slack": {
       "enabled": true,
       "botUserId": "U12345678"
@@ -115,6 +118,9 @@ Example `secrets.json`:
 
 ```json
 {
+  "discord": {
+    "botToken": "your-discord-bot-token"
+  },
   "slack": {
     "appToken": "xapp-your-slack-app-token",
     "botToken": "xoxb-your-slack-bot-token"
@@ -196,8 +202,10 @@ Providers provide your AI model. You can configure both these variables.
 Connectors are how you talk to maclaw. maclaw server currently supports:
 
 - REPL (no server needed)
+- slack via Socket Mode websocket
+- discord via gateway websocket
+  - setup: register a discord bot in the Discord Developer Portal first.
 - whatsapp via webhooks (be careful)
-- slack via websocket
 
 
 ## TODO

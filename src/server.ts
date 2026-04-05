@@ -2,6 +2,7 @@ import type {
   Channel,
   ChannelMessage,
 } from "./channels/channel.js";
+import { DiscordChannel } from "./channels/discord.js";
 import { dispatchCommand } from "./commands.js";
 import { Harness } from "./harness.js";
 import {
@@ -186,6 +187,12 @@ export class MaclawServer {
     if (this.config.channels.slack.enabled) {
       this.channels.push(
         new SlackChannel(this.config.channels.slack, this.secrets.slack),
+      );
+    }
+
+    if (this.config.channels.discord.enabled) {
+      this.channels.push(
+        new DiscordChannel(this.config.channels.discord, this.secrets.discord),
       );
     }
 

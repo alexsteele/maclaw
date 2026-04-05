@@ -32,6 +32,9 @@ test("server handles project commands and routes chat messages by active project
         ],
         defaultProject: "home",
         channels: {
+          discord: {
+            enabled: false,
+          },
           slack: {
             enabled: false,
           },
@@ -45,6 +48,7 @@ test("server handles project commands and routes chat messages by active project
       },
       {
         configFile: path.join(rootDir, "secrets.json"),
+        discord: {},
         slack: {},
         whatsapp: {},
       },
@@ -135,6 +139,9 @@ test("server prompts the user to choose a project when none is selected", async 
           { name: "work", folder: workDir },
         ],
         channels: {
+          discord: {
+            enabled: false,
+          },
           slack: {
             enabled: false,
           },
@@ -148,6 +155,7 @@ test("server prompts the user to choose a project when none is selected", async 
       },
       {
         configFile: path.join(rootDir, "secrets.json"),
+        discord: {},
         slack: {},
         whatsapp: {},
       },

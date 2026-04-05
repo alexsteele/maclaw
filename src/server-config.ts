@@ -20,11 +20,16 @@ export type SlackConfig = {
   botUserId?: string;
 };
 
+export type DiscordConfig = {
+  enabled: boolean;
+};
+
 export type ServerConfig = {
   configFile: string;
   defaultProject?: string;
   projects: ServerProjectConfig[];
   channels: {
+    discord: DiscordConfig;
     slack: SlackConfig;
     whatsapp: WhatsAppConfig;
   };
@@ -32,6 +37,9 @@ export type ServerConfig = {
 
 export type ServerSecrets = {
   configFile: string;
+  discord: {
+    botToken?: string;
+  };
   slack: {
     appToken?: string;
     botToken?: string;
@@ -70,6 +78,7 @@ export const loadServerConfig = (
   const parsed = JSON.parse(raw) as {
     defaultProject?: string;
     channels?: {
+      discord?: Partial<DiscordConfig>;
       slack?: Partial<SlackConfig>;
       whatsapp?: Partial<WhatsAppConfig>;
     };
@@ -92,6 +101,7 @@ export const loadServerConfig = (
 
   const whatsapp = parsed.channels?.whatsapp ?? {};
   const slack = parsed.channels?.slack ?? {};
+  const discord = parsed.channels?.discord ?? {};
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
   }
@@ -104,6 +114,9 @@ export const loadServerConfig = (
       folder: path.resolve(project.folder),
     })),
     channels: {
+      discord: {
+        enabled: discord.enabled ?? false,
+      },
       slack: {
         enabled: slack.enabled ?? false,
         botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
@@ -126,6 +139,7 @@ export const loadServerSecrets = (
   const resolvedSecretsFile = path.resolve(secretsFile);
   const parsed = existsSync(resolvedSecretsFile)
     ? (JSON.parse(readFileSync(resolvedSecretsFile, "utf8")) as {
+        discord?: Partial<ServerSecrets["discord"]>;
         slack?: Partial<ServerSecrets["slack"]>;
         whatsapp?: Partial<ServerSecrets["whatsapp"]>;
       })
@@ -133,6 +147,11 @@ export const loadServerSecrets = (
 
   return {
     configFile: resolvedSecretsFile,
+    discord: {
+      botToken:
+        process.env.MACLAW_DISCORD_BOT_TOKEN ??
+        parsed.discord?.botToken,
+    },
     slack: {
       appToken:
         process.env.MACLAW_SLACK_APP_TOKEN ??

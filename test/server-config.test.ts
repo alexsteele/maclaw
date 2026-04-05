@@ -25,6 +25,9 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
           ],
           defaultProject: "home",
           channels: {
+            discord: {
+              enabled: true,
+            },
             slack: {
               enabled: true,
               botUserId: "U123456",
@@ -50,6 +53,7 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
       { name: "work", folder: projectB },
     ]);
     assert.equal(config.defaultProject, "home");
+    assert.equal(config.channels.discord.enabled, true);
     assert.equal(config.channels.slack.enabled, true);
     assert.equal(config.channels.slack.botUserId, "U123456");
     assert.equal(config.channels.whatsapp.enabled, true);
@@ -114,6 +118,9 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
       secretsPath,
       `${JSON.stringify(
         {
+          discord: {
+            botToken: "file-discord-bot-token",
+          },
           slack: {
             appToken: "xapp-file-slack-app-token",
             botToken: "file-slack-bot-token",
@@ -131,18 +138,21 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
 
     const originalAccessToken = process.env.MACLAW_WHATSAPP_ACCESS_TOKEN;
     const originalVerifyToken = process.env.MACLAW_WHATSAPP_VERIFY_TOKEN;
+    const originalDiscordBotToken = process.env.MACLAW_DISCORD_BOT_TOKEN;
     const originalSlackAppToken = process.env.MACLAW_SLACK_APP_TOKEN;
     const originalSlackBotToken = process.env.MACLAW_SLACK_BOT_TOKEN;
 
     try {
       process.env.MACLAW_WHATSAPP_ACCESS_TOKEN = "env-access-token";
       delete process.env.MACLAW_WHATSAPP_VERIFY_TOKEN;
+      process.env.MACLAW_DISCORD_BOT_TOKEN = "env-discord-bot-token";
       process.env.MACLAW_SLACK_APP_TOKEN = "env-slack-app-token";
       delete process.env.MACLAW_SLACK_BOT_TOKEN;
 
       const secrets = loadServerSecrets(secretsPath);
 
       assert.equal(secrets.configFile, secretsPath);
+      assert.equal(secrets.discord.botToken, "env-discord-bot-token");
       assert.equal(secrets.slack.appToken, "env-slack-app-token");
       assert.equal(secrets.slack.botToken, "file-slack-bot-token");
       assert.equal(secrets.whatsapp.accessToken, "env-access-token");
@@ -158,6 +168,12 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
         delete process.env.MACLAW_WHATSAPP_VERIFY_TOKEN;
       } else {
         process.env.MACLAW_WHATSAPP_VERIFY_TOKEN = originalVerifyToken;
+      }
+
+      if (originalDiscordBotToken === undefined) {
+        delete process.env.MACLAW_DISCORD_BOT_TOKEN;
+      } else {
+        process.env.MACLAW_DISCORD_BOT_TOKEN = originalDiscordBotToken;
       }
 
       if (originalSlackAppToken === undefined) {
