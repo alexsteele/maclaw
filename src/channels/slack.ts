@@ -1,3 +1,12 @@
+/**
+ * Slack API references:
+ * - Socket Mode: https://docs.slack.dev/apis/events-api/using-socket-mode/
+ * - Open socket connection: https://docs.slack.dev/reference/methods/apps.connections.open
+ * - Post message: https://docs.slack.dev/reference/methods/chat.postMessage
+ *
+ * This channel uses Slack Socket Mode over websocket for inbound events and
+ * the Slack Web API for outbound messages.
+ */
 import type { Channel, ChannelMessageHandler } from "./channel.js";
 import type { SlackConfig, ServerSecrets } from "../server-config.js";
 

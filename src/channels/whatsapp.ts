@@ -1,3 +1,12 @@
+/**
+ * WhatsApp Cloud API references:
+ * - Cloud API overview: https://developers.facebook.com/docs/whatsapp/cloud-api
+ * - Webhooks: https://developers.facebook.com/docs/graph-api/webhooks/getting-started
+ * - Send messages: https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
+ *
+ * This channel uses WhatsApp Cloud API webhooks for inbound messages and the
+ * Graph API for outbound messages.
+ */
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import type { Channel, ChannelMessageHandler } from "./channel.js";

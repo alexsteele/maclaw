@@ -203,9 +203,12 @@ Connectors are how you talk to maclaw. maclaw server currently supports:
 
 - REPL (no server needed)
 - slack via Socket Mode websocket
+  - setup: create a Slack app and enable Socket Mode first.
 - discord via gateway websocket
-  - setup: register a discord bot in the Discord Developer Portal first.
-- whatsapp via webhooks (be careful)
+  - setup: register a Discord bot in the Discord Developer Portal first.
+- whatsapp via webhooks
+  - setup: configure a WhatsApp Cloud API app and webhook first.
+  - warning: this exposes a public webhook, so be careful about how and where you run it.
 
 
 ## TODO
