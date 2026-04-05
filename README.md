@@ -4,6 +4,20 @@
 
 maclaw is a small LLM harness built with OpenAI codex.
 
+The goal of this project is to understand and test the limits of this
+technology. I make no strong claims about the reliablity, security, or
+robustness, though I do guide, review, and curate all AI code. 
+No AI slop hits `origin/main` without human eyes in the loop.
+
+Happy hacking friends. May your claws forever be ma'd and your way paved with
+gold 🦞❤️
+
+With love,
+
+Alex, your dedicated human-in-the-loop
+
+/endhuman
+
 <!-- END -->
 
 ## Features
