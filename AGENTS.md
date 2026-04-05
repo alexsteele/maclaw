@@ -10,6 +10,8 @@
 ## Code Style
 
 - Format files and avoid trailing whitespace.
+- Add a header comment to important files, functions, and classes briefly
+  explaining what it does. Link to any relevant documentation.
 - Put key lifecycle methods towards the top of classes.
 - Use simple clear names focused on our domain concepts.
 - Put important commands/fields first in a readable order for users.
