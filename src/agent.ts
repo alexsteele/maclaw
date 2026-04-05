@@ -1,188 +1,238 @@
-import { existsSync } from "node:fs";
-import type { ProjectConfig } from "./config.js";
-import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
-import { appendMessage, type ChatStore } from "./chats.js";
-import { loadSkills } from "./skills.js";
-import { createTools } from "./tools.js";
-import type { ChatRecord, ChatSummary, Message } from "./types.js";
-import { TaskScheduler } from "./scheduler.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import type { AgentRecord, Message } from "./types.js";
 
-const buildSystemPrompt = async (
-  config: ProjectConfig,
-  chat: ChatRecord,
-): Promise<string> => {
-  const skills = await loadSkills(config.skillsDir);
-  const skillsBlock =
-    skills.length === 0
-      ? "No local skills are available."
-      : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+const CONTINUE_PROMPT =
+  "Continue working on the task. If you are finished, end your response with a final line that contains only <AGENT_DONE>.";
 
-  return [
-    "You are maclaw, a small local LLM harness.",
-    "Your goal is to help the user answer questions and complete tasks.",
-    "Keep answers concise and practical.",
-    "Use tools when needed.",
-    "Local skills are available as user-authored task descriptions. Read them when useful.",
-    `Project initialized: ${existsSync(config.projectConfigFile) ? "yes" : "no"}.`,
-    `Chat retention: ${config.retentionDays} days.`,
-    `Compression mode: ${config.compressionMode}. If set to planned, compression is not implemented yet.`,
-    "",
-    "Available skills:",
-    skillsBlock,
-    "",
-    `Current chat id: ${chat.id}`,
-    `Current time: ${new Date().toISOString()}`,
-  ].join("\n");
+const isDoneMessage = (content: string): boolean => {
+  const lines = content.trim().split("\n").map((line) => line.trim());
+  return lines[lines.length - 1] === "<AGENT_DONE>";
 };
 
-const createProvider = (config: ProjectConfig): Provider => {
-  if (config.provider === "openai" && config.openAiApiKey) {
-    return new OpenAIResponsesProvider(config.openAiApiKey, config.model);
+type RunStep = (chatId: string, input: string) => Promise<Message>;
+
+export interface AgentStore {
+  getAgent(agentId: string): AgentRecord | undefined;
+  saveAgent(record: AgentRecord): void;
+  listAgents(): AgentRecord[];
+}
+
+export class MemoryAgentStore implements AgentStore {
+  private readonly agents = new Map<string, AgentRecord>();
+
+  getAgent(agentId: string): AgentRecord | undefined {
+    const record = this.agents.get(agentId);
+    return record ? structuredClone(record) : undefined;
   }
 
-  return new LocalFallbackProvider();
-};
-
-export class MaclawAgent {
-  private readonly config: ProjectConfig;
-  private readonly scheduler: TaskScheduler;
-  private readonly chatStore: ChatStore;
-  private readonly provider: Provider;
-  private activeChatId: string;
-  private activeChat?: ChatRecord;
-
-  constructor(config: ProjectConfig, scheduler: TaskScheduler, chatStore: ChatStore) {
-    this.config = config;
-    this.scheduler = scheduler;
-    this.chatStore = chatStore;
-    this.provider = createProvider(config);
-    this.activeChatId = config.chatId;
+  saveAgent(record: AgentRecord): void {
+    this.agents.set(record.id, structuredClone(record));
   }
 
-  private getChatLoadOptions() {
-      return {
-      retentionDays: this.config.retentionDays,
-      compressionMode: this.config.compressionMode,
-    } as const;
+  listAgents(): AgentRecord[] {
+    return Array.from(this.agents.values()).map((record) => structuredClone(record));
+  }
+}
+
+export class JsonFileAgentStore implements AgentStore {
+  private readonly filePath: string;
+
+  constructor(filePath: string) {
+    this.filePath = filePath;
   }
 
-  private async loadChat(chatId: string): Promise<ChatRecord> {
-    return this.chatStore.loadChat(chatId, this.getChatLoadOptions());
+  getAgent(agentId: string): AgentRecord | undefined {
+    const record = this.readAgents()[agentId];
+    return record ? structuredClone(record) : undefined;
   }
 
-  getCurrentChatId(): string {
-    return this.activeChatId;
+  saveAgent(record: AgentRecord): void {
+    const agents = this.readAgents();
+    agents[record.id] = structuredClone(record);
+    this.writeAgents(agents);
   }
 
-  async listChats(): Promise<ChatSummary[]> {
-    return this.chatStore.listChats();
+  listAgents(): AgentRecord[] {
+    return Object.values(this.readAgents()).map((record) => structuredClone(record));
   }
 
-  async switchChat(chatId: string): Promise<ChatRecord> {
-    this.activeChatId = chatId;
-    this.activeChat = await this.loadChat(chatId);
-    return this.activeChat;
-  }
-
-  async forkChat(newChatId: string): Promise<ChatRecord> {
-    const sourceChat = await this.loadActiveChat();
-    const now = new Date().toISOString();
-    const forkedChat: ChatRecord = {
-      ...structuredClone(sourceChat),
-      id: newChatId,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await this.chatStore.saveChat(forkedChat);
-    this.activeChatId = newChatId;
-    this.activeChat = forkedChat;
-    return forkedChat;
-  }
-
-  async loadActiveChat(): Promise<ChatRecord> {
-    if (!this.activeChat) {
-      this.activeChat = await this.loadChat(this.activeChatId);
+  private readAgents(): Record<string, AgentRecord> {
+    if (!existsSync(this.filePath)) {
+      return {};
     }
 
-    return this.activeChat;
+    const raw = readFileSync(this.filePath, "utf8");
+    return JSON.parse(raw) as Record<string, AgentRecord>;
   }
 
-  async handleUserInput(userInput: string): Promise<Message> {
-    const chat = await this.loadActiveChat();
-    return this.handleUserInputForChat(chat.id, userInput);
+  private writeAgents(agents: Record<string, AgentRecord>): void {
+    mkdirSync(path.dirname(this.filePath), { recursive: true });
+    writeFileSync(this.filePath, `${JSON.stringify(agents, null, 2)}\n`, "utf8");
+  }
+}
+
+// TODO:
+// - Resume runnable agents from storage on harness/server startup.
+// - Support pausing agents in addition to cancelling them.
+
+// Agent runs tasks autonomously in a loop.
+// An agent runs in a single project with its own chat (or user provided chat ID).
+// An agent can be "steered" by sending it prompts which are inserted in the loop.
+export class Agent {
+  private readonly agentStore: AgentStore;
+  private readonly runStep: RunStep;
+  private readonly record: AgentRecord;
+  private readonly steerQueue: string[] = [];
+  private readonly onStopped?: () => void;
+
+  constructor(
+    record: AgentRecord,
+    agentStore: AgentStore,
+    runStep: RunStep,
+    onStopped?: () => void,
+  ) {
+    this.record = record;
+    this.agentStore = agentStore;
+    this.runStep = runStep;
+    this.onStopped = onStopped;
   }
 
-  async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
-    const chat =
-      chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
+  get info(): AgentRecord {
+    return structuredClone(this.getRecord());
+  }
 
-    appendMessage(chat, "user", userInput);
-    await this.chatStore.saveChat(chat);
+  cancel(): AgentRecord {
+    const record = this.getRecord();
+    if (record.status === "pending" || record.status === "running") {
+      record.status = "cancelled";
+      record.finishedAt = new Date().toISOString();
+      this.saveRecord(record);
+      this.onStopped?.();
+    }
 
-    let assistantMessage: Message;
+    return this.info;
+  }
+
+  steer(prompt: string): AgentRecord {
+    const trimmed = prompt.trim();
+    const record = this.getRecord();
+    if (
+      trimmed.length === 0 ||
+      (record.status !== "pending" && record.status !== "running")
+    ) {
+      return this.info;
+    }
+
+    this.steerQueue.push(trimmed);
+    return this.info;
+  }
+
+  start(): AgentRecord {
+    const record = this.getRecord();
+    if (record.status !== "pending") {
+      return structuredClone(record);
+    }
+
+    record.status = "running";
+    record.startedAt = new Date().toISOString();
+    this.saveRecord(record);
+    this.scheduleIteration();
+    return structuredClone(record);
+  }
+
+  private consumeSteerPrompt(): string | undefined {
+    return this.steerQueue.shift();
+  }
+
+  private getRecord(): AgentRecord {
+    return this.agentStore.getAgent(this.record.id) ?? structuredClone(this.record);
+  }
+
+  private saveRecord(record: AgentRecord): void {
+    this.agentStore.saveAgent(record);
+  }
+
+  private scheduleIteration(): void {
+    const timer = setTimeout(() => {
+      void this.runNextIteration();
+    }, 0);
+    timer.unref?.();
+  }
+
+  private async runNextIteration(): Promise<void> {
+    const record = this.getRecord();
+    if (record.status !== "running") {
+      return;
+    }
+
+    if (this.isTimedOut(record)) {
+      this.finish(record, "stopped");
+      return;
+    }
+
+    if (record.maxSteps !== undefined && record.stepCount >= record.maxSteps) {
+      this.finish(record, "stopped");
+      return;
+    }
+
+    const input =
+      record.stepCount === 0 ? record.prompt : this.consumeSteerPrompt() ?? CONTINUE_PROMPT;
+
     try {
-      const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config, this.scheduler, chat.id);
-      const result = await this.provider.generate({
-        chat,
-        userInput,
-        systemPrompt,
-        tools,
-      });
+      const reply = await this.runStep(record.chatId, input);
+      const latest = this.getRecord();
+      if (latest.status !== "running") {
+        return;
+      }
 
-      assistantMessage = appendMessage(chat, "assistant", result.outputText);
+      latest.stepCount += 1;
+      latest.lastMessage = reply.content;
+      this.saveRecord(latest);
+
+      if (isDoneMessage(reply.content)) {
+        this.finish(latest, "completed");
+        return;
+      }
+
+      if (this.isTimedOut(latest)) {
+        this.finish(latest, "stopped");
+        return;
+      }
+
+      if (latest.maxSteps !== undefined && latest.stepCount >= latest.maxSteps) {
+        this.finish(latest, "stopped");
+        return;
+      }
+
+      this.scheduleIteration();
     } catch (error) {
-      const content = `Request failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-      assistantMessage = appendMessage(chat, "assistant", content);
+      this.finish(record, "failed", error instanceof Error ? error.message : String(error));
     }
-
-    await this.chatStore.saveChat(chat);
-    if (this.activeChatId === chat.id) {
-      this.activeChat = chat;
-    }
-    return assistantMessage;
   }
 
-  async handleScheduledTask(
-    chatId: string,
-    prompt: string,
-  ): Promise<Message> {
-    const chat = await this.loadChat(chatId);
+  private finish(
+    record: AgentRecord,
+    status: AgentRecord["status"],
+    lastError?: string,
+  ): void {
+    record.status = status;
+    record.finishedAt = new Date().toISOString();
+    record.lastError = lastError;
+    this.saveRecord(record);
+    this.onStopped?.();
+  }
 
-    appendMessage(chat, "system", `Scheduled task triggered: ${prompt}`, "scheduler");
-    await this.chatStore.saveChat(chat);
-
-    let assistantMessage: Message;
-    try {
-      const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config, this.scheduler, chat.id);
-      const result = await this.provider.generate({
-        chat,
-        userInput: prompt,
-        systemPrompt,
-        tools,
-      });
-
-      assistantMessage = appendMessage(
-        chat,
-        "assistant",
-        result.outputText,
-        "scheduler",
-      );
-    } catch (error) {
-      const content = `Scheduled task failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-      assistantMessage = appendMessage(chat, "assistant", content, "scheduler");
+  private isTimedOut(record: AgentRecord): boolean {
+    if (!record.startedAt) {
+      return false;
     }
 
-    await this.chatStore.saveChat(chat);
-    if (this.activeChatId === chat.id) {
-      this.activeChat = chat;
+    const startedAt = Date.parse(record.startedAt);
+    if (!Number.isFinite(startedAt)) {
+      return false;
     }
-    return assistantMessage;
+
+    return Date.now() - startedAt >= record.timeoutMs;
   }
 }

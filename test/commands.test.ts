@@ -129,3 +129,68 @@ test("dispatchCommand lists local skills", async () => {
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("dispatchCommand renders agent list output", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-list-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    harness.createAgent({
+      name: "daily-summary",
+      prompt: "Write a summary",
+    });
+
+    const reply = await dispatchCommand(harness, "/agent list");
+
+    assert.match(reply ?? "", /\bid\b/u);
+    assert.match(reply ?? "", /\bname\b/u);
+    assert.match(reply ?? "", /\bstatus\b/u);
+    assert.match(reply ?? "", /daily-summary/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand creates an agent for the scoped chat", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-create-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      "/agent create stock-updates | Send me a market summary",
+      { chatId: "whatsapp-15551234567" },
+    );
+
+    assert.match(reply ?? "", /started agent: /u);
+    const agent = harness.listAgents()[0];
+    assert.equal(agent?.name, "stock-updates");
+    assert.equal(agent?.chatId, "whatsapp-15551234567");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can steer and stop an agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-control-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const agent = harness.createAgent({
+      name: "research-agent",
+      prompt: "Research this",
+    });
+
+    const steerReply = await dispatchCommand(
+      harness,
+      `/agent steer ${agent.id} | Focus on recent changes`,
+    );
+    assert.equal(steerReply, `steered agent: ${agent.id}`);
+
+    const stopReply = await dispatchCommand(harness, `/agent stop ${agent.id}`);
+    assert.equal(stopReply, `stopped agent: ${agent.id}`);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

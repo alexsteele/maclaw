@@ -18,6 +18,7 @@ maclaw is a small LLM harness built with OpenAI codex.
 - **Project**: the folder maclaw runs in, including its local config, skills,
   chats, tasks, and logs
 - **Chat**: a saved conversation thread with its own history and scheduled tasks
+- **Agent** autonomously completes tasks by running prompts/tools in a loop
 - **Channel**: communication channel for talking to maclaw (whatsapp, sms, etc)
 - **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
 - **Tool**: a callable capability the harness can use, such as editing files,
@@ -40,10 +41,11 @@ maclaw is a small LLM harness built with OpenAI codex.
 ```text
 Commands:
   /help              Show this help
-  /project           Project commands
-  /chat              Chat commands
+  /project           Project information commands
+  /chat              Chat management commands
   /history           Show the current chat transcript
   /skills            List local skills
+  /agent             Agent management commands
   /task              Task scheduling commands
   /quit              Exit the REPL
 ```

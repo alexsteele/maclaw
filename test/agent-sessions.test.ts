@@ -3,14 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
-import { MaclawAgent } from "../src/agent.js";
 import type { ProjectConfig } from "../src/config.js";
 import { defaultTasksFile } from "../src/config.js";
 import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
-import { JsonFileChatStore, appendMessage } from "../src/chats.js";
+import { ChatRuntime, JsonFileChatStore, appendMessage } from "../src/chats.js";
 
 const createHarness = async (): Promise<{
-  agent: MaclawAgent;
+  agent: ChatRuntime;
   cleanup: () => Promise<void>;
   chatStore: JsonFileChatStore;
 }> => {
@@ -33,7 +32,7 @@ const createHarness = async (): Promise<{
 
   const chatStore = new JsonFileChatStore(config.chatsDir);
   const scheduler = new TaskScheduler(new JsonFileTaskStore(tasksFile));
-  const agent = new MaclawAgent(config, scheduler, chatStore);
+  const agent = new ChatRuntime(config, scheduler, chatStore);
 
   return {
     agent,

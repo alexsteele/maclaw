@@ -25,6 +25,30 @@ export type ChatSummary = {
   messageCount: number;
 };
 
+export type AgentStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "cancelled"
+  | "stopped"
+  | "failed";
+
+export type AgentRecord = {
+  id: string;
+  name: string;
+  prompt: string;
+  chatId: string;
+  status: AgentStatus;
+  maxSteps?: number;
+  timeoutMs: number;
+  stepCount: number;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  lastMessage?: string;
+  lastError?: string;
+};
+
 export type Skill = {
   name: string;
   path: string;

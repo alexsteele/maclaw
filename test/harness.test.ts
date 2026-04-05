@@ -4,6 +4,27 @@ import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
+import type { AgentRecord } from "../src/types.js";
+
+const waitForAgentToSettle = async (
+  harness: Harness,
+  agentId: string,
+): Promise<AgentRecord> => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const record = harness.getAgent(agentId);
+    if (
+      record &&
+      record.status !== "pending" &&
+      record.status !== "running"
+    ) {
+      return record;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error(`Timed out waiting for agent ${agentId} to settle`);
+};
 
 test("initProject upgrades a headless harness and preserves chats and tasks", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-"));
@@ -57,6 +78,100 @@ test("forkChat creates a default fork id when none is provided", async () => {
     assert.ok(result.chat);
     assert.equal(result.chat.id, "default-fork");
     assert.equal(harness.getCurrentChatId(), "default-fork");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness createAgent starts a simple agent loop in the background", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const created = harness.createAgent({
+      name: "simple-agent",
+      prompt: "Work on this task",
+      maxSteps: 2,
+    });
+
+    const initial = harness.getAgent(created.id);
+    assert.ok(initial);
+    assert.match(initial.status, /pending|running/u);
+
+    const result = await waitForAgentToSettle(harness, created.id);
+
+    assert.equal(result.id, created.id);
+    assert.equal(result.status, "stopped");
+    assert.equal(result.stepCount, 2);
+
+    const transcript = await harness.getChatTranscript(created.chatId);
+    assert.match(transcript, /Work on this task/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness stores and cancels agents through the agent store", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-store-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const created = harness.createAgent({
+      name: "queued-agent",
+      prompt: "Wait here",
+    });
+
+    const listed = harness.listAgents();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]?.id, created.id);
+
+    const loaded = harness.getAgent(created.id);
+    assert.equal(loaded?.name, "queued-agent");
+
+    const cancelled = harness.cancelAgent(created.id);
+    assert.equal(cancelled?.status, "cancelled");
+    assert.equal(harness.getAgent(created.id)?.status, "cancelled");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness can queue a steer prompt for an agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-steer-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = harness.createAgent({
+      name: "steerable-agent",
+      prompt: "Start here",
+    });
+
+    const steered = harness.steerAgent(created.id, "Try a different direction");
+
+    assert.equal(steered?.id, created.id);
+    assert.ok(steered);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("teardown cancels running agents", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-teardown-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = harness.createAgent({
+      name: "long-agent",
+      prompt: "Keep going",
+      maxSteps: 50,
+    });
+
+    harness.teardown();
+
+    const settled = await waitForAgentToSettle(harness, created.id);
+    assert.equal(settled.status, "cancelled");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

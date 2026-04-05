@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
 import {
+  defaultAgentsFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   initProjectConfig,
   loadConfig,
   type ProjectConfig,
 } from "./config.js";
-import { MaclawAgent } from "./agent.js";
+import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
 import { loadSkills } from "./skills.js";
 import {
   JsonFileTaskStore,
@@ -14,12 +15,14 @@ import {
   TaskScheduler,
 } from "./scheduler.js";
 import {
+  ChatRuntime,
   JsonFileChatStore,
   MemoryChatStore,
   type ChatLoadOptions,
   type ChatStore,
 } from "./chats.js";
 import type {
+  AgentRecord,
   ChatRecord,
   ChatSummary,
   Message,
@@ -48,20 +51,41 @@ const createScheduler = (config: ProjectConfig): TaskScheduler => {
     : new TaskScheduler(new MemoryTaskStore());
 };
 
+const createAgentStore = (config: ProjectConfig): AgentStore => {
+  return existsSync(config.projectConfigFile)
+    ? new JsonFileAgentStore(defaultAgentsFile(config.projectFolder))
+    : new MemoryAgentStore();
+};
+
+const AGENT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+const createShortAgentId = (): string => {
+  let id = "";
+  for (let index = 0; index < 6; index += 1) {
+    const offset = Math.floor(Math.random() * AGENT_ID_ALPHABET.length);
+    id += AGENT_ID_ALPHABET[offset];
+  }
+
+  return id;
+};
+
 // Harness orchestrates user interactions with a project.
 // A default harness has no project. initProject() creates one.
 export class Harness {
   private _config: ProjectConfig;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
-  private _agent: MaclawAgent;
+  private _chatRuntime: ChatRuntime;
+  private _agentStore: AgentStore;
+  private _runningAgents = new Map<string, Agent>();
   private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
 
   constructor(config: ProjectConfig) {
     this._config = config;
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
-    this._agent = new MaclawAgent(config, this._scheduler, this._chatStore);
+    this._chatRuntime = new ChatRuntime(config, this._scheduler, this._chatStore);
+    this._agentStore = createAgentStore(config);
   }
 
   static load(cwd?: string): Harness {
@@ -89,6 +113,10 @@ export class Harness {
   }
 
   teardown(): void {
+    for (const agent of this._runningAgents.values()) {
+      agent.cancel();
+    }
+    this._runningAgents.clear();
     this._scheduler.stop();
   }
 
@@ -107,7 +135,8 @@ export class Harness {
     };
     const nextChatStore = createChatStore(nextConfig);
     const nextScheduler = createScheduler(nextConfig);
-    const nextAgent = new MaclawAgent(nextConfig, nextScheduler, nextChatStore);
+    const nextChatRuntime = new ChatRuntime(nextConfig, nextScheduler, nextChatStore);
+    const nextAgentStore = createAgentStore(nextConfig);
 
     const activeChat = await this.loadCurrentChat();
     await nextChatStore.saveChat(activeChat);
@@ -128,7 +157,8 @@ export class Harness {
     this._config = nextConfig;
     this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
-    this._agent = nextAgent;
+    this._chatRuntime = nextChatRuntime;
+    this._agentStore = nextAgentStore;
 
     if (this._taskListener) {
       await this.start(this._taskListener);
@@ -138,7 +168,7 @@ export class Harness {
   }
 
   getCurrentChatId(): string {
-    return this._agent.getCurrentChatId();
+    return this._chatRuntime.getCurrentChatId();
   }
 
   getChatOptions(): ChatLoadOptions {
@@ -153,7 +183,7 @@ export class Harness {
   }
 
   async listChats(): Promise<ChatSummary[]> {
-    return this._agent.listChats();
+    return this._chatRuntime.listChats();
   }
 
   async listSkills(): Promise<Skill[]> {
@@ -161,7 +191,7 @@ export class Harness {
   }
 
   async switchChat(chatId: string): Promise<ChatRecord> {
-    return this._agent.switchChat(chatId);
+    return this._chatRuntime.switchChat(chatId);
   }
 
   private parseRequestedChatId(value: string): string | null {
@@ -205,11 +235,11 @@ export class Harness {
       return { error: `chat already exists: ${newChatId}` };
     }
 
-    return { chat: await this._agent.forkChat(newChatId) };
+    return { chat: await this._chatRuntime.forkChat(newChatId) };
   }
 
   async loadCurrentChat(): Promise<ChatRecord> {
-    return this._agent.loadActiveChat();
+    return this._chatRuntime.loadActiveChat();
   }
 
   async getCurrentChatTranscript(): Promise<string> {
@@ -261,15 +291,77 @@ export class Harness {
   }
 
   async handleUserInput(userInput: string): Promise<Message> {
-    return this._agent.handleUserInput(userInput);
+    return this._chatRuntime.handleUserInput(userInput);
   }
 
   async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
-    return this._agent.handleUserInputForChat(chatId, userInput);
+    return this._chatRuntime.handleUserInputForChat(chatId, userInput);
   }
 
   async handleScheduledTask(chatId: string, prompt: string): Promise<Message> {
-    return this._agent.handleScheduledTask(chatId, prompt);
+    return this._chatRuntime.handleScheduledTask(chatId, prompt);
+  }
+
+  private createAgentId(): string {
+    const existingIds = new Set(this._agentStore.listAgents().map((agent) => agent.id));
+
+    for (let attempt = 0; attempt < 10_000; attempt += 1) {
+      const candidate = `agent_${createShortAgentId()}`;
+      if (!existingIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new Error("Could not create a unique agent id.");
+  }
+
+  createAgent(input: {
+    name: string;
+    prompt: string;
+    maxSteps?: number;
+    timeoutMs?: number;
+    chatId?: string;
+  }): AgentRecord {
+    const now = new Date().toISOString();
+    const id = this.createAgentId();
+    const record: AgentRecord = {
+      id,
+      name: input.name,
+      prompt: input.prompt,
+      chatId: input.chatId ?? id,
+      status: "pending",
+      maxSteps: input.maxSteps ?? 100,
+      timeoutMs: input.timeoutMs ?? 60 * 60 * 1000,
+      stepCount: 0,
+      createdAt: now,
+    };
+
+    const agent = new Agent(
+      record,
+      this._agentStore,
+      this.handleUserInputForChat.bind(this),
+      () => {
+        this._runningAgents.delete(record.id);
+      },
+    );
+    this._runningAgents.set(record.id, agent);
+    return agent.start();
+  }
+
+  listAgents(): AgentRecord[] {
+    return this._agentStore.listAgents();
+  }
+
+  getAgent(agentId: string): AgentRecord | undefined {
+    return this._agentStore.getAgent(agentId);
+  }
+
+  cancelAgent(agentId: string): AgentRecord | undefined {
+    return this._runningAgents.get(agentId)?.cancel();
+  }
+
+  steerAgent(agentId: string, prompt: string): AgentRecord | undefined {
+    return this._runningAgents.get(agentId)?.steer(prompt);
   }
 
   async runDueTasks(

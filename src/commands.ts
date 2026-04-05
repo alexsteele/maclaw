@@ -1,6 +1,6 @@
 import { Harness } from "./harness.js";
 import { parseTaskSchedule } from "./task.js";
-import type { TaskSchedule } from "./types.js";
+import type { AgentRecord, TaskSchedule } from "./types.js";
 
 type DispatchOptions = {
   chatId?: string;
@@ -13,6 +13,7 @@ export const helpText = [
   "  /chat              Chat management commands",
   "  /history           Show the current chat transcript",
   "  /skills            List local skills",
+  "  /agent             Agent management commands",
   "  /task              Task scheduling commands",
 ].join("\n");
 
@@ -39,6 +40,16 @@ export const taskHelpText = [
   "  /task schedule daily 9:00 AM | <title> | <prompt>",
   "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>",
   "  /task delete <task id>",
+].join("\n");
+
+export const agentHelpText = [
+  "Command: /agent",
+  "  /agent",
+  "  /agent list",
+  "  /agent create <name> | <prompt>",
+  "  /agent show <agent id>",
+  "  /agent stop <agent id>",
+  "  /agent steer <agent id> | <prompt>",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -164,6 +175,75 @@ const renderTaskList = async (
   return [header, separator, ...lines].join("\n");
 };
 
+const renderAgentList = (agents: AgentRecord[]): string => {
+  if (agents.length === 0) {
+    return "No agents.";
+  }
+
+  const rows = agents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    status: agent.status,
+    steps:
+      agent.maxSteps === undefined
+        ? `${agent.stepCount}`
+        : `${agent.stepCount}/${agent.maxSteps}`,
+    chat: agent.chatId,
+  }));
+
+  const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
+  const nameWidth = Math.max("name".length, ...rows.map((row) => row.name.length));
+  const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
+  const stepsWidth = Math.max("steps".length, ...rows.map((row) => row.steps.length));
+  const chatWidth = Math.max("chat".length, ...rows.map((row) => row.chat.length));
+
+  const header = [
+    padCell("id", idWidth),
+    padCell("name", nameWidth),
+    padCell("status", statusWidth),
+    padCell("steps", stepsWidth),
+    padCell("chat", chatWidth),
+  ].join("  ");
+
+  const separator = [
+    "-".repeat(idWidth),
+    "-".repeat(nameWidth),
+    "-".repeat(statusWidth),
+    "-".repeat(stepsWidth),
+    "-".repeat(chatWidth),
+  ].join("  ");
+
+  const lines = rows.map((row) =>
+    [
+      padCell(row.id, idWidth),
+      padCell(row.name, nameWidth),
+      padCell(row.status, statusWidth),
+      padCell(row.steps, stepsWidth),
+      padCell(row.chat, chatWidth),
+    ].join("  "),
+  );
+
+  return [header, separator, ...lines].join("\n");
+};
+
+const renderAgentInfo = (agent: AgentRecord): string =>
+  [
+    `id: ${agent.id}`,
+    `name: ${agent.name}`,
+    `status: ${agent.status}`,
+    `chatId: ${agent.chatId}`,
+    `steps: ${
+      agent.maxSteps === undefined
+        ? `${agent.stepCount}`
+        : `${agent.stepCount}/${agent.maxSteps}`
+    }`,
+    `timeoutMs: ${agent.timeoutMs}`,
+    `createdAt: ${agent.createdAt}`,
+    `startedAt: ${agent.startedAt ?? "(not started)"}`,
+    `finishedAt: ${agent.finishedAt ?? "(not finished)"}`,
+    `lastError: ${agent.lastError ?? "(none)"}`,
+  ].join("\n");
+
 const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
   const projectConfig = harness.config;
   const isProjectInitialized = harness.isProjectInitialized();
@@ -258,6 +338,10 @@ export const dispatchCommand = async (
 
   if (input === "/help task") {
     return taskHelpText;
+  }
+
+  if (input === "/help agent") {
+    return agentHelpText;
   }
 
   if (input === "/project" || input === "/project show") {
@@ -360,6 +444,76 @@ export const dispatchCommand = async (
 
   if (input.startsWith("/task")) {
     return taskHelpText;
+  }
+
+  if (input === "/agent") {
+    return agentHelpText;
+  }
+
+  if (input === "/agent list") {
+    return renderAgentList(harness.listAgents());
+  }
+
+  if (input.startsWith("/agent create ")) {
+    const body = input.slice("/agent create ".length).trim();
+    const separatorIndex = body.indexOf("|");
+    if (separatorIndex < 0) {
+      return "Usage: /agent create <name> | <prompt>";
+    }
+
+    const name = body.slice(0, separatorIndex).trim();
+    const prompt = body.slice(separatorIndex + 1).trim();
+    if (name.length === 0 || prompt.length === 0) {
+      return "Usage: /agent create <name> | <prompt>";
+    }
+
+    const agent = harness.createAgent({
+      name,
+      prompt,
+      chatId: getScopedChatId(harness, options),
+    });
+    return `started agent: ${agent.id}`;
+  }
+
+  if (input.startsWith("/agent show ")) {
+    const agentId = input.slice("/agent show ".length).trim();
+    if (agentId.length === 0) {
+      return "Usage: /agent show <agent id>";
+    }
+
+    const agent = harness.getAgent(agentId);
+    return agent ? renderAgentInfo(agent) : `agent not found: ${agentId}`;
+  }
+
+  if (input.startsWith("/agent stop ")) {
+    const agentId = input.slice("/agent stop ".length).trim();
+    if (agentId.length === 0) {
+      return "Usage: /agent stop <agent id>";
+    }
+
+    const agent = harness.cancelAgent(agentId);
+    return agent ? `stopped agent: ${agentId}` : `agent not found: ${agentId}`;
+  }
+
+  if (input.startsWith("/agent steer ")) {
+    const body = input.slice("/agent steer ".length).trim();
+    const separatorIndex = body.indexOf("|");
+    if (separatorIndex < 0) {
+      return "Usage: /agent steer <agent id> | <prompt>";
+    }
+
+    const agentId = body.slice(0, separatorIndex).trim();
+    const prompt = body.slice(separatorIndex + 1).trim();
+    if (agentId.length === 0 || prompt.length === 0) {
+      return "Usage: /agent steer <agent id> | <prompt>";
+    }
+
+    const agent = harness.steerAgent(agentId, prompt);
+    return agent ? `steered agent: ${agentId}` : `agent not found: ${agentId}`;
+  }
+
+  if (input.startsWith("/agent")) {
+    return agentHelpText;
   }
 
   if (input === "/skills") {

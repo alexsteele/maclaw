@@ -11,6 +11,9 @@ export const defaultTasksFile = (projectFolder: string): string =>
 export const defaultTaskRunsFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "task-runs.jsonl");
 
+export const defaultAgentsFile = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "agents.json");
+
 export type ProjectConfig = {
   name: string;
   createdAt?: string;
