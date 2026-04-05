@@ -9,10 +9,12 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { initProjectConfig, type ProjectConfig } from "./config.js";
 import {
+  defaultServerConfigFile,
+  defaultServerSecretsFile,
   type ServerConfig,
   type ServerSecrets,
 } from "./server-config.js";
-import { writeJsonFile } from "./fs-utils.js";
+import { readJsonFile, writeJsonFile } from "./fs-utils.js";
 
 type SetupOptions = {
   answers?: string[];
@@ -25,19 +27,21 @@ type SetupOptions = {
 type ProviderChoice = "openai" | "dummy" | "skip";
 type ChannelChoice = "slack" | "discord" | "whatsapp";
 
+type ServerConfigData = {
+  defaultProject?: string;
+  projects?: ServerConfig["projects"];
+  channels?: {
+    discord?: Partial<ServerConfig["channels"]["discord"]>;
+    slack?: Partial<ServerConfig["channels"]["slack"]>;
+    whatsapp?: Partial<ServerConfig["channels"]["whatsapp"]>;
+  };
+};
+type ServerSecretsData = Partial<Omit<ServerSecrets, "configFile">>;
+
 const OPENAI_SETUP_URL = "https://developers.openai.com/api/docs/quickstart";
 const SLACK_SETUP_URL = "https://api.slack.com/apps";
 const DISCORD_SETUP_URL = "https://discord.com/developers/applications";
 const WHATSAPP_SETUP_URL = "https://developers.facebook.com/docs/whatsapp/cloud-api";
-
-const defaultSetupProjectFolder = (homeDir: string): string =>
-  path.join(homeDir, "maclaw-projects", "default");
-
-const defaultSetupServerConfigFile = (homeDir: string): string =>
-  path.join(homeDir, ".maclaw", "server.json");
-
-const defaultSetupServerSecretsFile = (homeDir: string): string =>
-  path.join(homeDir, ".maclaw", "secrets.json");
 
 const expandHome = (value: string, homeDir: string): string => {
   if (value === "~") {
@@ -51,19 +55,35 @@ const expandHome = (value: string, homeDir: string): string => {
   return value;
 };
 
+const emptyServerConfig = (): ServerConfigData => ({
+  projects: [],
+});
+
+const loadSetupServerConfig = async (homeDir: string): Promise<ServerConfigData> => {
+  return readJsonFile<ServerConfigData>(
+    defaultServerConfigFile(homeDir),
+    {},
+  );
+};
+
+const loadSetupServerSecrets = async (homeDir: string): Promise<ServerSecretsData> => {
+  return readJsonFile<ServerSecretsData>(
+    defaultServerSecretsFile(homeDir),
+    {},
+  );
+};
+
 class SetupPrompter {
-  private readonly rl: readline.Interface;
+  private rl?: readline.Interface;
 
   constructor(
-    input: NodeJS.ReadableStream,
+    private readonly input: NodeJS.ReadableStream,
     private readonly output: NodeJS.WritableStream,
     private readonly answers: string[] = [],
-  ) {
-    this.rl = readline.createInterface({ input, output });
-  }
+  ) {}
 
   async close(): Promise<void> {
-    this.rl.close();
+    this.rl?.close();
   }
 
   print(line = ""): void {
@@ -77,6 +97,10 @@ class SetupPrompter {
       return answer.trim();
     }
 
+    this.rl ??= readline.createInterface({
+      input: this.input,
+      output: this.output,
+    });
     return (await this.rl.question(prompt)).trim();
   }
 
@@ -180,6 +204,173 @@ class SetupPrompter {
   }
 }
 
+const runProviderSetup = async (
+  prompt: SetupPrompter,
+  projectConfig: Partial<ProjectConfig>,
+  serverSecrets: ServerSecretsData,
+): Promise<void> => {
+  const providerChoice = await prompt.askChoice<ProviderChoice>(
+    "Provider?",
+    ["openai", "dummy", "skip"],
+    "openai",
+  );
+
+  if (providerChoice === "openai") {
+    prompt.print();
+    prompt.print("OpenAI API setup:");
+    prompt.print(`  ${OPENAI_SETUP_URL}`);
+
+    projectConfig.provider = "openai";
+    projectConfig.model = await prompt.askLine("Model?", "gpt-5.4-mini");
+    const apiKey = await prompt.askLine("OpenAI API key");
+    if (apiKey) {
+      serverSecrets.openai = { apiKey };
+    }
+    return;
+  }
+
+  if (providerChoice === "dummy") {
+    projectConfig.provider = "local";
+    projectConfig.model = await prompt.askLine("Model?", "dummy-model");
+  }
+};
+
+const runProjectSetup = async (
+  prompt: SetupPrompter,
+  homeDir: string,
+  projectConfig: Partial<ProjectConfig>,
+  serverConfig: ServerConfigData,
+): Promise<ProjectConfig | undefined> => {
+  const createDefaultProject = await prompt.askYesNo(
+    "Do you want to create a default project?",
+    true,
+  );
+
+  if (!createDefaultProject) {
+    return undefined;
+  }
+
+  const projectFolder = path.resolve(
+    expandHome(
+      await prompt.askLine(
+        "Where should the default project live?",
+        "~/maclaw-projects/default",
+      ),
+      homeDir,
+    ),
+  );
+
+  const defaultProject = await initProjectConfig(projectFolder, projectConfig);
+  serverConfig.defaultProject = defaultProject.name;
+  serverConfig.projects = [
+    ...(serverConfig.projects ?? []).filter((project) => project.name !== defaultProject.name),
+    {
+      name: defaultProject.name,
+      folder: defaultProject.projectFolder,
+    },
+  ];
+  return defaultProject;
+};
+
+const runServerSetup = async (
+  prompt: SetupPrompter,
+  serverConfig: ServerConfigData,
+  serverSecrets: ServerSecretsData,
+): Promise<boolean> => {
+  const setupServer = await prompt.askChoice(
+    "Set up maclaw server and connectors?",
+    ["yes", "skip"],
+    "skip",
+  );
+
+  if (setupServer !== "yes") {
+    return false;
+  }
+
+  const selectedChannels = await prompt.askMultiChoice<ChannelChoice>("Enable channels?", [
+    "slack",
+    "discord",
+    "whatsapp",
+  ]);
+
+  if (selectedChannels.includes("slack")) {
+    prompt.print();
+    prompt.print("Slack setup:");
+    prompt.print("  Create a Slack app and enable Socket Mode:");
+    prompt.print(`  ${SLACK_SETUP_URL}`);
+    const channels = (serverConfig.channels ??= {});
+    channels.slack = {
+      ...(channels.slack ?? {}),
+      enabled: true,
+    };
+    const appToken = await prompt.askLine("Slack app token");
+    const botToken = await prompt.askLine("Slack bot token");
+    if (appToken || botToken) {
+      serverSecrets.slack = {
+        ...(appToken ? { appToken } : {}),
+        ...(botToken ? { botToken } : {}),
+      };
+    }
+  }
+
+  if (selectedChannels.includes("discord")) {
+    prompt.print();
+    prompt.print("Discord setup:");
+    prompt.print("  Register a bot in the Discord Developer Portal:");
+    prompt.print(`  ${DISCORD_SETUP_URL}`);
+    const channels = (serverConfig.channels ??= {});
+    channels.discord = {
+      ...(channels.discord ?? {}),
+      enabled: true,
+    };
+    const botToken = await prompt.askLine("Discord bot token");
+    if (botToken) {
+      serverSecrets.discord = { botToken };
+    }
+  }
+
+  if (selectedChannels.includes("whatsapp")) {
+    prompt.print();
+    prompt.print("WhatsApp setup:");
+    prompt.print("  Configure a WhatsApp Cloud API app and webhook:");
+    prompt.print(`  ${WHATSAPP_SETUP_URL}`);
+    prompt.print("  Warning: this exposes a public webhook, so be careful how and where you run it.");
+    const channels = (serverConfig.channels ??= {});
+    const phoneNumberId = await prompt.askLine("WhatsApp phone number id");
+    channels.whatsapp = {
+      ...(channels.whatsapp ?? {}),
+      enabled: true,
+      ...(phoneNumberId ? { phoneNumberId } : {}),
+    };
+    const accessToken = await prompt.askLine("WhatsApp access token");
+    const verifyToken = await prompt.askLine("WhatsApp verify token");
+    if (accessToken || verifyToken) {
+      serverSecrets.whatsapp = {
+        ...(accessToken ? { accessToken } : {}),
+        ...(verifyToken ? { verifyToken } : {}),
+      };
+    }
+  }
+
+  return true;
+};
+
+const writeSetupConfig = async (
+  homeDir: string,
+  serverConfig: ServerConfigData,
+  serverSecrets: ServerSecretsData,
+  writtenFiles: string[],
+): Promise<void> => {
+  const serverConfigPath = defaultServerConfigFile(homeDir);
+  const serverSecretsPath = defaultServerSecretsFile(homeDir);
+
+  await writeJsonFile(serverConfigPath, serverConfig);
+  writtenFiles.push(serverConfigPath);
+
+  await writeJsonFile(serverSecretsPath, serverSecrets);
+  writtenFiles.push(serverSecretsPath);
+};
+
 const runSetupFlow = async (
   prompt: SetupPrompter,
   homeDir: string,
@@ -197,168 +388,42 @@ const runSetupFlow = async (
   prompt.print("`maclaw server`.");
   prompt.print();
 
-  const allowGlobalWrites = await prompt.askYesNo(
+  const saveGlobalConfig = await prompt.askYesNo(
     "maclaw can save server config and API secrets in ~/.maclaw. Is that OK?",
     true,
   );
-
-  const providerChoice = await prompt.askChoice<ProviderChoice>(
-    "Provider?",
-    ["openai", "dummy", "skip"],
-    "openai",
-  );
-
-  let provider: ProjectConfig["provider"] | undefined;
-  let model: string | undefined;
-  let openAiApiKey: string | undefined;
-
-  if (providerChoice === "openai") {
-    provider = "openai";
+  if (!saveGlobalConfig) {
+    prompt.print("Global config will not be written. You can configure ~/.maclaw manually later.");
     prompt.print();
-    prompt.print("OpenAI API setup:");
-    prompt.print(`  ${OPENAI_SETUP_URL}`);
-    if (allowGlobalWrites) {
-      openAiApiKey = await prompt.askLine("OpenAI API key");
-    } else {
-      prompt.print("OpenAI API keys will not be saved. You can set OPENAI_API_KEY later.");
-    }
-    model = await prompt.askLine("Model?", "gpt-5.4-mini");
-  } else if (providerChoice === "dummy") {
-    provider = "local";
-    model = await prompt.askLine("Model?", "dummy-model");
   }
 
-  const createDefaultProject = await prompt.askYesNo(
-    "Do you want to create a default project?",
-    true,
-  );
+  const projectConfig: Partial<ProjectConfig> = {};
+  const serverConfig = saveGlobalConfig
+    ? await loadSetupServerConfig(homeDir)
+    : emptyServerConfig();
+  const serverSecrets = saveGlobalConfig
+    ? await loadSetupServerSecrets(homeDir)
+    : {};
 
-  let defaultProject: ProjectConfig | undefined;
-  if (createDefaultProject) {
-    const projectFolder = path.resolve(
-      expandHome(
-        await prompt.askLine(
-          "Where should the default project live?",
-          "~/maclaw-projects/default",
-        ),
-        homeDir,
-      ),
-    );
-    defaultProject = await initProjectConfig(projectFolder, {
-      ...(provider ? { provider } : {}),
-      ...(model ? { model } : {}),
-    });
+  await runProviderSetup(prompt, projectConfig, serverSecrets);
+
+  const defaultProject = await runProjectSetup(prompt, homeDir, projectConfig, serverConfig);
+  if (defaultProject) {
     writtenFiles.push(defaultProject.projectConfigFile);
   }
 
-  let selectedChannels: ChannelChoice[] = [];
-  let slackAppToken = "";
-  let slackBotToken = "";
-  let discordBotToken = "";
-  let whatsappPhoneNumberId = "";
-  let whatsappAccessToken = "";
-  let whatsappVerifyToken = "";
+  const configuredServer = saveGlobalConfig
+    ? await runServerSetup(prompt, serverConfig, serverSecrets)
+    : false;
+  const shouldShowServerCommand = Boolean(defaultProject) || configuredServer;
 
-  const setupServer = allowGlobalWrites
-    ? await prompt.askChoice("Set up maclaw server and connectors?", ["yes", "skip"], "skip")
-    : "skip";
-
-  if (setupServer === "yes") {
-    selectedChannels = await prompt.askMultiChoice<ChannelChoice>("Enable channels?", [
-      "slack",
-      "discord",
-      "whatsapp",
-    ]);
-
-    if (selectedChannels.includes("slack")) {
-      prompt.print();
-      prompt.print("Slack setup:");
-      prompt.print("  Create a Slack app and enable Socket Mode:");
-      prompt.print(`  ${SLACK_SETUP_URL}`);
-      slackAppToken = await prompt.askLine("Slack app token");
-      slackBotToken = await prompt.askLine("Slack bot token");
-    }
-
-    if (selectedChannels.includes("discord")) {
-      prompt.print();
-      prompt.print("Discord setup:");
-      prompt.print("  Register a bot in the Discord Developer Portal:");
-      prompt.print(`  ${DISCORD_SETUP_URL}`);
-      discordBotToken = await prompt.askLine("Discord bot token");
-    }
-
-    if (selectedChannels.includes("whatsapp")) {
-      prompt.print();
-      prompt.print("WhatsApp setup:");
-      prompt.print("  Configure a WhatsApp Cloud API app and webhook:");
-      prompt.print(`  ${WHATSAPP_SETUP_URL}`);
-      prompt.print("  Warning: this exposes a public webhook, so be careful how and where you run it.");
-      whatsappPhoneNumberId = await prompt.askLine("WhatsApp phone number id");
-      whatsappAccessToken = await prompt.askLine("WhatsApp access token");
-      whatsappVerifyToken = await prompt.askLine("WhatsApp verify token");
-    }
-  }
-
-  const shouldWriteServerConfig =
-    allowGlobalWrites && (setupServer === "yes" || Boolean(openAiApiKey));
-
-  if (shouldWriteServerConfig) {
-    const serverConfigPath = defaultSetupServerConfigFile(homeDir);
-    const serverSecretsPath = defaultSetupServerSecretsFile(homeDir);
-    const serverConfig: Omit<ServerConfig, "configFile"> = {
-      defaultProject: defaultProject?.name,
-      projects: defaultProject
-        ? [{ name: defaultProject.name, folder: defaultProject.projectFolder }]
-        : [],
-      channels: {
-        discord: {
-          enabled: selectedChannels.includes("discord"),
-        },
-        slack: {
-          enabled: selectedChannels.includes("slack"),
-        },
-        whatsapp: {
-          enabled: selectedChannels.includes("whatsapp"),
-          graphApiVersion: "v23.0",
-          phoneNumberId: whatsappPhoneNumberId || undefined,
-          port: 3000,
-          webhookPath: "/whatsapp/webhook",
-        },
-      },
-    };
-    const serverSecrets: Omit<ServerSecrets, "configFile"> = {
-      openai: {
-        apiKey: openAiApiKey || undefined,
-      },
-      discord: {
-        botToken: discordBotToken || undefined,
-      },
-      slack: {
-        appToken: slackAppToken || undefined,
-        botToken: slackBotToken || undefined,
-      },
-      whatsapp: {
-        accessToken: whatsappAccessToken || undefined,
-        verifyToken: whatsappVerifyToken || undefined,
-      },
-    };
-
-    if (setupServer === "yes") {
-      await writeJsonFile(serverConfigPath, serverConfig);
-      writtenFiles.push(serverConfigPath);
-    }
-
-    if (
-      openAiApiKey ||
-      discordBotToken ||
-      slackAppToken ||
-      slackBotToken ||
-      whatsappAccessToken ||
-      whatsappVerifyToken
-    ) {
-      await writeJsonFile(serverSecretsPath, serverSecrets);
-      writtenFiles.push(serverSecretsPath);
-    }
+  if (saveGlobalConfig) {
+    await writeSetupConfig(
+      homeDir,
+      serverConfig,
+      serverSecrets,
+      writtenFiles,
+    );
   }
 
   if (writtenFiles.length > 0) {
@@ -373,7 +438,7 @@ const runSetupFlow = async (
   prompt.print("Done.");
   prompt.print("Run:");
   prompt.print("  maclaw");
-  if (setupServer === "yes") {
+  if (shouldShowServerCommand) {
     prompt.print("  maclaw server");
   }
 };

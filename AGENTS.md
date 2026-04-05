@@ -16,6 +16,7 @@
 - Use simple clear names focused on our domain concepts.
 - Put important commands/fields first in a readable order for users.
 - Keep functions focused and ask the user if you're unsure how to organize them.
-- Avoid creating very similar types like "RawConfig" and "Config". Keep it simple.
+- Avoid creating very similar types like "RawConfig" and "Config". Keep it
+  simple. Use one authoritative type for each concepts.
 - Reserve exceptions for exceptional events like IO errors, not bad user input.
 - Avoid deeply nested code and complex ternary expressions. Keep code flat and simple.

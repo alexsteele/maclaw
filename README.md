@@ -22,10 +22,10 @@ Alex, your dedicated human-in-the-loop
 
 ## Features
 
-- REPL-based chat loop
+- Chat with `maclaw` via a REPL or `maclaw server` connectors (slack etc)
 - Projects, chats, skills, tools, and schedulable tasks.
 - File-backed storage for chats, tasks, etc.
-- Pluggable LLM provider interface.
+- Pluggable LLM models.
 
 ## Concepts
 
@@ -51,15 +51,16 @@ Alex, your dedicated human-in-the-loop
 
 ## Message Flow
 
-- You create a maclaw project `/project init`
-- You configure a channel
-- You start a maclaw server
-- You message maclaw
-- The channel receives, normalizes, and forwards the message to `MaclawServer`
-- `MaclawServer` checks for `/commands` and forwards messages to the right
-  `Harness` for the current project and chat
+- Install and run `maclaw setup` to configure a model, project, and channels
+- Run `maclaw server` or `maclaw repl`
+- You message maclaw via a channel.
+- Maclaw's `Channel` code receives, normalizes, and forwards the message to `MaclawServer`
+- `MaclawServer` checks for `/commands` and forwards messages to the 
+  `Harness` for the right project and chat
 - The harness constructs and sends the prompt to the AI model.
 - The harness logs the messages and the channel sends the response back to you
+- Agents you start run in a loop in their project `Harness` until completion or cancellation.
+
 
 ## REPL
 

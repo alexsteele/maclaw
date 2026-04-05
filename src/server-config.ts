@@ -53,11 +53,26 @@ export type ServerSecrets = {
   };
 };
 
-export const defaultServerConfigFile = (): string =>
-  process.env.MACLAW_SERVER_CONFIG ?? path.join(os.homedir(), ".maclaw", "server.json");
+export const defaultServerConfigFile = (homeDir: string = os.homedir()): string =>
+  process.env.MACLAW_SERVER_CONFIG ?? path.join(homeDir, ".maclaw", "server.json");
 
-export const defaultServerSecretsFile = (): string =>
-  process.env.MACLAW_SERVER_SECRETS ?? path.join(os.homedir(), ".maclaw", "secrets.json");
+export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string =>
+  process.env.MACLAW_SERVER_SECRETS ?? path.join(homeDir, ".maclaw", "secrets.json");
+
+export const defaultWhatsAppConfig = (): WhatsAppConfig => ({
+  enabled: false,
+  graphApiVersion: "v23.0",
+  port: 3000,
+  webhookPath: "/whatsapp/webhook",
+});
+
+export const defaultSlackConfig = (): SlackConfig => ({
+  enabled: false,
+});
+
+export const defaultDiscordConfig = (): DiscordConfig => ({
+  enabled: false,
+});
 
 const toPositiveInt = (value: unknown, fallback: number): number => {
   if (typeof value !== "number") {
@@ -118,19 +133,21 @@ export const loadServerConfig = (
     })),
     channels: {
       discord: {
-        enabled: discord.enabled ?? false,
+        ...defaultDiscordConfig(),
+        ...discord,
       },
       slack: {
-        enabled: slack.enabled ?? false,
+        ...defaultSlackConfig(),
+        ...slack,
         botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
       },
       whatsapp: {
-        enabled: whatsapp.enabled ?? false,
-        graphApiVersion: whatsapp.graphApiVersion ?? "v23.0",
+        ...defaultWhatsAppConfig(),
+        ...whatsapp,
+        enabled: whatsapp.enabled ?? defaultWhatsAppConfig().enabled,
         phoneNumberId:
           process.env.MACLAW_WHATSAPP_PHONE_NUMBER_ID ?? whatsapp.phoneNumberId,
-        port: toPositiveInt(whatsapp.port, 3000),
-        webhookPath: whatsapp.webhookPath ?? "/whatsapp/webhook",
+        port: toPositiveInt(whatsapp.port, defaultWhatsAppConfig().port),
       },
     },
   };
