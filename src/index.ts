@@ -1,6 +1,7 @@
 import { Harness } from "./harness.js";
 import { runRepl } from "./repl.js";
 import { MaclawServer } from "./server.js";
+import { runSetup } from "./setup.js";
 
 const runReplCommand = async (): Promise<void> => {
   const harness = Harness.load();
@@ -22,6 +23,11 @@ const main = async (): Promise<void> => {
 
   if (command === "server") {
     await runServer();
+    return;
+  }
+
+  if (command === "setup") {
+    await runSetup();
     return;
   }
 

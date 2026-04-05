@@ -45,8 +45,9 @@ Alex, your dedicated human-in-the-loop
 
 1. Install Node.js 20+.
 2. Install dependencies with `npm install`.
-3. Set `OPENAI_API_KEY` if you want live model responses.
-4. Start the REPL with `npm run dev`.
+3. Run `npm run dev -- setup` for a guided first-run setup.
+4. Or set `OPENAI_API_KEY` manually if you want live model responses.
+5. Start the REPL with `npm run dev`.
 
 ## Message Flow
 

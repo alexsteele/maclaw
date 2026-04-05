@@ -118,6 +118,9 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
       secretsPath,
       `${JSON.stringify(
         {
+          openai: {
+            apiKey: "file-openai-api-key",
+          },
           discord: {
             botToken: "file-discord-bot-token",
           },
@@ -141,6 +144,7 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
     const originalDiscordBotToken = process.env.MACLAW_DISCORD_BOT_TOKEN;
     const originalSlackAppToken = process.env.MACLAW_SLACK_APP_TOKEN;
     const originalSlackBotToken = process.env.MACLAW_SLACK_BOT_TOKEN;
+    const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 
     try {
       process.env.MACLAW_WHATSAPP_ACCESS_TOKEN = "env-access-token";
@@ -148,10 +152,12 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
       process.env.MACLAW_DISCORD_BOT_TOKEN = "env-discord-bot-token";
       process.env.MACLAW_SLACK_APP_TOKEN = "env-slack-app-token";
       delete process.env.MACLAW_SLACK_BOT_TOKEN;
+      process.env.OPENAI_API_KEY = "env-openai-api-key";
 
       const secrets = loadServerSecrets(secretsPath);
 
       assert.equal(secrets.configFile, secretsPath);
+      assert.equal(secrets.openai.apiKey, "env-openai-api-key");
       assert.equal(secrets.discord.botToken, "env-discord-bot-token");
       assert.equal(secrets.slack.appToken, "env-slack-app-token");
       assert.equal(secrets.slack.botToken, "file-slack-bot-token");
@@ -186,6 +192,12 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
         delete process.env.MACLAW_SLACK_BOT_TOKEN;
       } else {
         process.env.MACLAW_SLACK_BOT_TOKEN = originalSlackBotToken;
+      }
+
+      if (originalOpenAiApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalOpenAiApiKey;
       }
     }
   } finally {

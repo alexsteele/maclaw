@@ -65,6 +65,52 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
   }
 });
 
+test("loadConfig reads OpenAI API key from ~/.maclaw secrets when env is unset", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-secrets-"));
+
+  try {
+    const secretsPath = path.join(rootDir, "secrets.json");
+    await writeFile(
+      secretsPath,
+      `${JSON.stringify(
+        {
+          openai: {
+            apiKey: "file-openai-api-key",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const originalServerSecrets = process.env.MACLAW_SERVER_SECRETS;
+    const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+    try {
+      process.env.MACLAW_SERVER_SECRETS = secretsPath;
+      delete process.env.OPENAI_API_KEY;
+
+      const config = loadConfig(rootDir);
+      assert.equal(config.openAiApiKey, "file-openai-api-key");
+    } finally {
+      if (originalServerSecrets === undefined) {
+        delete process.env.MACLAW_SERVER_SECRETS;
+      } else {
+        process.env.MACLAW_SERVER_SECRETS = originalServerSecrets;
+      }
+
+      if (originalOpenAiApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      }
+    }
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("initProjectConfig creates a new project config with createdAt", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-init-"));
 

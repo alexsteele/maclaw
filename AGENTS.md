@@ -18,3 +18,4 @@
 - Keep functions focused and ask the user if you're unsure how to organize them.
 - Avoid creating very similar types like "RawConfig" and "Config". Keep it simple.
 - Reserve exceptions for exceptional events like IO errors, not bad user input.
+- Avoid deeply nested code and complex ternary expressions. Keep code flat and simple.

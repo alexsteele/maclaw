@@ -37,6 +37,9 @@ export type ServerConfig = {
 
 export type ServerSecrets = {
   configFile: string;
+  openai: {
+    apiKey?: string;
+  };
   discord: {
     botToken?: string;
   };
@@ -139,6 +142,7 @@ export const loadServerSecrets = (
   const resolvedSecretsFile = path.resolve(secretsFile);
   const parsed = existsSync(resolvedSecretsFile)
     ? (JSON.parse(readFileSync(resolvedSecretsFile, "utf8")) as {
+        openai?: Partial<ServerSecrets["openai"]>;
         discord?: Partial<ServerSecrets["discord"]>;
         slack?: Partial<ServerSecrets["slack"]>;
         whatsapp?: Partial<ServerSecrets["whatsapp"]>;
@@ -147,6 +151,11 @@ export const loadServerSecrets = (
 
   return {
     configFile: resolvedSecretsFile,
+    openai: {
+      apiKey:
+        process.env.OPENAI_API_KEY ??
+        parsed.openai?.apiKey,
+    },
     discord: {
       botToken:
         process.env.MACLAW_DISCORD_BOT_TOKEN ??
