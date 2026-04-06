@@ -7,14 +7,34 @@ import type {
 
 type ResponsesApiOutputItem = {
   type: string;
+  id?: string;
   name?: string;
   call_id?: string;
   arguments?: string;
+  content?: Array<{
+    type: string;
+    text?: string;
+  }>;
 };
 
 type ResponsesApiResponse = {
   output?: ResponsesApiOutputItem[];
   output_text?: string;
+};
+
+const extractOutputText = (response: ResponsesApiResponse): string => {
+  if (response.output_text?.trim()) {
+    return response.output_text.trim();
+  }
+
+  const text = (response.output ?? [])
+    .flatMap((item) => item.content ?? [])
+    .filter((item) => item.type === "output_text" && typeof item.text === "string")
+    .map((item) => item.text ?? "")
+    .join("\n")
+    .trim();
+
+  return text || "The model returned no text.";
 };
 
 const buildToolSpec = (tool: ToolDefinition): Record<string, unknown> => ({
@@ -27,7 +47,12 @@ const buildToolSpec = (tool: ToolDefinition): Record<string, unknown> => ({
 const conversationInput = (chat: ChatRecord): Array<Record<string, unknown>> => {
   return chat.messages.map((message) => ({
     role: message.role,
-    content: [{ type: "input_text", text: message.content }],
+    content: [
+      {
+        type: message.role === "assistant" ? "output_text" : "input_text",
+        text: message.content,
+      },
+    ],
   }));
 };
 
@@ -72,9 +97,15 @@ export class OpenAIResponsesProvider implements Provider {
 
       if (toolCalls.length === 0) {
         return {
-          outputText: response.output_text?.trim() || "The model returned no text.",
+          outputText: extractOutputText(response),
         };
       }
+
+      input.push(
+        ...toolCalls.map((toolCall) => ({
+          ...toolCall,
+        })),
+      );
 
       for (const toolCall of toolCalls) {
         const tool = toolCall.name ? toolsByName.get(toolCall.name) : undefined;
