@@ -339,6 +339,30 @@ test("dispatchCommand can pause an agent and switch into its chat", async () => 
   }
 });
 
+test("dispatchCommand can return from an agent chat and resume the agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-return-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+    const created = harness.createAgent({
+      name: "research-agent",
+      prompt: "Research this",
+    });
+    assert.ok(created.agent);
+
+    await dispatchCommand(harness, "/agent chat research-agent");
+
+    const reply = await dispatchCommand(harness, "/agent return research-agent");
+
+    assert.equal(reply, "resumed agent: research-agent\nswitched to chat: default");
+    assert.equal(harness.getCurrentChatId(), "default");
+    assert.equal(harness.getAgent(created.agent.id)?.status, "running");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand rejects duplicate live agent names", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-duplicate-"));
 

@@ -61,6 +61,10 @@ type AgentCreateResult =
   | { agent: AgentRecord; error?: undefined }
   | { agent?: undefined; error: string };
 
+type AgentChatResult =
+  | { agent: AgentRecord; chatId: string; error?: undefined }
+  | { agent?: undefined; chatId?: undefined; error: string };
+
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.storage === "json"
     ? new JsonFileChatStore(config.chatsDir)
@@ -230,6 +234,10 @@ export class Harness {
 
   getCurrentChatId(): string {
     return this._chatRuntime.getCurrentChatId();
+  }
+
+  getPreviousChatId(): string | undefined {
+    return this._chatRuntime.getPreviousChatId();
   }
 
   getChatOptions(): ChatLoadOptions {
@@ -461,6 +469,33 @@ export class Harness {
         .listAgents()
         .find((agent) => agent.name === agentRef) ?? this._agentStore.getAgent(agentRef)
     );
+  }
+
+  async attachAgentChat(agentRef: string): Promise<AgentChatResult> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return { error: `agent not found: ${agentRef}` };
+    }
+
+    this.pauseAgent(agentRef);
+    await this.switchChat(agent.chatId);
+    return { agent: this.findAgent(agent.id) ?? agent, chatId: agent.chatId };
+  }
+
+  async returnAgentChat(agentRef: string): Promise<AgentChatResult> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return { error: `agent not found: ${agentRef}` };
+    }
+
+    const returnChatId = this.getPreviousChatId();
+    if (!returnChatId) {
+      return { error: `no return chat recorded for agent: ${agent.name}` };
+    }
+
+    await this.switchChat(returnChatId);
+    const resumed = this.resumeAgent(agentRef);
+    return { agent: resumed ?? agent, chatId: returnChatId };
   }
 
   createAgent(input: AgentCreateOptions): AgentCreateResult {

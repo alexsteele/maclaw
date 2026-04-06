@@ -318,6 +318,7 @@ export class ChatRuntime {
   private readonly chatStore: ChatStore;
   private readonly provider: Provider;
   private activeChatId: string;
+  private previousChatId?: string;
   private activeChat?: ChatRecord;
 
   constructor(config: ProjectConfig, scheduler: TaskScheduler, chatStore: ChatStore) {
@@ -343,11 +344,18 @@ export class ChatRuntime {
     return this.activeChatId;
   }
 
+  getPreviousChatId(): string | undefined {
+    return this.previousChatId;
+  }
+
   async listChats(): Promise<ChatSummary[]> {
     return this.chatStore.listChats();
   }
 
   async switchChat(chatId: string): Promise<ChatRecord> {
+    if (chatId !== this.activeChatId) {
+      this.previousChatId = this.activeChatId;
+    }
     this.activeChatId = chatId;
     this.activeChat = await this.loadChat(chatId);
     return this.activeChat;
@@ -364,6 +372,7 @@ export class ChatRuntime {
     };
 
     await this.chatStore.saveChat(forkedChat);
+    this.previousChatId = this.activeChatId;
     this.activeChatId = newChatId;
     this.activeChat = forkedChat;
     return forkedChat;
