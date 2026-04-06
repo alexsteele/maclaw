@@ -504,6 +504,33 @@ export class Harness {
     return { agent: resumed ?? agent, chatId: returnChatId };
   }
 
+  private handleAgentStopped(agentId: string): void {
+    this._runningAgents.delete(agentId);
+    const latest = this._agentStore.getAgent(agentId);
+    if (!latest?.origin) {
+      return;
+    }
+
+    if (latest.status === "completed") {
+      void this.emitNotification({
+        kind: "agentCompleted",
+        origin: latest.origin,
+        text: `Agent ${latest.name} completed.`,
+      });
+      return;
+    }
+
+    if (latest.status === "failed") {
+      void this.emitNotification({
+        kind: "agentFailed",
+        origin: latest.origin,
+        text: latest.lastError
+          ? `Agent ${latest.name} failed: ${latest.lastError}`
+          : `Agent ${latest.name} failed.`,
+      });
+    }
+  }
+
   async createAgent(input: AgentCreateOptions): Promise<AgentCreateResult> {
     if (this.findLiveAgentByName(input.name)) {
       return { error: `agent already running: ${input.name}` };
@@ -530,32 +557,7 @@ export class Harness {
       record,
       this._agentStore,
       this.promptChat.bind(this),
-      () => {
-        this._runningAgents.delete(record.id);
-        const latest = this._agentStore.getAgent(record.id);
-        if (!latest?.origin) {
-          return;
-        }
-
-        if (latest.status === "completed") {
-          void this.emitNotification({
-            kind: "agentCompleted",
-            origin: latest.origin,
-            text: `Agent ${latest.name} completed.`,
-          });
-          return;
-        }
-
-        if (latest.status === "failed") {
-          void this.emitNotification({
-            kind: "agentFailed",
-            origin: latest.origin,
-            text: latest.lastError
-              ? `Agent ${latest.name} failed: ${latest.lastError}`
-              : `Agent ${latest.name} failed.`,
-          });
-        }
-      },
+      this.handleAgentStopped.bind(this, record.id),
     );
     this._runningAgents.set(record.id, agent);
     return { agent: agent.start() };
