@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
@@ -87,13 +87,29 @@ test("forkChat creates a default fork id when none is provided", async () => {
   }
 });
 
+test("harness loads normal prompts from @files", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-prompt-file-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await writeFile(path.join(projectDir, "note.md"), "remember this from file\n", "utf8");
+
+    await harness.prompt("@note.md");
+
+    const transcript = await harness.getCurrentChatTranscript();
+    assert.match(transcript, /remember this from file/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("harness createAgent starts a simple agent loop in the background", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-"));
 
   try {
     const harness = Harness.load(projectDir);
 
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "simple-agent",
       prompt: "Work on this task",
       maxSteps: 2,
@@ -123,7 +139,7 @@ test("harness stores and cancels agents through the agent store", async () => {
   try {
     const harness = Harness.load(projectDir);
 
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "queued-agent",
       prompt: "Wait here",
     });
@@ -149,13 +165,13 @@ test("harness can queue a steer prompt for an agent", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "steerable-agent",
       prompt: "Start here",
     });
     assert.ok(created.agent);
 
-    const steered = harness.steerAgent("steerable-agent", "Try a different direction");
+    const steered = await harness.steerAgent("steerable-agent", "Try a different direction");
 
     assert.equal(steered?.id, created.agent.id);
     assert.ok(steered);
@@ -169,7 +185,7 @@ test("harness can pause and resume an agent", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "pauseable-agent",
       prompt: "Start here",
     });
@@ -191,7 +207,7 @@ test("teardown cancels running agents", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "long-agent",
       prompt: "Keep going",
       maxSteps: 50,
@@ -259,7 +275,7 @@ test("harness emits a notification when an origin-backed agent fails", async () 
       throw new Error("boom");
     };
 
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "notifier-agent",
       prompt: "Do the thing",
       origin: {
@@ -395,7 +411,7 @@ test("harness suppresses notifications when project notifications are none", asy
       throw new Error("boom");
     };
 
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "quiet-agent",
       prompt: "Do the thing",
       origin: {

@@ -12,6 +12,7 @@ import {
 import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
+import { resolvePromptText } from "./prompt.js";
 import {
   JsonFileTaskStore,
   MemoryTaskStore,
@@ -346,9 +347,11 @@ export class Harness {
     schedule?: ScheduledTask["schedule"];
     runAt?: string;
   }): Promise<ScheduledTask> {
+    const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
     return this._scheduler.createTask({
-      chatId: input.chatId ?? this.getCurrentChatId(),
       ...input,
+      chatId: input.chatId ?? this.getCurrentChatId(),
+      prompt,
     });
   }
 
@@ -417,11 +420,13 @@ export class Harness {
   }
 
   async prompt(userInput: string, context?: MessageContext): Promise<Message> {
-    return this._chatRuntime.prompt(userInput, context);
+    const prompt = await resolvePromptText(this.config.projectFolder, userInput);
+    return this._chatRuntime.prompt(prompt, context);
   }
 
   async promptDetailed(userInput: string, context?: MessageContext): Promise<ChatReply> {
-    return this._chatRuntime.promptDetailed(userInput, context);
+    const prompt = await resolvePromptText(this.config.projectFolder, userInput);
+    return this._chatRuntime.promptDetailed(prompt, context);
   }
 
   async promptChat(
@@ -429,7 +434,8 @@ export class Harness {
     userInput: string,
     context?: MessageContext,
   ): Promise<Message> {
-    return this._chatRuntime.promptChat(chatId, userInput, context);
+    const prompt = await resolvePromptText(this.config.projectFolder, userInput);
+    return this._chatRuntime.promptChat(chatId, prompt, context);
   }
 
   async handleScheduledTask(
@@ -498,17 +504,18 @@ export class Harness {
     return { agent: resumed ?? agent, chatId: returnChatId };
   }
 
-  createAgent(input: AgentCreateOptions): AgentCreateResult {
+  async createAgent(input: AgentCreateOptions): Promise<AgentCreateResult> {
     if (this.findLiveAgentByName(input.name)) {
       return { error: `agent already running: ${input.name}` };
     }
 
+    const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
     const now = new Date().toISOString();
     const id = this.createAgentId();
     const record: AgentRecord = {
       id,
       name: input.name,
-      prompt: input.prompt,
+      prompt,
       chatId: input.chatId ?? id,
       origin: input.origin,
       status: "pending",
@@ -577,9 +584,14 @@ export class Harness {
     return agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
   }
 
-  steerAgent(agentRef: string, prompt: string): AgentRecord | undefined {
+  async steerAgent(agentRef: string, prompt: string): Promise<AgentRecord | undefined> {
     const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.steer(prompt) : undefined;
+    if (!agent) {
+      return undefined;
+    }
+
+    const resolvedPrompt = await resolvePromptText(this.config.projectFolder, prompt);
+    return this._runningAgents.get(agent.id)?.steer(resolvedPrompt);
   }
 
   async runDueTasks(

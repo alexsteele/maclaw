@@ -241,7 +241,7 @@ test("dispatchCommand renders agent list output", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    harness.createAgent({
+    await harness.createAgent({
       name: "daily-summary",
       prompt: "Write a summary",
     });
@@ -301,12 +301,43 @@ test("dispatchCommand creates an agent with JSON options", async () => {
   }
 });
 
+test("dispatchCommand loads agent and task prompts from @files", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-prompt-files-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await writeFile(path.join(projectDir, "agent-prompt.md"), "Prompt from file\n", "utf8");
+    await writeFile(path.join(projectDir, "task-prompt.md"), "Task prompt from file\n", "utf8");
+
+    const agentReply = await dispatchCommand(
+      harness,
+      "/agent create planner | @agent-prompt.md",
+    );
+    const taskReply = await dispatchCommand(
+      harness,
+      "/task schedule daily 9:00 AM | Daily Brief | @task-prompt.md",
+    );
+
+    assert.match(agentReply ?? "", /^started agent: agent_/u);
+    assert.match(taskReply ?? "", /^scheduled task: /u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.ok(agent);
+    assert.equal(agent.prompt, "Prompt from file\n");
+
+    const tasks = await harness.listCurrentChatTasks();
+    assert.equal(tasks[0]?.prompt, "Task prompt from file\n");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand can steer, pause, resume, and stop an agent", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-control-"));
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "research-agent",
       prompt: "Research this",
     });
@@ -337,7 +368,7 @@ test("dispatchCommand can pause an agent and switch into its chat", async () => 
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "research-agent",
       prompt: "Research this",
     });
@@ -362,7 +393,7 @@ test("dispatchCommand can return from an agent chat and resume the agent", async
   try {
     const harness = Harness.load(projectDir);
     await harness.prompt("hello from default");
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "research-agent",
       prompt: "Research this",
     });
@@ -385,7 +416,7 @@ test("dispatchCommand rejects duplicate live agent names", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    const created = harness.createAgent({
+    const created = await harness.createAgent({
       name: "planner",
       prompt: "First run",
     });

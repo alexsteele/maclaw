@@ -688,7 +688,7 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
       agentOptions = parsedOptions;
     }
 
-    const agent = harness.createAgent({
+    const agent = await harness.createAgent({
       name,
       prompt,
       chatId: getScopedChatId(harness, options),
@@ -791,7 +791,7 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
       return "Usage: /agent steer <name> | <prompt>";
     }
 
-    const agent = harness.steerAgent(agentRef, prompt);
+    const agent = await harness.steerAgent(agentRef, prompt);
     return agent ? `steered agent: ${agent.name}` : `agent not found: ${agentRef}`;
   }
 
