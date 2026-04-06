@@ -58,7 +58,16 @@ class Repl {
     this.showStartup();
 
     while (true) {
-      const line = (await this.rl.question("> ")).trim();
+      let line: string;
+      try {
+        line = (await this.rl.question("> ")).trim();
+      } catch {
+        output.write("\n");
+        this.harness.teardown();
+        this.rl.close();
+        break;
+      }
+
       if (line.length === 0) {
         continue;
       }
