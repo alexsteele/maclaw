@@ -241,21 +241,22 @@ const runProjectSetup = async (
   projectConfig: Partial<ProjectConfig>,
   serverConfig: ServerConfigData,
 ): Promise<ProjectConfig | undefined> => {
-  const createDefaultProject = await prompt.askYesNo(
-    "Do you want to create a default project?",
-    true,
+  const defaultProjectLocation = "~/.maclaw/projects/default";
+  const projectChoice = await prompt.askChoice(
+    `Create a default project in ${defaultProjectLocation}?`,
+    ["yes", "no", "other location"],
+    "yes",
   );
 
-  if (!createDefaultProject) {
+  if (projectChoice === "no") {
     return undefined;
   }
 
   const projectFolder = path.resolve(
     expandHome(
-      await prompt.askLine(
-        "Where should the default project live?",
-        "~/maclaw-projects/default",
-      ),
+      projectChoice === "other location"
+        ? await prompt.askLine("Where should the default project live?")
+        : defaultProjectLocation,
       homeDir,
     ),
   );

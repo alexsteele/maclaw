@@ -24,7 +24,7 @@ not need to understand how maclaw or its configuration works yet. Everything
 should be safe by default.
 
 For now, the default suggested project location should be
-`~/maclaw-projects/default`.
+`~/.maclaw/projects/default`.
 
 Each major section should be easy to skip. Skipping should leave existing config
 alone rather than clearing it.
@@ -62,11 +62,11 @@ OpenAI API setup:
 Model? [gpt-5.4-mini]
 > 
 
-Do you want to create a default project?
-> yes
-
-Where should the default project live? [~/maclaw-projects/default]
-> 
+Create a default project in ~/.maclaw/projects/default?
+  1. yes
+  2. no
+  3. other location
+> 1
 
 Set up maclaw server and connectors?
   1. yes

@@ -37,8 +37,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       "1",
       "gpt-5.4-mini",
       "sk-test-openai",
-      "yes",
-      "",
+      "1",
       "1",
       "1,2",
       "xapp-slack",
@@ -48,7 +47,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
 
     await runSetup({ cwd, homeDir, input, output, answers });
 
-    const projectConfigPath = path.join(homeDir, "maclaw-projects", "default", ".maclaw", "maclaw.json");
+    const projectConfigPath = path.join(homeDir, ".maclaw", "projects", "default", ".maclaw", "maclaw.json");
     const serverConfigPath = path.join(homeDir, ".maclaw", "server.json");
     const secretsPath = path.join(homeDir, ".maclaw", "secrets.json");
 
