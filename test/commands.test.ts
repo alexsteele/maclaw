@@ -3,7 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { dispatchCommand, helpText, projectHelpText, saveHelpText } from "../src/commands.js";
+import {
+  dispatchCommand,
+  helpText,
+  projectHelpText,
+  saveHelpText,
+  usageHelpText,
+} from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
 import { Harness } from "../src/harness.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -188,6 +194,61 @@ test("dispatchCommand shows chat and project usage from persisted assistant mess
     assert.match(projectReply ?? "", /^totalTokens: 36$/mu);
     assert.match(projectReply ?? "", /^cachedInputTokens: 6$/mu);
     assert.match(projectReply ?? "", /^reasoningTokens: 4$/mu);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalProvider === undefined) {
+      delete process.env.MACLAW_PROVIDER;
+    } else {
+      process.env.MACLAW_PROVIDER = originalProvider;
+    }
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand aliases usage to current chat and project usage", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-alias-"));
+  const originalFetch = globalThis.fetch;
+  const originalProvider = process.env.MACLAW_PROVIDER;
+  const originalApiKey = process.env.OPENAI_API_KEY;
+
+  try {
+    delete process.env.MACLAW_PROVIDER;
+    process.env.OPENAI_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          output_text: "usage reply",
+          usage: {
+            input_tokens: 5,
+            output_tokens: 2,
+            total_tokens: 7,
+          },
+        }),
+      }) as Response) as typeof fetch;
+
+    await initProjectConfig(projectDir, {
+      name: "usage-alias-project",
+      provider: "openai",
+      model: "test-model",
+      openAiApiKey: "test-key",
+    });
+
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+
+    const usageReply = await dispatchCommand(harness, "/usage");
+    const projectReply = await dispatchCommand(harness, "/usage project");
+    const helpReply = await dispatchCommand(harness, "/usage help");
+
+    assert.match(usageReply ?? "", /^messagesWithUsage: 1$/mu);
+    assert.match(projectReply ?? "", /^messagesWithUsage: 1$/mu);
+    assert.equal(helpReply, usageHelpText);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalProvider === undefined) {
@@ -605,6 +666,7 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
     assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
+    assert.equal(await dispatchCommand(harness, "/usage help"), usageHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

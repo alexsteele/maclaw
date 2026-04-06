@@ -17,6 +17,7 @@ export const helpText = [
   "Commands:",
   "  /help              Show this help",
   "  /save              Save the current chat transcript to a file",
+  "  /usage             Show token usage for the current chat",
   "  /config            Project config commands",
   "  /project           Project information commands",
   "  /chat              Chat management commands",
@@ -90,6 +91,13 @@ export const saveHelpText = [
   "Command: /save",
   "  /save              Save the current chat transcript to .maclaw/exports/<chat>.md",
   "  /save <path>       Save the current chat transcript to a file",
+].join("\n");
+
+export const usageHelpText = [
+  "Command: /usage",
+  "  /usage             Show token usage for the current chat",
+  "  /usage <chat>      Show token usage for a named chat",
+  "  /usage project     Show token usage for the project",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -434,6 +442,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
     return saveHelpText;
   }
 
+  if (input === "/help usage") {
+    return usageHelpText;
+  }
+
   if (input === "/help project") {
     return projectHelpText;
   }
@@ -538,6 +550,31 @@ const handleSaveCommand: CommandHandler = async (harness, input, options) => {
   }
 
   return saveHelpText;
+};
+
+const handleUsageCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/usage") {
+    return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
+  }
+
+  if (input === "/usage help") {
+    return usageHelpText;
+  }
+
+  if (input === "/usage project") {
+    return renderUsage("messagesWithUsage", await harness.getProjectUsage());
+  }
+
+  if (input.startsWith("/usage ")) {
+    const requestedId = parseChatId(input.slice("/usage ".length));
+    if (!requestedId) {
+      return usageHelpText;
+    }
+
+    return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
+  }
+
+  return usageHelpText;
 };
 
 const handleConfigCommand: CommandHandler = async (harness, input) => {
@@ -920,6 +957,7 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
   save: handleSaveCommand,
+  usage: handleUsageCommand,
   project: handleProjectCommand,
   config: handleConfigCommand,
   chat: handleChatCommand,
