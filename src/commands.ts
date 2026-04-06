@@ -20,6 +20,7 @@ export const helpText = [
   "  /project           Project information commands",
   "  /chat              Chat management commands",
   "  /history           Show the current chat transcript",
+  "  /tools             Show the current tools",
   "  /skills            List local skills",
   "  /agent             Agent management commands",
   "  /task              Task scheduling commands",
@@ -75,6 +76,11 @@ export const agentHelpText = [
   "  /agent resume <name>",
   "  /agent stop <name>",
   "  /agent steer <name> | <prompt>",
+].join("\n");
+
+export const toolsHelpText = [
+  "Command: /tools",
+  "  /tools             Show the current tools",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -419,6 +425,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
 
   if (input === "/help agent") {
     return agentHelpText;
+  }
+
+  if (input === "/help tools") {
+    return toolsHelpText;
   }
 
   if (input.startsWith("/help")) {
@@ -817,6 +827,21 @@ const handleSkillsCommand: CommandHandler = async (harness, input) => {
   return "Usage: /skills";
 };
 
+const handleToolsCommand: CommandHandler = async (harness, input) => {
+  if (input === "/tools") {
+    const tools = harness.listTools();
+    return tools.length === 0
+      ? "No tools found."
+      : tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n");
+  }
+
+  if (input === "/tools help" || input.startsWith("/tools ")) {
+    return toolsHelpText;
+  }
+
+  return toolsHelpText;
+};
+
 const handleHistoryCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/history") {
     return harness.getChatTranscript(options.chatId);
@@ -836,6 +861,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   chat: handleChatCommand,
   task: handleTaskCommand,
   agent: handleAgentCommand,
+  tools: handleToolsCommand,
   skills: handleSkillsCommand,
   history: handleHistoryCommand,
 };

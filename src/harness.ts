@@ -13,6 +13,7 @@ import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
+import { createTools } from "./tools/index.js";
 import {
   JsonFileTaskStore,
   MemoryTaskStore,
@@ -36,6 +37,7 @@ import type {
   Message,
   ScheduledTask,
   Skill,
+  ToolDefinition,
 } from "./types.js";
 
 type ForkChatResult =
@@ -108,6 +110,7 @@ export class Harness {
   private _allowedNotifications: Set<NotificationKind>;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
+  private _tools: ToolDefinition[];
   private _chatRuntime: ChatRuntime;
   private _agentStore: AgentStore;
   private _runningAgents = new Map<string, Agent>();
@@ -121,7 +124,8 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(config.notifications);
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
-    this._chatRuntime = new ChatRuntime(config, this._scheduler, this._chatStore);
+    this._tools = createTools(config);
+    this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = createAgentStore(config);
   }
 
@@ -174,7 +178,8 @@ export class Harness {
     };
     const nextChatStore = createChatStore(nextConfig);
     const nextScheduler = createScheduler(nextConfig);
-    const nextChatRuntime = new ChatRuntime(nextConfig, nextScheduler, nextChatStore);
+    const nextTools = createTools(nextConfig);
+    const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = createAgentStore(nextConfig);
 
     const activeChat = await this.loadCurrentChat();
@@ -197,6 +202,7 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
+    this._tools = nextTools;
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
 
@@ -223,7 +229,8 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._scheduler = createScheduler(nextConfig);
     this._chatStore = createChatStore(nextConfig);
-    this._chatRuntime = new ChatRuntime(nextConfig, this._scheduler, this._chatStore);
+    this._tools = createTools(nextConfig);
+    this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = createAgentStore(nextConfig);
 
     if (this._taskListener) {
@@ -258,6 +265,10 @@ export class Harness {
 
   async listSkills(): Promise<Skill[]> {
     return loadSkills(this._config.skillsDir);
+  }
+
+  listTools() {
+    return this._tools;
   }
 
   async switchChat(chatId: string): Promise<ChatRecord> {

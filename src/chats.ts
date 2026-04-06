@@ -12,15 +12,14 @@ import {
 } from "./fs-utils.js";
 import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
-import { createTools } from "./tools/index.js";
 import type {
   ChatRecord,
   ChatSummary,
   Message,
   MessageContext,
   ProviderResult,
+  ToolDefinition,
 } from "./types.js";
-import { TaskScheduler } from "./scheduler.js";
 
 export type ChatLoadOptions = {
   retentionDays: number;
@@ -314,17 +313,17 @@ export class MemoryChatStore implements ChatStore {
 
 export class ChatRuntime {
   private readonly config: ProjectConfig;
-  private readonly scheduler: TaskScheduler;
   private readonly chatStore: ChatStore;
   private readonly provider: Provider;
+  private readonly tools: ToolDefinition[];
   private activeChatId: string;
   private previousChatId?: string;
   private activeChat?: ChatRecord;
 
-  constructor(config: ProjectConfig, scheduler: TaskScheduler, chatStore: ChatStore) {
+  constructor(config: ProjectConfig, chatStore: ChatStore, tools: ToolDefinition[]) {
     this.config = config;
-    this.scheduler = scheduler;
     this.chatStore = chatStore;
+    this.tools = tools;
     this.provider = createProvider(config);
     this.activeChatId = config.chatId;
   }
@@ -423,13 +422,12 @@ export class ChatRuntime {
     let providerResult: ProviderResult | undefined;
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       providerResult = await this.provider.generate({
         chat: promptChat,
         userInput,
         systemPrompt,
-        tools,
+        tools: this.tools,
       });
 
       assistantMessage = appendMessage(chat, "assistant", providerResult.outputText);
@@ -463,13 +461,12 @@ export class ChatRuntime {
     let assistantMessage: Message;
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       const result = await this.provider.generate({
         chat: promptChat,
         userInput: prompt,
         systemPrompt,
-        tools,
+        tools: this.tools,
       });
 
       assistantMessage = appendMessage(

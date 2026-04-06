@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { dispatchCommand } from "../src/commands.js";
+import { dispatchCommand, helpText } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
 import { Harness } from "../src/harness.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -186,6 +186,25 @@ test("dispatchCommand lists local skills", async () => {
 
     assert.match(reply ?? "", /daily_summary/u);
     assert.match(reply ?? "", /# Daily Summary/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand lists current tools and shows tools help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-tools-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/tools");
+    const helpReply = await dispatchCommand(harness, "/tools help");
+    const sharedHelpReply = await dispatchCommand(harness, "/help tools");
+
+    assert.match(reply ?? "", /list_skills/u);
+    assert.match(reply ?? "", /read_skill/u);
+    assert.match(reply ?? "", /get_time/u);
+    assert.equal(helpReply, sharedHelpReply);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -491,7 +510,7 @@ test("dispatchCommand shows main help for unknown help subcommands", async () =>
 
     const reply = await dispatchCommand(harness, "/help foo");
 
-    assert.equal(reply, "Commands:\n  /help              Show this help\n  /config            Project config commands\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+    assert.equal(reply, helpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -518,7 +537,7 @@ test("dispatchCommand shows main help for unknown slash commands", async () => {
 
     const reply = await dispatchCommand(harness, "/wat");
 
-    assert.equal(reply, "Commands:\n  /help              Show this help\n  /config            Project config commands\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+    assert.equal(reply, helpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
