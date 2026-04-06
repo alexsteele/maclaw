@@ -22,6 +22,7 @@ export const projectHelpText = [
   "  /project           Show the active project",
   "  /project show      Show the active project",
   "  /project init      Create .maclaw/maclaw.json for this project",
+  "  /project wipeout   Delete .maclaw/ for this project after confirmation",
 ].join("\n");
 
 export const chatHelpText = [
@@ -360,6 +361,29 @@ export const dispatchCommand = async (
       `initialized project: ${harness.config.projectConfigFile}\n` +
       `current chat: ${harness.getCurrentChatId()}\n` +
       "switched this REPL into persistent project mode"
+    );
+  }
+
+  if (input === "/project wipeout") {
+    if (!harness.isProjectInitialized()) {
+      return "project is not initialized";
+    }
+
+    return (
+      "This will delete the project's .maclaw folder, including chats, tasks, agents, and config.\n" +
+      "Run /project wipeout confirm to continue."
+    );
+  }
+
+  if (input === "/project wipeout confirm") {
+    const wiped = await harness.wipeProject();
+    if (!wiped) {
+      return "project is not initialized";
+    }
+
+    return (
+      "deleted project data: .maclaw\n" +
+      `project is now headless at: ${harness.config.projectFolder}`
     );
   }
 

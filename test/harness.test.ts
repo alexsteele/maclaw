@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
 import type { AgentRecord } from "../src/types.js";
@@ -175,6 +176,36 @@ test("teardown cancels running agents", async () => {
 
     const settled = await waitForAgentToSettle(harness, created.id);
     assert.equal(settled.status, "cancelled");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("wipeProject deletes .maclaw and returns the harness to headless mode", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-wipeout-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "wipe-me",
+      provider: "local",
+      model: "test-model",
+    });
+    await harness.handleUserInput("remember this");
+    await harness.createTask({
+      title: "Follow up",
+      prompt: "Check back later",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    const wiped = await harness.wipeProject();
+
+    assert.equal(wiped, true);
+    assert.equal(harness.isProjectInitialized(), false);
+    assert.equal(harness.config.storage, "none");
+    assert.equal(existsSync(path.join(projectDir, ".maclaw")), false);
+    assert.equal((await harness.listCurrentChatTasks()).length, 0);
+    assert.equal(await harness.getCurrentChatTranscript(), "No history yet.");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

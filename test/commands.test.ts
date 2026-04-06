@@ -197,3 +197,26 @@ test("dispatchCommand can steer and stop an agent", async () => {
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("dispatchCommand requires confirmation before wiping project data", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-wipeout-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "wipeout-project",
+      provider: "local",
+      model: "test-model",
+    });
+    const harness = Harness.load(projectDir);
+
+    const warningReply = await dispatchCommand(harness, "/project wipeout");
+    assert.match(warningReply ?? "", /delete the project's \.maclaw folder/u);
+    assert.match(warningReply ?? "", /\/project wipeout confirm/u);
+
+    const confirmReply = await dispatchCommand(harness, "/project wipeout confirm");
+    assert.match(confirmReply ?? "", /deleted project data: \.maclaw/u);
+    assert.equal(harness.isProjectInitialized(), false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

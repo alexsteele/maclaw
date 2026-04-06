@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import {
+  defaultProjectDataDir,
   defaultAgentsFile,
   defaultTaskRunsFile,
   defaultTasksFile,
@@ -165,6 +167,31 @@ export class Harness {
     }
 
     return this;
+  }
+
+  async wipeProject(): Promise<boolean> {
+    if (!this.isProjectInitialized()) {
+      return false;
+    }
+
+    this.teardown();
+    await rm(defaultProjectDataDir(this._config.projectFolder), {
+      recursive: true,
+      force: true,
+    });
+
+    const nextConfig = loadConfig(this._config.projectFolder);
+    this._config = nextConfig;
+    this._scheduler = createScheduler(nextConfig);
+    this._chatStore = createChatStore(nextConfig);
+    this._chatRuntime = new ChatRuntime(nextConfig, this._scheduler, this._chatStore);
+    this._agentStore = createAgentStore(nextConfig);
+
+    if (this._taskListener) {
+      await this.start(this._taskListener);
+    }
+
+    return true;
   }
 
   getCurrentChatId(): string {
