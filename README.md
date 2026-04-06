@@ -136,6 +136,7 @@ Example `secrets.json`:
 }
 ```
 
+
 ## Projects
 
 maclaw organizes work into projects. Projects encompass settings, chats, and tasks.
@@ -213,6 +214,18 @@ Connectors are how you talk to maclaw. maclaw server currently supports:
 - whatsapp via webhooks
   - setup: configure a WhatsApp Cloud API app and webhook first.
   - warning: this exposes a public webhook, so be careful about how and where you run it.
+
+## Notifications
+
+maclaw can send notifications to the user over channels.
+
+Current notification triggers:
+
+- agent completed/failed
+- scheduled task completed/failed
+
+By default, notifications go back to the originating channel when available,
+such as your slack  channel or REPL session.
 
 
 ## TODO

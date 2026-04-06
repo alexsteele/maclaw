@@ -3,8 +3,8 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
-import { Harness } from "../harness.js";
-import type { ProviderResult } from "../types.js";
+import { Harness, type HarnessNotification } from "../harness.js";
+import type { Origin, ProviderResult } from "../types.js";
 
 const replHelpText = [
   helpText,
@@ -31,6 +31,11 @@ const expandHome = (value: string): string => {
   return value;
 };
 
+const replOrigin: Origin = {
+  channel: "repl",
+  userId: "local",
+};
+
 class Repl {
   private readonly rl = readline.createInterface({ input, output });
   private harness: Harness;
@@ -38,13 +43,18 @@ class Repl {
   private readonly onTaskMessage = async (task: Parameters<Parameters<Harness["start"]>[0]>[0], message: Parameters<Parameters<Harness["start"]>[0]>[1]): Promise<void> => {
     output.write(`\n[scheduled:${task.title}] ${message.content}\n\n> `);
   };
+  private readonly onNotification = async (
+    notification: HarnessNotification,
+  ): Promise<void> => {
+    output.write(`\n[notification:${notification.kind}] ${notification.text}\n\n> `);
+  };
 
   constructor(harness: Harness) {
     this.harness = harness;
   }
 
   async run(): Promise<void> {
-    await this.harness.start(this.onTaskMessage);
+    await this.harness.start(this.onTaskMessage, this.onNotification);
     this.showStartup();
 
     while (true) {
@@ -110,7 +120,7 @@ class Repl {
 
     this.harness.teardown();
     this.harness = Harness.load(nextFolder);
-    await this.harness.start(this.onTaskMessage);
+    await this.harness.start(this.onTaskMessage, this.onNotification);
 
     const lines = [
       `switched to project: ${this.harness.config.name}`,
@@ -168,13 +178,17 @@ class Repl {
       return false;
     }
 
-    const commandReply = await dispatchCommand(this.harness, line);
+    const commandReply = await dispatchCommand(this.harness, line, {
+      origin: replOrigin,
+    });
     if (commandReply !== null) {
       this.writeLine(commandReply);
       return false;
     }
 
-    const reply = await this.harness.promptDetailed(line);
+    const reply = await this.harness.promptDetailed(line, {
+      origin: replOrigin,
+    });
     const verboseFooter = this.verbose ? this.formatVerboseFooter(reply.providerResult) : null;
     this.writeLine(verboseFooter ? `${reply.message.content}\n${verboseFooter}` : reply.message.content);
     return false;
