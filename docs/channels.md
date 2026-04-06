@@ -72,6 +72,21 @@ For channels like WhatsApp, we will need explicit mapping between:
 
 This is the main seam for making multi-channel usage feel seamless.
 
+## Notifications
+
+Channels should eventually support outbound notifications that are not tied to
+replying to an inbound message.
+
+This would let maclaw notify a user through Slack, Discord, WhatsApp, etc. when
+an agent finishes, fails, or needs confirmation.
+
+The likely shape is:
+
+- server passes `MessageContext` to `Harness.handleUserInput` with `user/origin` channel info
+- the `Harness` emits a notification event via a callback with the context
+- server routes it to the right `channel/user` based on the context.
+- the `Channel` sends the notification
+
 ## Config
 
 Channel configuration should be explicit and deny-by-default. No default remote access.

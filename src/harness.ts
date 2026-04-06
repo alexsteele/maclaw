@@ -28,6 +28,7 @@ import type {
   AgentRecord,
   ChatRecord,
   ChatSummary,
+  MessageContext,
   Message,
   ScheduledTask,
   Skill,
@@ -331,20 +332,28 @@ export class Harness {
     return this._chatStore.deleteChat(chatId);
   }
 
-  async handleUserInput(userInput: string): Promise<Message> {
-    return this._chatRuntime.handleUserInput(userInput);
+  async handleUserInput(userInput: string, context?: MessageContext): Promise<Message> {
+    return this._chatRuntime.handleUserInput(userInput, context);
   }
 
-  async handleUserInputDetailed(userInput: string): Promise<ChatReply> {
-    return this._chatRuntime.handleUserInputDetailed(userInput);
+  async handleUserInputDetailed(userInput: string, context?: MessageContext): Promise<ChatReply> {
+    return this._chatRuntime.handleUserInputDetailed(userInput, context);
   }
 
-  async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
-    return this._chatRuntime.handleUserInputForChat(chatId, userInput);
+  async handleUserInputForChat(
+    chatId: string,
+    userInput: string,
+    context?: MessageContext,
+  ): Promise<Message> {
+    return this._chatRuntime.handleUserInputForChat(chatId, userInput, context);
   }
 
-  async handleScheduledTask(chatId: string, prompt: string): Promise<Message> {
-    return this._chatRuntime.handleScheduledTask(chatId, prompt);
+  async handleScheduledTask(
+    chatId: string,
+    prompt: string,
+    context?: MessageContext,
+  ): Promise<Message> {
+    return this._chatRuntime.handleScheduledTask(chatId, prompt, context);
   }
 
   private createAgentId(): string {
@@ -367,6 +376,7 @@ export class Harness {
     timeoutMs?: number;
     stepIntervalMs?: number;
     chatId?: string;
+    origin?: AgentRecord["origin"];
   }): AgentRecord {
     const now = new Date().toISOString();
     const id = this.createAgentId();
@@ -375,6 +385,7 @@ export class Harness {
       name: input.name,
       prompt: input.prompt,
       chatId: input.chatId ?? id,
+      origin: input.origin,
       status: "pending",
       maxSteps: input.maxSteps ?? 100,
       timeoutMs: input.timeoutMs ?? 60 * 60 * 1000,

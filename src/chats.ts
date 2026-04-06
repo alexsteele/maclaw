@@ -6,7 +6,13 @@ import { ensureDir, makeId, readJsonFile, writeJsonFile } from "./fs-utils.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
-import type { ChatRecord, ChatSummary, Message, ProviderResult } from "./types.js";
+import type {
+  ChatRecord,
+  ChatSummary,
+  Message,
+  MessageContext,
+  ProviderResult,
+} from "./types.js";
 import { TaskScheduler } from "./scheduler.js";
 
 export type ChatLoadOptions = {
@@ -299,18 +305,25 @@ export class ChatRuntime {
     return this.activeChat;
   }
 
-  async handleUserInput(userInput: string): Promise<Message> {
+  async handleUserInput(userInput: string, _context?: MessageContext): Promise<Message> {
     const chat = await this.loadActiveChat();
     const reply = await this.handleUserInputForChatDetailed(chat.id, userInput);
     return reply.message;
   }
 
-  async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
+  async handleUserInputForChat(
+    chatId: string,
+    userInput: string,
+    _context?: MessageContext,
+  ): Promise<Message> {
     const reply = await this.handleUserInputForChatDetailed(chatId, userInput);
     return reply.message;
   }
 
-  async handleUserInputDetailed(userInput: string): Promise<ChatReply> {
+  async handleUserInputDetailed(
+    userInput: string,
+    _context?: MessageContext,
+  ): Promise<ChatReply> {
     const chat = await this.loadActiveChat();
     return this.handleUserInputForChatDetailed(chat.id, userInput);
   }
@@ -358,6 +371,7 @@ export class ChatRuntime {
   async handleScheduledTask(
     chatId: string,
     prompt: string,
+    _context?: MessageContext,
   ): Promise<Message> {
     const chat = await this.loadChat(chatId);
 

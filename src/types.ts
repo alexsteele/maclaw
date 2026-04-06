@@ -25,6 +25,16 @@ export type ChatSummary = {
   messageCount: number;
 };
 
+export type Origin = {
+  channel: string;
+  userId: string;
+  threadId?: string;
+};
+
+export type MessageContext = {
+  origin?: Origin;
+};
+
 export type AgentStatus =
   | "pending"
   | "running"
@@ -38,6 +48,7 @@ export type AgentRecord = {
   name: string;
   prompt: string;
   chatId: string;
+  origin?: Origin;
   status: AgentStatus;
   maxSteps?: number;
   timeoutMs: number;
