@@ -7,6 +7,7 @@ import type { ProjectConfig } from "../src/config.js";
 import { defaultTasksFile } from "../src/config.js";
 import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
 import { ChatRuntime, JsonFileChatStore, appendMessage } from "../src/chats.js";
+import { createTools } from "../src/tools/index.js";
 
 const createHarness = async (): Promise<{
   agent: ChatRuntime;
@@ -35,8 +36,7 @@ const createHarness = async (): Promise<{
   };
 
   const chatStore = new JsonFileChatStore(config.chatsDir);
-  const scheduler = new TaskScheduler(new JsonFileTaskStore(tasksFile));
-  const agent = new ChatRuntime(config, scheduler, chatStore);
+  const agent = new ChatRuntime(config, chatStore, createTools(config));
 
   return {
     agent,
@@ -70,7 +70,6 @@ test("agent can fork and switch chats", async () => {
 
 test("ChatRuntime only sends the most recent contextMessages to the provider", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-context-"));
-  const tasksFile = defaultTasksFile(projectDir);
   const originalFetch = globalThis.fetch;
   const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
 
@@ -104,8 +103,7 @@ test("ChatRuntime only sends the most recent contextMessages to the provider", a
     };
 
     const chatStore = new JsonFileChatStore(config.chatsDir);
-    const scheduler = new TaskScheduler(new JsonFileTaskStore(tasksFile));
-    const runtime = new ChatRuntime(config, scheduler, chatStore);
+    const runtime = new ChatRuntime(config, chatStore, createTools(config));
     const chat = await runtime.loadActiveChat();
     appendMessage(chat, "user", "one");
     appendMessage(chat, "assistant", "two");

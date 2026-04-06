@@ -6,7 +6,7 @@ import {
   renderProjectConfig,
 } from "./project-config.js";
 import { parseTaskSchedule } from "./task.js";
-import type { AgentRecord, Origin, TaskSchedule } from "./types.js";
+import type { AgentRecord, Origin, TaskSchedule, UsageSummary } from "./types.js";
 
 type DispatchOptions = {
   chatId?: string;
@@ -30,6 +30,7 @@ export const projectHelpText = [
   "Command: /project",
   "  /project           Show the active project",
   "  /project show      Show the active project",
+  "  /project usage     Show token usage for the project",
   "  /project init      Create .maclaw/maclaw.json for this project",
   "  /project wipeout   Delete .maclaw/ for this project after confirmation",
 ].join("\n");
@@ -48,6 +49,7 @@ export const chatHelpText = [
   "Command: /chat",
   "  /chat              Show the current chat id",
   "  /chat show [X]     Show the current or named chat",
+  "  /chat usage [X]    Show token usage for the current or named chat",
   "  /chat list         List saved chats",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
@@ -297,6 +299,16 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
   ].join("\n");
 };
 
+const renderUsage = (scope: string, usage: UsageSummary): string =>
+  [
+    `${scope}: ${usage.messageCount}`,
+    `inputTokens: ${usage.inputTokens}`,
+    `outputTokens: ${usage.outputTokens}`,
+    `totalTokens: ${usage.totalTokens}`,
+    `cachedInputTokens: ${usage.cachedInputTokens}`,
+    `reasoningTokens: ${usage.reasoningTokens}`,
+  ].join("\n");
+
 const renderChatList = (
   chats: Awaited<ReturnType<Harness["listChats"]>>,
   currentChatId: string,
@@ -447,6 +459,10 @@ const handleProjectCommand: CommandHandler = async (harness, input, options) => 
     return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
 
+  if (input === "/project usage") {
+    return renderUsage("messagesWithUsage", await harness.getProjectUsage());
+  }
+
   if (input === "/project init") {
     if (harness.isProjectInitialized()) {
       return `project already initialized: ${harness.config.projectConfigFile}`;
@@ -555,6 +571,10 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     return renderChatInfo(await harness.loadChat(getScopedChatId(harness, options)));
   }
 
+  if (input === "/chat usage") {
+    return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
+  }
+
   if (input.startsWith("/chat show ")) {
     const requestedId = parseChatId(input.slice("/chat show ".length));
     if (!requestedId) {
@@ -562,6 +582,15 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     }
 
     return renderChatInfo(await harness.loadChat(requestedId));
+  }
+
+  if (input.startsWith("/chat usage ")) {
+    const requestedId = parseChatId(input.slice("/chat usage ".length));
+    if (!requestedId) {
+      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+    }
+
+    return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
   }
 
   if (input === "/chat list") {

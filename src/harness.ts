@@ -38,6 +38,7 @@ import type {
   ScheduledTask,
   Skill,
   ToolDefinition,
+  UsageSummary,
 } from "./types.js";
 
 type ForkChatResult =
@@ -67,6 +68,32 @@ type AgentCreateResult =
 type AgentChatResult =
   | { agent: AgentRecord; chatId: string; error?: undefined }
   | { agent?: undefined; chatId?: undefined; error: string };
+
+const createUsageSummary = (): UsageSummary => ({
+  messageCount: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  cachedInputTokens: 0,
+  reasoningTokens: 0,
+});
+
+const addUsage = (summary: UsageSummary, chat: ChatRecord): UsageSummary => {
+  for (const message of chat.messages) {
+    if (!message.usage) {
+      continue;
+    }
+
+    summary.messageCount += 1;
+    summary.inputTokens += message.usage.inputTokens ?? 0;
+    summary.outputTokens += message.usage.outputTokens ?? 0;
+    summary.totalTokens += message.usage.totalTokens ?? 0;
+    summary.cachedInputTokens += message.usage.cachedInputTokens ?? 0;
+    summary.reasoningTokens += message.usage.reasoningTokens ?? 0;
+  }
+
+  return summary;
+};
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.storage === "json"
@@ -332,6 +359,21 @@ export class Harness {
     return chat.messages.length === 0
       ? "No history yet."
       : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+  }
+
+  async getChatUsage(chatId?: string): Promise<UsageSummary> {
+    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
+    return addUsage(createUsageSummary(), chat);
+  }
+
+  async getProjectUsage(): Promise<UsageSummary> {
+    const summary = createUsageSummary();
+    const chats = await this.listChats();
+    for (const chat of chats) {
+      addUsage(summary, await this.loadChat(chat.id));
+    }
+
+    return summary;
   }
 
   async loadChat(chatId: string): Promise<ChatRecord> {

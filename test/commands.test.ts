@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { dispatchCommand, helpText } from "../src/commands.js";
+import { dispatchCommand, helpText, projectHelpText } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
 import { Harness } from "../src/harness.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -93,6 +93,77 @@ test("dispatchCommand shows current and named chat info", async () => {
     assert.match(namedReply ?? "", /^id: branch-a$/mu);
     assert.match(namedReply ?? "", /^messageCount: 2$/mu);
   } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows chat and project usage from persisted assistant messages", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-"));
+  const originalFetch = globalThis.fetch;
+  const originalProvider = process.env.MACLAW_PROVIDER;
+  const originalApiKey = process.env.OPENAI_API_KEY;
+
+  try {
+    delete process.env.MACLAW_PROVIDER;
+    process.env.OPENAI_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          output_text: "usage reply",
+          usage: {
+            input_tokens: 11,
+            output_tokens: 7,
+            total_tokens: 18,
+            input_tokens_details: {
+              cached_tokens: 3,
+            },
+            output_tokens_details: {
+              reasoning_tokens: 2,
+            },
+          },
+        }),
+      }) as Response) as typeof fetch;
+
+    await initProjectConfig(projectDir, {
+      name: "usage-project",
+      provider: "openai",
+      model: "test-model",
+      openAiApiKey: "test-key",
+    });
+
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
+
+    const chatReply = await dispatchCommand(harness, "/chat usage branch-a");
+    const projectReply = await dispatchCommand(harness, "/project usage");
+
+    assert.match(chatReply ?? "", /^messagesWithUsage: 1$/mu);
+    assert.match(chatReply ?? "", /^inputTokens: 11$/mu);
+    assert.match(chatReply ?? "", /^outputTokens: 7$/mu);
+    assert.match(chatReply ?? "", /^totalTokens: 18$/mu);
+    assert.match(chatReply ?? "", /^cachedInputTokens: 3$/mu);
+    assert.match(chatReply ?? "", /^reasoningTokens: 2$/mu);
+
+    assert.match(projectReply ?? "", /^messagesWithUsage: 2$/mu);
+    assert.match(projectReply ?? "", /^inputTokens: 22$/mu);
+    assert.match(projectReply ?? "", /^outputTokens: 14$/mu);
+    assert.match(projectReply ?? "", /^totalTokens: 36$/mu);
+    assert.match(projectReply ?? "", /^cachedInputTokens: 6$/mu);
+    assert.match(projectReply ?? "", /^reasoningTokens: 4$/mu);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalProvider === undefined) {
+      delete process.env.MACLAW_PROVIDER;
+    } else {
+      process.env.MACLAW_PROVIDER = originalProvider;
+    }
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
     await rm(projectDir, { recursive: true, force: true });
   }
 });
@@ -480,7 +551,7 @@ test("dispatchCommand shows project help for unknown project subcommands", async
 
     const reply = await dispatchCommand(harness, "/project foo");
 
-    assert.equal(reply, "Command: /project\n  /project           Show the active project\n  /project show      Show the active project\n  /project init      Create .maclaw/maclaw.json for this project\n  /project wipeout   Delete .maclaw/ for this project after confirmation");
+    assert.equal(reply, projectHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

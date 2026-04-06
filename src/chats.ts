@@ -18,6 +18,7 @@ import type {
   Message,
   MessageContext,
   ProviderResult,
+  ProviderUsage,
   ToolDefinition,
 } from "./types.js";
 
@@ -430,7 +431,10 @@ export class ChatRuntime {
         tools: this.tools,
       });
 
-      assistantMessage = appendMessage(chat, "assistant", providerResult.outputText);
+      assistantMessage = appendMessage(chat, "assistant", providerResult.outputText, undefined, {
+        model: providerResult.model,
+        usage: providerResult.usage,
+      });
     } catch (error) {
       const content = `Request failed: ${
         error instanceof Error ? error.message : String(error)
@@ -474,6 +478,10 @@ export class ChatRuntime {
         "assistant",
         result.outputText,
         "scheduler",
+        {
+          model: result.model,
+          usage: result.usage,
+        },
       );
     } catch (error) {
       const content = `Scheduled task failed: ${
@@ -500,6 +508,10 @@ export const appendMessage = (
   role: Message["role"],
   content: string,
   name?: string,
+  metadata?: {
+    model?: string;
+    usage?: ProviderUsage;
+  },
 ): Message => {
   const message: Message = {
     id: makeId(role),
@@ -507,6 +519,8 @@ export const appendMessage = (
     content,
     createdAt: new Date().toISOString(),
     name,
+    model: metadata?.model,
+    usage: metadata?.usage,
   };
 
   chat.messages.push(message);

@@ -6,6 +6,8 @@ export type Message = {
   content: string;
   createdAt: string;
   name?: string;
+  model?: string;
+  usage?: ProviderUsage;
 };
 
 export type ChatRecord = {
@@ -163,6 +165,15 @@ export type ProviderUsage = {
   totalTokens?: number;
   cachedInputTokens?: number;
   reasoningTokens?: number;
+};
+
+export type UsageSummary = {
+  messageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  reasoningTokens: number;
 };
 
 export type ProviderResult = {
