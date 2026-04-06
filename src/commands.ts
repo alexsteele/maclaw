@@ -1,9 +1,10 @@
 import { Harness } from "./harness.js";
 import { parseTaskSchedule } from "./task.js";
-import type { AgentRecord, TaskSchedule } from "./types.js";
+import type { AgentRecord, Origin, TaskSchedule } from "./types.js";
 
 type DispatchOptions = {
   chatId?: string;
+  origin?: Origin;
 };
 
 export const helpText = [
@@ -520,6 +521,7 @@ export const dispatchCommand = async (
       name,
       prompt,
       chatId: getScopedChatId(harness, options),
+      origin: options.origin,
     });
     return `started agent: ${agent.id}`;
   }

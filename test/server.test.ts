@@ -180,3 +180,59 @@ test("server prompts the user to choose a project when none is selected", async 
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("server passes channel origin through to created agents", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-agent-origin-"));
+  const homeDir = path.join(rootDir, "home");
+
+  try {
+    await initProjectConfig(homeDir, {
+      name: "home",
+      provider: "local",
+      model: "test-model",
+    });
+
+    const server = MaclawServer.create(
+      {
+        configFile: path.join(rootDir, "server.json"),
+        projects: [{ name: "home", folder: homeDir }],
+        defaultProject: "home",
+        channels: {
+          discord: { enabled: false },
+          slack: { enabled: false },
+          whatsapp: {
+            enabled: false,
+            graphApiVersion: "v23.0",
+            port: 3000,
+            webhookPath: "/whatsapp/webhook",
+          },
+        },
+      },
+      {
+        configFile: path.join(rootDir, "secrets.json"),
+        discord: {},
+        slack: {},
+        whatsapp: {},
+      },
+    );
+    await server.start();
+
+    const reply = await server.handleMessage({
+      channel: "slack",
+      threadId: "thread-123",
+      userId: "slack-T1-U1",
+      text: "/agent create notifier | Let me know when this is done",
+    });
+
+    assert.match(reply ?? "", /started agent: /u);
+
+    const agent = server.getHarness("home").listAgents()[0];
+    assert.equal(agent?.origin?.channel, "slack");
+    assert.equal(agent?.origin?.userId, "slack-T1-U1");
+    assert.equal(agent?.origin?.threadId, "thread-123");
+
+    await server.stop();
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

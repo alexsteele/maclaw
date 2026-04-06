@@ -292,6 +292,7 @@ export class DiscordChannel implements Channel {
 
     const reply = await this.messageHandler?.({
       channel: this.name,
+      threadId: event.channelId,
       userId: event.userId,
       text: event.text,
     });

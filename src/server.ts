@@ -11,7 +11,7 @@ import {
   type ServerConfig,
   type ServerSecrets,
 } from "./server-config.js";
-import type { Message, ScheduledTask } from "./types.js";
+import type { Message, Origin, ScheduledTask } from "./types.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
 
@@ -164,14 +164,22 @@ export class MaclawServer {
     }
 
     const harness = this.getHarness(projectName);
+    const origin: Origin = {
+      channel: message.channel,
+      userId: message.userId,
+      threadId: message.threadId,
+    };
     const commandReply = await dispatchCommand(harness, message.text, {
       chatId: message.userId,
+      origin,
     });
     if (commandReply !== null) {
       return commandReply;
     }
 
-    const reply = await harness.handleUserInputForChat(message.userId, message.text);
+    const reply = await harness.handleUserInputForChat(message.userId, message.text, {
+      origin,
+    });
     return reply.content;
   }
 

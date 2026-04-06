@@ -1,6 +1,7 @@
 export type ChannelMessage = {
   channel: string;
   text: string;
+  threadId?: string;
   userId: string;
 };
 

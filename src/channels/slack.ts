@@ -240,6 +240,7 @@ export class SlackChannel implements Channel {
 
     const reply = await this.messageHandler?.({
       channel: this.name,
+      threadId: event.threadTs,
       userId: event.userId,
       text: event.text,
     });
