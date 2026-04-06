@@ -255,6 +255,7 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `config: ${isProjectInitialized ? projectConfig.projectConfigFile : "(not set)"}`,
     `provider: ${projectConfig.provider}`,
     `model: ${projectConfig.model}`,
+    `storage: ${projectConfig.storage}`,
     `retentionDays: ${projectConfig.retentionDays}`,
     `currentChat: ${currentChatId}`,
     `skillsDir: ${projectConfig.skillsDir}`,

@@ -20,6 +20,7 @@ export type ProjectConfig = {
   createdAt?: string;
   provider: "local" | "openai";
   model: string;
+  storage: "json" | "none";
   retentionDays: number;
   skillsDir: string;
   compressionMode: "none" | "planned";
@@ -69,6 +70,7 @@ export const initProjectConfig = async (
     retentionDays: mergedConfig.retentionDays ?? 30,
     provider: mergedConfig.provider ?? "openai",
     model: mergedConfig.model ?? "gpt-4.1-mini",
+    storage: mergedConfig.storage ?? "json",
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
     compressionMode: mergedConfig.compressionMode ?? "none",
     schedulerPollMs: mergedConfig.schedulerPollMs ?? 15_000,
@@ -84,11 +86,14 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   const projectFolder = path.resolve(cwd);
   const projectFileConfig = readProjectFileConfig(projectFolder);
   const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
+  const hasProjectConfig = existsSync(projectConfigFile);
   const serverSecrets = loadServerSecrets();
   const compressionModeValue =
     process.env.MACLAW_COMPRESSION_MODE ?? projectFileConfig.compressionMode ?? "none";
   const providerValue =
     process.env.MACLAW_PROVIDER ?? projectFileConfig.provider ?? "openai";
+  const storageValue =
+    process.env.MACLAW_STORAGE ?? projectFileConfig.storage ?? (hasProjectConfig ? "json" : "none");
   const skillsDir = path.resolve(
     projectFolder,
     process.env.MACLAW_SKILLS_DIR ?? projectFileConfig.skillsDir ?? ".maclaw/skills",
@@ -103,6 +108,7 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
       process.env.OPENAI_MODEL ??
       projectFileConfig.model ??
       "gpt-4.1-mini",
+    storage: storageValue === "json" ? "json" : "none",
     retentionDays: toPositiveInt(
       process.env.MACLAW_RETENTION_DAYS,
       projectFileConfig.retentionDays ?? 30,

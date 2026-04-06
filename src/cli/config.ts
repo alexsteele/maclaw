@@ -13,6 +13,7 @@ const configHelpText = [
   "  name",
   "  provider",
   "  model",
+  "  storage",
   "  retentionDays",
   "  skillsDir",
   "  compressionMode",
@@ -23,6 +24,7 @@ const editableKeys = new Set([
   "name",
   "provider",
   "model",
+  "storage",
   "retentionDays",
   "skillsDir",
   "compressionMode",
@@ -36,6 +38,7 @@ const renderConfig = (config: ProjectConfig): string =>
     `config: ${config.projectConfigFile}`,
     `provider: ${config.provider}`,
     `model: ${config.model}`,
+    `storage: ${config.storage}`,
     `retentionDays: ${config.retentionDays}`,
     `skillsDir: ${config.skillsDir}`,
     `compressionMode: ${config.compressionMode}`,
@@ -61,6 +64,14 @@ const parseConfigValue = (
     }
 
     return { compressionMode: value };
+  }
+
+  if (key === "storage") {
+    if (value !== "json" && value !== "none") {
+      return "storage must be 'json' or 'none'";
+    }
+
+    return { storage: value };
   }
 
   if (key === "retentionDays" || key === "schedulerPollMs") {

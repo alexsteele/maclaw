@@ -35,13 +35,13 @@ type ForkChatResult =
   | { chat?: undefined; error: string };
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
-  return existsSync(config.projectConfigFile)
+  return config.storage === "json"
     ? new JsonFileChatStore(config.chatsDir)
     : new MemoryChatStore();
 };
 
 const createScheduler = (config: ProjectConfig): TaskScheduler => {
-  return existsSync(config.projectConfigFile)
+  return config.storage === "json"
     ? new TaskScheduler(
         new JsonFileTaskStore(
           defaultTasksFile(config.projectFolder),
@@ -52,7 +52,7 @@ const createScheduler = (config: ProjectConfig): TaskScheduler => {
 };
 
 const createAgentStore = (config: ProjectConfig): AgentStore => {
-  return existsSync(config.projectConfigFile)
+  return config.storage === "json"
     ? new JsonFileAgentStore(defaultAgentsFile(config.projectFolder))
     : new MemoryAgentStore();
 };

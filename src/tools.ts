@@ -147,6 +147,7 @@ export const createTools = (
             projectName: config.name,
             isProjectInitialized: existsSync(config.projectConfigFile),
             provider: config.provider,
+            storage: config.storage,
             chatId,
             skillsDir: config.skillsDir,
             retentionDays: config.retentionDays,
