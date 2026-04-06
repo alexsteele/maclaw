@@ -220,3 +220,44 @@ test("dispatchCommand requires confirmation before wiping project data", async (
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("dispatchCommand shows project help for unknown project subcommands", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-project-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/project foo");
+
+    assert.equal(reply, "Command: /project\n  /project           Show the active project\n  /project show      Show the active project\n  /project init      Create .maclaw/maclaw.json for this project\n  /project wipeout   Delete .maclaw/ for this project after confirmation");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows main help for unknown help subcommands", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-help-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/help foo");
+
+    assert.equal(reply, "Commands:\n  /help              Show this help\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand keeps unknown skills and history variants local", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-local-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    assert.equal(await dispatchCommand(harness, "/skills foo"), "Usage: /skills");
+    assert.equal(await dispatchCommand(harness, "/history foo"), "Usage: /history");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

@@ -347,6 +347,10 @@ export const dispatchCommand = async (
     return agentHelpText;
   }
 
+  if (input.startsWith("/help")) {
+    return helpText;
+  }
+
   if (input === "/project" || input === "/project show") {
     return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
@@ -385,6 +389,10 @@ export const dispatchCommand = async (
       "deleted project data: .maclaw\n" +
       `project is now headless at: ${harness.config.projectFolder}`
     );
+  }
+
+  if (input.startsWith("/project")) {
+    return projectHelpText;
   }
 
   if (input === "/chat") {
@@ -549,8 +557,16 @@ export const dispatchCommand = async (
       : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
   }
 
+  if (input.startsWith("/skills")) {
+    return "Usage: /skills";
+  }
+
   if (input === "/history") {
     return harness.getChatTranscript(options.chatId);
+  }
+
+  if (input.startsWith("/history")) {
+    return "Usage: /history";
   }
 
   return null;
