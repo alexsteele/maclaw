@@ -171,6 +171,34 @@ test("dispatchCommand lists local skills", async () => {
   }
 });
 
+test("dispatchCommand shows, gets, and sets project config", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-config-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "config-project",
+      provider: "dummy",
+      model: "test-model",
+    });
+    const harness = Harness.load(projectDir);
+
+    const showReply = await dispatchCommand(harness, "/config");
+    assert.match(showReply ?? "", /name: config-project/u);
+    assert.match(showReply ?? "", /contextMessages: 20/u);
+
+    const getReply = await dispatchCommand(harness, "/config get model");
+    assert.equal(getReply, "test-model");
+
+    const setReply = await dispatchCommand(harness, "/config set contextMessages 12");
+    assert.equal(setReply, "contextMessages = 12");
+
+    const updatedReply = await dispatchCommand(harness, "/config get contextMessages");
+    assert.equal(updatedReply, "12");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand renders agent list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-list-"));
 
@@ -281,7 +309,7 @@ test("dispatchCommand shows main help for unknown help subcommands", async () =>
 
     const reply = await dispatchCommand(harness, "/help foo");
 
-    assert.equal(reply, "Commands:\n  /help              Show this help\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+    assert.equal(reply, "Commands:\n  /help              Show this help\n  /config            Project config commands\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -308,7 +336,7 @@ test("dispatchCommand shows main help for unknown slash commands", async () => {
 
     const reply = await dispatchCommand(harness, "/wat");
 
-    assert.equal(reply, "Commands:\n  /help              Show this help\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+    assert.equal(reply, "Commands:\n  /help              Show this help\n  /config            Project config commands\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

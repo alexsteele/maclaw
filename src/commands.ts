@@ -1,4 +1,10 @@
 import { Harness } from "./harness.js";
+import { initProjectConfig, loadConfig } from "./config.js";
+import {
+  editableProjectConfigKeys,
+  parseProjectConfigValue,
+  renderProjectConfig,
+} from "./project-config.js";
 import { parseTaskSchedule } from "./task.js";
 import type { AgentRecord, Origin, TaskSchedule } from "./types.js";
 
@@ -10,6 +16,7 @@ type DispatchOptions = {
 export const helpText = [
   "Commands:",
   "  /help              Show this help",
+  "  /config            Project config commands",
   "  /project           Project information commands",
   "  /chat              Chat management commands",
   "  /history           Show the current chat transcript",
@@ -24,6 +31,13 @@ export const projectHelpText = [
   "  /project show      Show the active project",
   "  /project init      Create .maclaw/maclaw.json for this project",
   "  /project wipeout   Delete .maclaw/ for this project after confirmation",
+].join("\n");
+
+export const configHelpText = [
+  "Command: /config",
+  "  /config                Show the current project config",
+  "  /config get <key>      Show one config value",
+  "  /config set <key> <v>  Update a config value",
 ].join("\n");
 
 export const chatHelpText = [
@@ -326,6 +340,9 @@ const renderChatList = (
 const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
   options?.chatId ?? harness.getCurrentChatId();
 
+const readCurrentProjectConfig = (harness: Harness) =>
+  loadConfig(harness.config.projectFolder);
+
 // Parses user input and dispatches it to a project.
 export const dispatchCommand = async (
   harness: Harness,
@@ -334,6 +351,10 @@ export const dispatchCommand = async (
 ): Promise<string | null> => {
   if (input === "/help") {
     return helpText;
+  }
+
+  if (input === "/help config") {
+    return configHelpText;
   }
 
   if (input === "/help project") {
@@ -358,6 +379,50 @@ export const dispatchCommand = async (
 
   if (input === "/project" || input === "/project show") {
     return renderProjectInfo(harness, getScopedChatId(harness, options));
+  }
+
+  if (input === "/config") {
+    return renderProjectConfig(readCurrentProjectConfig(harness));
+  }
+
+  if (input.startsWith("/config get ")) {
+    const key = input.slice("/config get ".length).trim();
+    if (key.length === 0) {
+      return "Usage: /config get <key>";
+    }
+
+    const config = readCurrentProjectConfig(harness);
+    if (!(key in config)) {
+      return `Unknown config key: ${key}`;
+    }
+
+    return String(config[key as keyof typeof config]);
+  }
+
+  if (input.startsWith("/config set ")) {
+    const body = input.slice("/config set ".length).trim();
+    const firstSpace = body.indexOf(" ");
+    if (firstSpace <= 0) {
+      return "Usage: /config set <key> <value>";
+    }
+
+    const key = body.slice(0, firstSpace);
+    const value = body.slice(firstSpace + 1).trim();
+    if (value.length === 0) {
+      return "Usage: /config set <key> <value>";
+    }
+
+    if (!editableProjectConfigKeys.has(key)) {
+      return `Unknown or non-editable config key: ${key}`;
+    }
+
+    const parsedValue = parseProjectConfigValue(key, value);
+    if (typeof parsedValue === "string") {
+      return parsedValue;
+    }
+
+    const config = await initProjectConfig(harness.config.projectFolder, parsedValue);
+    return `${key} = ${String(config[key as keyof typeof config])}`;
   }
 
   if (input === "/project init") {
@@ -398,6 +463,10 @@ export const dispatchCommand = async (
 
   if (input.startsWith("/project")) {
     return projectHelpText;
+  }
+
+  if (input.startsWith("/config")) {
+    return configHelpText;
   }
 
   if (input === "/chat") {
