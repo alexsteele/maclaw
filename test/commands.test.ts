@@ -261,6 +261,29 @@ test("dispatchCommand creates an agent for the scoped chat", async () => {
   }
 });
 
+test("dispatchCommand creates an agent with JSON options", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-options-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      '/agent create planner | work through the task | {"maxSteps":3,"timeoutMs":5000,"stepIntervalMs":25}',
+    );
+
+    assert.match(reply ?? "", /^started agent: agent_/u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.ok(agent);
+    assert.equal(agent.maxSteps, 3);
+    assert.equal(agent.timeoutMs, 5000);
+    assert.equal(agent.stepIntervalMs, 25);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand can steer and stop an agent", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-control-"));
 

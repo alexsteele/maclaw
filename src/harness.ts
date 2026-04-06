@@ -47,6 +47,16 @@ export type HarnessNotification = {
   text: string;
 };
 
+export type AgentCreateOptions = {
+  name: string;
+  prompt: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  stepIntervalMs?: number;
+  chatId?: string;
+  origin?: AgentRecord["origin"];
+};
+
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.storage === "json"
     ? new JsonFileChatStore(config.chatsDir)
@@ -431,15 +441,7 @@ export class Harness {
     throw new Error("Could not create a unique agent id.");
   }
 
-  createAgent(input: {
-    name: string;
-    prompt: string;
-    maxSteps?: number;
-    timeoutMs?: number;
-    stepIntervalMs?: number;
-    chatId?: string;
-    origin?: AgentRecord["origin"];
-  }): AgentRecord {
+  createAgent(input: AgentCreateOptions): AgentRecord {
     const now = new Date().toISOString();
     const id = this.createAgentId();
     const record: AgentRecord = {

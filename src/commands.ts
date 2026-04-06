@@ -1,4 +1,4 @@
-import { Harness } from "./harness.js";
+import { Harness, type AgentCreateOptions } from "./harness.js";
 import { initProjectConfig, loadConfig } from "./config.js";
 import {
   editableProjectConfigKeys,
@@ -64,7 +64,7 @@ export const agentHelpText = [
   "Command: /agent",
   "  /agent",
   "  /agent list",
-  "  /agent create <name> | <prompt>",
+  "  /agent create <name> | <prompt> [| <json options>]",
   "  /agent show <agent id>",
   "  /agent stop <agent id>",
   "  /agent steer <agent id> | <prompt>",
@@ -355,6 +355,34 @@ const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
 const readCurrentProjectConfig = (harness: Harness) =>
   loadConfig(harness.config.projectFolder);
 
+const parseAgentCreateOptions = (
+  value: string,
+): Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> | string => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return "Invalid agent options JSON.";
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "Agent options must be a JSON object.";
+  }
+
+  const optionsObject = parsed as Record<string, unknown>;
+  for (const key of Object.keys(optionsObject)) {
+    if (!["maxSteps", "timeoutMs", "stepIntervalMs"].includes(key)) {
+      return `Unknown agent option: ${key}`;
+    }
+  }
+
+  return {
+    maxSteps: optionsObject.maxSteps as AgentCreateOptions["maxSteps"],
+    timeoutMs: optionsObject.timeoutMs as AgentCreateOptions["timeoutMs"],
+    stepIntervalMs: optionsObject.stepIntervalMs as AgentCreateOptions["stepIntervalMs"],
+  };
+};
+
 // Parses user input and dispatches it to a project.
 export const dispatchCommand = async (
   harness: Harness,
@@ -616,15 +644,24 @@ export const dispatchCommand = async (
 
   if (input.startsWith("/agent create ")) {
     const body = input.slice("/agent create ".length).trim();
-    const separatorIndex = body.indexOf("|");
-    if (separatorIndex < 0) {
-      return "Usage: /agent create <name> | <prompt>";
+    const segments = body.split("|").map((segment) => segment.trim());
+    if (segments.length < 2) {
+      return "Usage: /agent create <name> | <prompt> [| <json options>]";
     }
 
-    const name = body.slice(0, separatorIndex).trim();
-    const prompt = body.slice(separatorIndex + 1).trim();
+    const name = segments[0];
+    const prompt = segments.length === 2 ? segments[1] : segments.slice(1, -1).join(" | ");
     if (name.length === 0 || prompt.length === 0) {
-      return "Usage: /agent create <name> | <prompt>";
+      return "Usage: /agent create <name> | <prompt> [| <json options>]";
+    }
+
+    let agentOptions: Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> = {};
+    if (segments.length >= 3) {
+      const parsedOptions = parseAgentCreateOptions(segments.at(-1) ?? "");
+      if (typeof parsedOptions === "string") {
+        return parsedOptions;
+      }
+      agentOptions = parsedOptions;
     }
 
     const agent = harness.createAgent({
@@ -632,6 +669,7 @@ export const dispatchCommand = async (
       prompt,
       chatId: getScopedChatId(harness, options),
       origin: options.origin,
+      ...agentOptions,
     });
     return `started agent: ${agent.id}`;
   }
