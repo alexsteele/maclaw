@@ -40,7 +40,7 @@ type ForkChatResult =
   | { chat?: undefined; error: string };
 
 export type HarnessNotification = {
-  kind: "agent_completed" | "agent_failed";
+  kind: "agent_completed" | "agent_failed" | "task_completed" | "task_failed";
   origin: Origin;
   text: string;
 };
@@ -121,10 +121,10 @@ export class Harness {
     this._taskListener = onTaskMessage;
     this._notificationListener = onNotification;
     return this.pruneExpiredChats().then(() => {
-      this._scheduler.start(this._config.schedulerPollMs, async (task) => {
-        const message = await this.handleScheduledTask(task.chatId, task.prompt);
-        await onTaskMessage(task, message);
-      });
+      this._scheduler.start(
+        this._config.schedulerPollMs,
+        this.executeScheduledTask.bind(this, onTaskMessage),
+      );
     });
   }
 
@@ -312,6 +312,7 @@ export class Harness {
 
   async createTask(input: {
     chatId?: string;
+    origin?: ScheduledTask["origin"];
     title: string;
     prompt: string;
     schedule?: ScheduledTask["schedule"];
@@ -321,6 +322,41 @@ export class Harness {
       chatId: input.chatId ?? this.getCurrentChatId(),
       ...input,
     });
+  }
+
+  private async executeScheduledTask(
+    onTaskMessage: ((task: ScheduledTask, message: Message) => void | Promise<void>) | undefined,
+    task: ScheduledTask,
+  ): Promise<void> {
+    try {
+      const message = await this.handleScheduledTask(
+        task.chatId,
+        task.prompt,
+        task.origin ? { origin: task.origin } : undefined,
+      );
+      await onTaskMessage?.(task, message);
+
+      if (task.origin) {
+        await this._notificationListener?.({
+          kind: "task_completed",
+          origin: task.origin,
+          text: `Task ${task.title} completed.`,
+        });
+      }
+    } catch (error) {
+      if (task.origin) {
+        await this._notificationListener?.({
+          kind: "task_failed",
+          origin: task.origin,
+          text:
+            error instanceof Error
+              ? `Task ${task.title} failed: ${error.message}`
+              : `Task ${task.title} failed: ${String(error)}`,
+        });
+      }
+
+      throw error;
+    }
   }
 
   async deleteTask(taskId: string, chatId?: string): Promise<boolean> {
@@ -460,6 +496,9 @@ export class Harness {
   async runDueTasks(
     onTask: (task: ScheduledTask) => Promise<void>,
   ): Promise<void> {
-    return this._scheduler.runDueTasks(onTask);
+    return this._scheduler.runDueTasks(async (task) => {
+      await this.executeScheduledTask(undefined, task);
+      await onTask(task);
+    });
   }
 }

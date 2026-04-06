@@ -474,6 +474,7 @@ export const dispatchCommand = async (
 
     const task = await harness.createTask({
       chatId: getScopedChatId(harness, options),
+      origin: options.origin,
       title: parsed.title,
       prompt: parsed.prompt,
       schedule: parsed.schedule,

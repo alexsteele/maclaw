@@ -400,6 +400,11 @@ export class ChatRuntime {
         error instanceof Error ? error.message : String(error)
       }`;
       assistantMessage = appendMessage(chat, "assistant", content, "scheduler");
+      await this.chatStore.saveChat(chat);
+      if (this.activeChatId === chat.id) {
+        this.activeChat = chat;
+      }
+      throw error;
     }
 
     await this.chatStore.saveChat(chat);

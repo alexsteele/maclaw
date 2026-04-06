@@ -255,3 +255,91 @@ test("harness emits a notification when an origin-backed agent fails", async () 
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("harness emits a notification when an origin-backed task completes", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
+
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        notifications.push({
+          kind: notification.kind,
+          text: notification.text,
+          originUserId: notification.origin.userId,
+        });
+      },
+    );
+
+    await harness.createTask({
+      chatId: "slack-T123-U123",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        threadId: "171234.5678",
+        userId: "slack-T123-U123",
+      },
+      title: "Branch Task",
+      prompt: "Follow up on branch",
+      runAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await harness.runDueTasks(async () => {});
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.kind, "task_completed");
+    assert.equal(notifications[0]?.originUserId, "slack-T123-U123");
+    assert.match(notifications[0]?.text ?? "", /Branch Task completed/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness emits a notification when an origin-backed task fails", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-fail-notify-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
+
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        notifications.push({
+          kind: notification.kind,
+          text: notification.text,
+          originUserId: notification.origin.userId,
+        });
+      },
+    );
+
+    harness.handleScheduledTask = async () => {
+      throw new Error("task boom");
+    };
+
+    await harness.createTask({
+      chatId: "slack-T123-U123",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        threadId: "171234.5678",
+        userId: "slack-T123-U123",
+      },
+      title: "Broken Task",
+      prompt: "This will fail",
+      runAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await harness.runDueTasks(async () => {});
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.kind, "task_failed");
+    assert.equal(notifications[0]?.originUserId, "slack-T123-U123");
+    assert.match(notifications[0]?.text ?? "", /Broken Task failed: task boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

@@ -95,6 +95,7 @@ export type TaskSchedule =
 export type ScheduledTask = {
   id: string;
   chatId: string;
+  origin?: Origin;
   title: string;
   prompt: string;
   schedule: TaskSchedule;
