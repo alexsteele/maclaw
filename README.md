@@ -45,9 +45,10 @@ Alex, your dedicated human-in-the-loop
 
 1. Install Node.js 20+.
 2. Install dependencies with `npm install`.
-3. Run `npm run dev -- setup` for a guided first-run setup.
-4. Or set `OPENAI_API_KEY` manually if you want live model responses.
-5. Start the REPL with `npm run dev`.
+3. Run `npm link` to install the local `maclaw` command.
+4. Run `maclaw setup` for a guided first-run setup.
+5. Or set `OPENAI_API_KEY` manually if you want live model responses.
+6. Start the REPL with `maclaw`.
 
 ## Message Flow
 
@@ -64,7 +65,7 @@ Alex, your dedicated human-in-the-loop
 
 ## REPL
 
-`npm run dev` starts a repl with the following commands.
+`maclaw` starts a repl with the following commands.
 
 ```text
 Commands:
@@ -82,7 +83,7 @@ Commands:
 
 maclaw can also run as a long-lived server:
 
-- `npm run dev -- server`
+- `maclaw server`
 
 Server mode currently supports WhatsApp, Slack, and Discord channels, and loads global server settings from:
 

@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Harness } from "./harness.js";
 import { runRepl } from "./repl.js";
 import { MaclawServer } from "./server.js";
