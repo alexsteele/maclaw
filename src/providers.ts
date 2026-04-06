@@ -2,6 +2,7 @@ import type {
   ChatRecord,
   ProviderRequest,
   ProviderResult,
+  ProviderUsage,
   ToolDefinition,
 } from "./types.js";
 
@@ -20,6 +21,34 @@ type ResponsesApiOutputItem = {
 type ResponsesApiResponse = {
   output?: ResponsesApiOutputItem[];
   output_text?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    input_tokens_details?: {
+      cached_tokens?: number;
+    };
+    output_tokens_details?: {
+      reasoning_tokens?: number;
+    };
+  };
+};
+
+const extractUsage = (response: ResponsesApiResponse): ProviderUsage | undefined => {
+  const usage = response.usage;
+  if (!usage) {
+    return undefined;
+  }
+
+  const result: ProviderUsage = {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    totalTokens: usage.total_tokens,
+    cachedInputTokens: usage.input_tokens_details?.cached_tokens,
+    reasoningTokens: usage.output_tokens_details?.reasoning_tokens,
+  };
+
+  return Object.values(result).some((value) => value !== undefined) ? result : undefined;
 };
 
 const extractOutputText = (response: ResponsesApiResponse): string => {
@@ -63,6 +92,7 @@ export interface Provider {
 export class LocalFallbackProvider implements Provider {
   async generate(request: ProviderRequest): Promise<ProviderResult> {
     return {
+      model: "local-fallback",
       outputText: [
         "No OpenAI API key is configured yet.",
         "",
@@ -97,7 +127,9 @@ export class OpenAIResponsesProvider implements Provider {
 
       if (toolCalls.length === 0) {
         return {
+          model: this.model,
           outputText: extractOutputText(response),
+          usage: extractUsage(response),
         };
       }
 
@@ -134,6 +166,7 @@ export class OpenAIResponsesProvider implements Provider {
     }
 
     return {
+      model: this.model,
       outputText: "Stopped after too many tool-calling iterations.",
     };
   }

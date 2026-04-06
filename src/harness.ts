@@ -18,6 +18,7 @@ import {
 } from "./scheduler.js";
 import {
   ChatRuntime,
+  type ChatReply,
   JsonFileChatStore,
   MemoryChatStore,
   type ChatLoadOptions,
@@ -319,6 +320,10 @@ export class Harness {
 
   async handleUserInput(userInput: string): Promise<Message> {
     return this._chatRuntime.handleUserInput(userInput);
+  }
+
+  async handleUserInputDetailed(userInput: string): Promise<ChatReply> {
+    return this._chatRuntime.handleUserInputDetailed(userInput);
   }
 
   async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {

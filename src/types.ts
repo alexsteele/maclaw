@@ -122,6 +122,16 @@ export type ProviderRequest = {
   tools: ToolDefinition[];
 };
 
+export type ProviderUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cachedInputTokens?: number;
+  reasoningTokens?: number;
+};
+
 export type ProviderResult = {
   outputText: string;
+  model?: string;
+  usage?: ProviderUsage;
 };

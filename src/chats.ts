@@ -6,7 +6,7 @@ import { ensureDir, makeId, readJsonFile, writeJsonFile } from "./fs-utils.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
-import type { ChatRecord, ChatSummary, Message } from "./types.js";
+import type { ChatRecord, ChatSummary, Message, ProviderResult } from "./types.js";
 import { TaskScheduler } from "./scheduler.js";
 
 export type ChatLoadOptions = {
@@ -20,6 +20,11 @@ export interface ChatStore {
   listChats(): Promise<ChatSummary[]>;
   pruneExpiredChats(retentionDays: number): Promise<number>;
 }
+
+export type ChatReply = {
+  message: Message;
+  providerResult?: ProviderResult;
+};
 
 const buildSystemPrompt = async (
   config: ProjectConfig,
@@ -281,10 +286,24 @@ export class ChatRuntime {
 
   async handleUserInput(userInput: string): Promise<Message> {
     const chat = await this.loadActiveChat();
-    return this.handleUserInputForChat(chat.id, userInput);
+    const reply = await this.handleUserInputForChatDetailed(chat.id, userInput);
+    return reply.message;
   }
 
   async handleUserInputForChat(chatId: string, userInput: string): Promise<Message> {
+    const reply = await this.handleUserInputForChatDetailed(chatId, userInput);
+    return reply.message;
+  }
+
+  async handleUserInputDetailed(userInput: string): Promise<ChatReply> {
+    const chat = await this.loadActiveChat();
+    return this.handleUserInputForChatDetailed(chat.id, userInput);
+  }
+
+  async handleUserInputForChatDetailed(
+    chatId: string,
+    userInput: string,
+  ): Promise<ChatReply> {
     const chat =
       chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
 
@@ -292,17 +311,18 @@ export class ChatRuntime {
     await this.chatStore.saveChat(chat);
 
     let assistantMessage: Message;
+    let providerResult: ProviderResult | undefined;
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
       const tools = createTools(this.config, this.scheduler, chat.id);
-      const result = await this.provider.generate({
+      providerResult = await this.provider.generate({
         chat,
         userInput,
         systemPrompt,
         tools,
       });
 
-      assistantMessage = appendMessage(chat, "assistant", result.outputText);
+      assistantMessage = appendMessage(chat, "assistant", providerResult.outputText);
     } catch (error) {
       const content = `Request failed: ${
         error instanceof Error ? error.message : String(error)
@@ -314,7 +334,10 @@ export class ChatRuntime {
     if (this.activeChatId === chat.id) {
       this.activeChat = chat;
     }
-    return assistantMessage;
+    return {
+      message: assistantMessage,
+      providerResult,
+    };
   }
 
   async handleScheduledTask(
