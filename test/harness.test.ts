@@ -5,6 +5,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
 import type { AgentRecord } from "../src/types.js";
+import { useDummyProviderEnv } from "./provider-env.js";
+
+useDummyProviderEnv();
 
 const waitForAgentToSettle = async (
   harness: Harness,

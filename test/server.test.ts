@@ -5,6 +5,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import { MaclawServer } from "../src/server.js";
+import { useDummyProviderEnv } from "./provider-env.js";
+
+useDummyProviderEnv();
 
 test("server handles project commands and routes chat messages by active project", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-"));

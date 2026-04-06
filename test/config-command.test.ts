@@ -5,6 +5,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import { runConfigCommand } from "../src/cli/config.js";
+import { useDummyProviderEnv } from "./provider-env.js";
+
+useDummyProviderEnv();
 
 test("runConfigCommand updates the project model", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-"));

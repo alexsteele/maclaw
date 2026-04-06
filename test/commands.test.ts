@@ -6,6 +6,9 @@ import test from "node:test";
 import { dispatchCommand } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
 import { Harness } from "../src/harness.js";
+import { useDummyProviderEnv } from "./provider-env.js";
+
+useDummyProviderEnv();
 
 test("dispatchCommand handles history for an explicit chat id", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-"));
