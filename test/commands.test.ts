@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { dispatchCommand, helpText, projectHelpText } from "../src/commands.js";
+import { dispatchCommand, helpText, projectHelpText, saveHelpText } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
 import { Harness } from "../src/harness.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -92,6 +92,42 @@ test("dispatchCommand shows current and named chat info", async () => {
     assert.match(currentReply ?? "", /^messageCount: 2$/mu);
     assert.match(namedReply ?? "", /^id: branch-a$/mu);
     assert.match(namedReply ?? "", /^messageCount: 2$/mu);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand saves the current chat transcript to the default file", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-save-default-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+
+    const reply = await dispatchCommand(harness, "/save");
+    const savedPath = path.join(projectDir, ".maclaw", "exports", "default.md");
+    const savedContent = await readFile(savedPath, "utf8");
+
+    assert.equal(reply, `saved chat transcript to: ${savedPath}`);
+    assert.match(savedContent, /\[user\] hello from default/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand saves the current chat transcript to a custom file", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-save-custom-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+
+    const reply = await dispatchCommand(harness, "/save notes/transcript.txt");
+    const savedPath = path.join(projectDir, "notes", "transcript.txt");
+    const savedContent = await readFile(savedPath, "utf8");
+
+    assert.equal(reply, `saved chat transcript to: ${savedPath}`);
+    assert.match(savedContent, /\[user\] hello from default/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -568,6 +604,7 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/chat help"), await dispatchCommand(harness, "/help chat"));
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
+    assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

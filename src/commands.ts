@@ -16,6 +16,7 @@ type DispatchOptions = {
 export const helpText = [
   "Commands:",
   "  /help              Show this help",
+  "  /save              Save the current chat transcript to a file",
   "  /config            Project config commands",
   "  /project           Project information commands",
   "  /chat              Chat management commands",
@@ -83,6 +84,12 @@ export const agentHelpText = [
 export const toolsHelpText = [
   "Command: /tools",
   "  /tools             Show the current tools",
+].join("\n");
+
+export const saveHelpText = [
+  "Command: /save",
+  "  /save              Save the current chat transcript to .maclaw/exports/<chat>.md",
+  "  /save <path>       Save the current chat transcript to a file",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -423,6 +430,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
     return configHelpText;
   }
 
+  if (input === "/help save") {
+    return saveHelpText;
+  }
+
   if (input === "/help project") {
     return projectHelpText;
   }
@@ -504,6 +515,29 @@ const handleProjectCommand: CommandHandler = async (harness, input, options) => 
   }
 
   return projectHelpText;
+};
+
+const handleSaveCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/save") {
+    const savedPath = await harness.saveChatTranscript(undefined, options.chatId);
+    return `saved chat transcript to: ${savedPath}`;
+  }
+
+  if (input === "/save help") {
+    return saveHelpText;
+  }
+
+  if (input.startsWith("/save ")) {
+    const outputPath = input.slice("/save ".length).trim();
+    if (outputPath.length === 0) {
+      return saveHelpText;
+    }
+
+    const savedPath = await harness.saveChatTranscript(outputPath, options.chatId);
+    return `saved chat transcript to: ${savedPath}`;
+  }
+
+  return saveHelpText;
 };
 
 const handleConfigCommand: CommandHandler = async (harness, input) => {
@@ -885,6 +919,7 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
 
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
+  save: handleSaveCommand,
   project: handleProjectCommand,
   config: handleConfigCommand,
   chat: handleChatCommand,

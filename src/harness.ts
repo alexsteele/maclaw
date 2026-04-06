@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import {
@@ -10,6 +12,7 @@ import {
   type ProjectConfig,
 } from "./config.js";
 import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
+import { ensureDir } from "./fs-utils.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
@@ -40,6 +43,7 @@ import type {
   ToolDefinition,
   UsageSummary,
 } from "./types.js";
+import { writeFile } from "node:fs/promises";
 
 type ForkChatResult =
   | { chat: ChatRecord; error?: undefined }
@@ -128,6 +132,23 @@ const createShortAgentId = (): string => {
   }
 
   return id;
+};
+
+const resolveOutputPath = (projectFolder: string, chatId: string, outputPath?: string): string => {
+  if (!outputPath || outputPath.trim().length === 0) {
+    return path.join(projectFolder, ".maclaw", "exports", `${chatId}.md`);
+  }
+
+  const trimmed = outputPath.trim();
+  const expandedPath = trimmed.startsWith("~/")
+    ? path.join(os.homedir(), trimmed.slice(2))
+    : trimmed === "~"
+      ? os.homedir()
+      : trimmed;
+
+  return path.isAbsolute(expandedPath)
+    ? expandedPath
+    : path.resolve(projectFolder, expandedPath);
 };
 
 // Harness orchestrates user interactions with a project.
@@ -359,6 +380,15 @@ export class Harness {
     return chat.messages.length === 0
       ? "No history yet."
       : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+  }
+
+  async saveChatTranscript(outputPath?: string, chatId?: string): Promise<string> {
+    const requestedChatId = chatId ?? this.getCurrentChatId();
+    const resolvedPath = resolveOutputPath(this.config.projectFolder, requestedChatId, outputPath);
+    const transcript = await this.getChatTranscript(requestedChatId);
+    await ensureDir(path.dirname(resolvedPath));
+    await writeFile(resolvedPath, `${transcript}\n`, "utf8");
+    return resolvedPath;
   }
 
   async getChatUsage(chatId?: string): Promise<UsageSummary> {
