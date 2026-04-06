@@ -238,6 +238,7 @@ const renderAgentInfo = (agent: AgentRecord): string =>
         : `${agent.stepCount}/${agent.maxSteps}`
     }`,
     `timeoutMs: ${agent.timeoutMs}`,
+    `stepIntervalMs: ${agent.stepIntervalMs ?? 0}`,
     `createdAt: ${agent.createdAt}`,
     `startedAt: ${agent.startedAt ?? "(not started)"}`,
     `finishedAt: ${agent.finishedAt ?? "(not finished)"}`,

@@ -320,6 +320,7 @@ export class Harness {
     prompt: string;
     maxSteps?: number;
     timeoutMs?: number;
+    stepIntervalMs?: number;
     chatId?: string;
   }): AgentRecord {
     const now = new Date().toISOString();
@@ -332,6 +333,7 @@ export class Harness {
       status: "pending",
       maxSteps: input.maxSteps ?? 100,
       timeoutMs: input.timeoutMs ?? 60 * 60 * 1000,
+      stepIntervalMs: input.stepIntervalMs ?? 0,
       stepCount: 0,
       createdAt: now,
     };

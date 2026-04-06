@@ -41,6 +41,7 @@ export type AgentRecord = {
   status: AgentStatus;
   maxSteps?: number;
   timeoutMs: number;
+  stepIntervalMs?: number;
   stepCount: number;
   createdAt: string;
   startedAt?: string;

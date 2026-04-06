@@ -156,3 +156,31 @@ test("Agent stops when its timeout is exceeded", async () => {
 
   assert.equal(result.status, "stopped");
 });
+
+test("Agent waits between steps when stepIntervalMs is set", async () => {
+  const store = new MemoryAgentStore();
+  const timestamps: number[] = [];
+  const record = { ...createRecord(), maxSteps: 2, stepIntervalMs: 20 };
+  store.saveAgent(record);
+  const agent = new Agent(
+    record,
+    store,
+    async (): Promise<Message> => {
+      timestamps.push(Date.now());
+      return {
+        id: `msg-${timestamps.length}`,
+        role: "assistant",
+        content: "Still working",
+        createdAt: new Date().toISOString(),
+      };
+    },
+  );
+
+  agent.start();
+  const result = await waitForAgentToSettle(store, record.id);
+
+  assert.equal(result.status, "stopped");
+  assert.equal(result.stepCount, 2);
+  assert.equal(timestamps.length, 2);
+  assert.ok(timestamps[1]! - timestamps[0]! >= 15);
+});

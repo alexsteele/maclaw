@@ -153,10 +153,10 @@ export class Agent {
     this.agentStore.saveAgent(record);
   }
 
-  private scheduleIteration(): void {
+  private scheduleIteration(delayMs?: number): void {
     const timer = setTimeout(() => {
       void this.runNextIteration();
-    }, 0);
+    }, delayMs ?? 0);
     timer.unref?.();
   }
 
@@ -205,7 +205,7 @@ export class Agent {
         return;
       }
 
-      this.scheduleIteration();
+      this.scheduleIteration(latest.stepIntervalMs);
     } catch (error) {
       this.finish(record, "failed", error instanceof Error ? error.message : String(error));
     }
