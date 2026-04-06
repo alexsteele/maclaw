@@ -77,6 +77,44 @@ test("dispatchCommand renders chat list output", async () => {
   }
 });
 
+test("dispatchCommand deletes a non-active chat", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-rm-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.handleUserInput("hello from default");
+    await harness.handleUserInputForChat("branch-a", "hello from branch");
+    await harness.createTask({
+      chatId: "branch-a",
+      title: "Branch Task",
+      prompt: "Follow up on branch",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    const reply = await dispatchCommand(harness, "/chat rm branch-a");
+
+    assert.equal(reply, "deleted chat: branch-a");
+    assert.equal((await harness.listChats()).some((chat) => chat.id === "branch-a"), false);
+    assert.equal((await harness.listTasks("branch-a")).length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand refuses to delete the current chat", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-rm-current-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/chat rm default");
+
+    assert.equal(reply, "Cannot delete the current chat. Switch to another chat first.");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand renders task list output for a scoped chat", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-list-"));
 

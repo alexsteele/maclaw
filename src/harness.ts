@@ -318,6 +318,19 @@ export class Harness {
     return this.deleteTask(taskId, this.getCurrentChatId());
   }
 
+  async deleteChat(chatId: string): Promise<boolean> {
+    if (chatId === this.getCurrentChatId()) {
+      return false;
+    }
+
+    const tasks = await this.listTasks(chatId);
+    for (const task of tasks) {
+      await this.deleteTask(task.id, chatId);
+    }
+
+    return this._chatStore.deleteChat(chatId);
+  }
+
   async handleUserInput(userInput: string): Promise<Message> {
     return this._chatRuntime.handleUserInput(userInput);
   }

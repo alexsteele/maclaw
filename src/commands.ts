@@ -31,6 +31,7 @@ export const chatHelpText = [
   "  /chat list         List saved chats",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
+  "  /chat rm X         Delete chat X",
 ].join("\n");
 
 export const taskHelpText = [
@@ -431,6 +432,20 @@ export const dispatchCommand = async (
     }
 
     return `forked current chat to: ${result.chat.id}`;
+  }
+
+  if (input.startsWith("/chat rm ")) {
+    const requestedId = parseChatId(input.slice("/chat rm ".length));
+    if (!requestedId) {
+      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+    }
+
+    if (requestedId === getScopedChatId(harness, options)) {
+      return "Cannot delete the current chat. Switch to another chat first.";
+    }
+
+    const deleted = await harness.deleteChat(requestedId);
+    return deleted ? `deleted chat: ${requestedId}` : `chat not found: ${requestedId}`;
   }
 
   if (input.startsWith("/chat")) {

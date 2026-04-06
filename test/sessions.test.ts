@@ -157,3 +157,24 @@ test("MemoryChatStore keeps chats in memory without filesystem backing", async (
   assert.equal(chats.length, 1);
   assert.equal(chats[0]?.id, "alpha");
 });
+
+test("deleteChat removes a saved chat from the JSON store", async () => {
+  const { cleanup, store } = await createStore();
+
+  try {
+    const chat = await store.loadChat("alpha", {
+      retentionDays: 30,
+      compressionMode: "none",
+    });
+    appendMessage(chat, "user", "hello");
+    await store.saveChat(chat);
+
+    const deleted = await store.deleteChat("alpha");
+    const chats = await store.listChats();
+
+    assert.equal(deleted, true);
+    assert.equal(chats.length, 0);
+  } finally {
+    await cleanup();
+  }
+});

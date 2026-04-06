@@ -17,6 +17,7 @@ export type ChatLoadOptions = {
 export interface ChatStore {
   loadChat(chatId: string, options: ChatLoadOptions): Promise<ChatRecord>;
   saveChat(chat: ChatRecord): Promise<void>;
+  deleteChat(chatId: string): Promise<boolean>;
   listChats(): Promise<ChatSummary[]>;
   pruneExpiredChats(retentionDays: number): Promise<number>;
 }
@@ -123,6 +124,16 @@ export class JsonFileChatStore implements ChatStore {
     await writeJsonFile(chatPath(this.chatsDir, chat.id), chat);
   }
 
+  async deleteChat(chatId: string): Promise<boolean> {
+    const filePath = chatPath(this.chatsDir, chatId);
+    if (!existsSync(filePath)) {
+      return false;
+    }
+
+    await rm(filePath, { force: true });
+    return true;
+  }
+
   async listChats(): Promise<ChatSummary[]> {
     await ensureDir(this.chatsDir);
     const entries = await readdir(this.chatsDir, { withFileTypes: true });
@@ -195,6 +206,10 @@ export class MemoryChatStore implements ChatStore {
   async saveChat(chat: ChatRecord): Promise<void> {
     chat.updatedAt = new Date().toISOString();
     this.chats.set(chat.id, structuredClone(chat));
+  }
+
+  async deleteChat(chatId: string): Promise<boolean> {
+    return this.chats.delete(chatId);
   }
 
   async listChats(): Promise<ChatSummary[]> {
