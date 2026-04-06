@@ -105,3 +105,31 @@ test("runConfigCommand updates scalar runtime settings", async () => {
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("runConfigCommand writes command errors to stderr", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-stderr-"));
+  const previousCwd = process.cwd();
+  const stderrWrites: string[] = [];
+  const previousExitCode = process.exitCode;
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+  try {
+    await initProjectConfig(projectDir, { model: "gpt-4.1-mini" });
+    process.chdir(projectDir);
+    process.exitCode = undefined;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrWrites.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      return true;
+    }) as typeof process.stderr.write;
+
+    await runConfigCommand(["set", "bogus", "123"]);
+
+    assert.match(stderrWrites.join(""), /Unknown or non-editable config key: bogus/);
+    assert.equal(process.exitCode, 1);
+  } finally {
+    process.chdir(previousCwd);
+    process.exitCode = previousExitCode;
+    process.stderr.write = originalStderrWrite;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

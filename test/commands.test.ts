@@ -219,6 +219,23 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
   }
 });
 
+test("dispatchCommand config help lists editable keys", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-config-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/help config");
+
+    assert.match(reply ?? "", /Editable keys:/u);
+    assert.match(reply ?? "", /\bnotifications\b/u);
+    assert.match(reply ?? "", /\bcontextMessages\b/u);
+    assert.match(reply ?? "", /\bmaxToolIterations\b/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand renders agent list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-list-"));
 

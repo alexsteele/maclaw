@@ -38,6 +38,9 @@ export const configHelpText = [
   "  /config                Show the current project config",
   "  /config get <key>      Show one config value",
   "  /config set <key> <v>  Update a config value",
+  "",
+  "Editable keys:",
+  ...Array.from(editableProjectConfigKeys, (key) => `  ${key}`),
 ].join("\n");
 
 export const chatHelpText = [

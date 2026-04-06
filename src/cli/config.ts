@@ -1,10 +1,6 @@
 import process from "node:process";
-import { initProjectConfig, loadConfig, type ProjectConfig } from "../config.js";
-import {
-  editableProjectConfigKeys,
-  parseProjectConfigValue,
-  renderProjectConfig,
-} from "../project-config.js";
+import { dispatchCommand } from "../commands.js";
+import { Harness } from "../harness.js";
 
 const configHelpText = [
   "Usage: maclaw config [command]",
@@ -13,67 +9,38 @@ const configHelpText = [
   "  maclaw config                  Show the current project config",
   "  maclaw config get <key>        Show one config value",
   "  maclaw config set <key> <val>  Update a config value",
-  "",
-  "Editable keys:",
-  "  name",
-  "  provider",
-  "  model",
-  "  storage",
-  "  notifications",
-  "  contextMessages",
-  "  maxToolIterations",
-  "  retentionDays",
-  "  skillsDir",
-  "  compressionMode",
-  "  schedulerPollMs",
 ].join("\n");
 
 export const runConfigCommand = async (args: string[]): Promise<void> => {
   const subcommand = args[0];
+  const harness = Harness.load(process.cwd());
 
   if (!subcommand || subcommand === "-h" || subcommand === "--help" || subcommand === "help") {
     process.stdout.write(`${configHelpText}\n`);
     if (!subcommand) {
-      process.stdout.write(`\n${renderProjectConfig(loadConfig())}\n`);
+      const reply = await dispatchCommand(harness, "/config");
+      process.stdout.write(`\n${reply}\n`);
     }
     return;
   }
 
-  if (subcommand === "get") {
-    const key = args[1];
-    if (!key) {
-      throw new Error("Usage: maclaw config get <key>");
-    }
-
-    const config = loadConfig();
-    if (!(key in config)) {
-      throw new Error(`Unknown config key: ${key}`);
-    }
-
-    process.stdout.write(`${String(config[key as keyof ProjectConfig])}\n`);
+  const input = `/config ${args.join(" ")}`;
+  const reply = await dispatchCommand(harness, input);
+  if (reply === null) {
+    process.stderr.write(`Unknown config command: ${subcommand}\n`);
+    process.exitCode = 1;
     return;
   }
 
-  if (subcommand === "set") {
-    const key = args[1];
-    const value = args.slice(2).join(" ");
-    if (!key || !value) {
-      throw new Error("Usage: maclaw config set <key> <value>");
-    }
-
-    if (!editableProjectConfigKeys.has(key)) {
-      throw new Error(`Unknown or non-editable config key: ${key}`);
-    }
-
-    const parsedValue = parseProjectConfigValue(key, value);
-    if (typeof parsedValue === "string") {
-      throw new Error(parsedValue);
-    }
-
-    const config = await initProjectConfig(process.cwd(), parsedValue);
-    process.stdout.write(`${key} = ${String(config[key as keyof ProjectConfig])}\n`);
+  if (
+    reply.startsWith("Usage:") ||
+    reply.startsWith("Unknown ") ||
+    reply.startsWith("Invalid ")
+  ) {
+    process.stderr.write(`${reply}\n`);
+    process.exitCode = 1;
     return;
   }
 
-  throw new Error(`Unknown config command: ${subcommand}`);
+  process.stdout.write(`${reply}\n`);
 };
