@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { runConfigCommand } from "./cli/config.js";
 import { Harness } from "./harness.js";
 import { runRepl } from "./repl.js";
 import { MaclawServer } from "./server.js";
@@ -12,6 +13,7 @@ const cliHelpText = [
   "  repl            Start the local REPL (default)",
   "  server          Start the maclaw server",
   "  setup           Run guided setup",
+  "  config          Show or update project config",
   "  -h, --help      Show this help",
 ].join("\n");
 
@@ -45,6 +47,11 @@ const main = async (): Promise<void> => {
 
   if (command === "setup") {
     await runSetup();
+    return;
+  }
+
+  if (command === "config") {
+    await runConfigCommand(process.argv.slice(3));
     return;
   }
 
