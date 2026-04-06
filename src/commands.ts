@@ -387,12 +387,13 @@ const parseAgentCreateOptions = (
   };
 };
 
-// Parses user input and dispatches it to a project.
-export const dispatchCommand = async (
+type CommandHandler = (
   harness: Harness,
   input: string,
-  options: DispatchOptions = {},
-): Promise<string | null> => {
+  options: DispatchOptions,
+) => Promise<string>;
+
+const handleHelpCommand: CommandHandler = async (_harness, input) => {
   if (input === "/help") {
     return helpText;
   }
@@ -421,6 +422,10 @@ export const dispatchCommand = async (
     return helpText;
   }
 
+  return helpText;
+};
+
+const handleProjectCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/project help") {
     return projectHelpText;
   }
@@ -429,6 +434,50 @@ export const dispatchCommand = async (
     return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
 
+  if (input === "/project init") {
+    if (harness.isProjectInitialized()) {
+      return `project already initialized: ${harness.config.projectConfigFile}`;
+    }
+
+    await harness.initProject();
+    return (
+      `initialized project: ${harness.config.projectConfigFile}\n` +
+      `current chat: ${harness.getCurrentChatId()}\n` +
+      "switched this REPL into persistent project mode"
+    );
+  }
+
+  if (input === "/project wipeout") {
+    if (!harness.isProjectInitialized()) {
+      return "project is not initialized";
+    }
+
+    return (
+      "This will delete the project's .maclaw folder, including chats, tasks, agents, and config.\n" +
+      "Run /project wipeout confirm to continue."
+    );
+  }
+
+  if (input === "/project wipeout confirm") {
+    const wiped = await harness.wipeProject();
+    if (!wiped) {
+      return "project is not initialized";
+    }
+
+    return (
+      "deleted project data: .maclaw\n" +
+      `project is now headless at: ${harness.config.projectFolder}`
+    );
+  }
+
+  if (input.startsWith("/project")) {
+    return projectHelpText;
+  }
+
+  return projectHelpText;
+};
+
+const handleConfigCommand: CommandHandler = async (harness, input) => {
   if (input === "/config help") {
     return configHelpText;
   }
@@ -477,50 +526,10 @@ export const dispatchCommand = async (
     return `${key} = ${String(config[key as keyof typeof config])}`;
   }
 
-  if (input === "/project init") {
-    if (harness.isProjectInitialized()) {
-      return `project already initialized: ${harness.config.projectConfigFile}`;
-    }
+  return configHelpText;
+};
 
-    await harness.initProject();
-    return (
-      `initialized project: ${harness.config.projectConfigFile}\n` +
-      `current chat: ${harness.getCurrentChatId()}\n` +
-      "switched this REPL into persistent project mode"
-    );
-  }
-
-  if (input === "/project wipeout") {
-    if (!harness.isProjectInitialized()) {
-      return "project is not initialized";
-    }
-
-    return (
-      "This will delete the project's .maclaw folder, including chats, tasks, agents, and config.\n" +
-      "Run /project wipeout confirm to continue."
-    );
-  }
-
-  if (input === "/project wipeout confirm") {
-    const wiped = await harness.wipeProject();
-    if (!wiped) {
-      return "project is not initialized";
-    }
-
-    return (
-      "deleted project data: .maclaw\n" +
-      `project is now headless at: ${harness.config.projectFolder}`
-    );
-  }
-
-  if (input.startsWith("/project")) {
-    return projectHelpText;
-  }
-
-  if (input.startsWith("/config")) {
-    return configHelpText;
-  }
-
+const handleChatCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/chat help") {
     return chatHelpText;
   }
@@ -594,6 +603,10 @@ export const dispatchCommand = async (
     return chatHelpText;
   }
 
+  return chatHelpText;
+};
+
+const handleTaskCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/task" || input === "/task help") {
     return taskHelpText;
   }
@@ -638,6 +651,10 @@ export const dispatchCommand = async (
     return taskHelpText;
   }
 
+  return taskHelpText;
+};
+
+const handleAgentCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/agent" || input === "/agent help") {
     return agentHelpText;
   }
@@ -779,6 +796,10 @@ export const dispatchCommand = async (
     return agentHelpText;
   }
 
+  return agentHelpText;
+};
+
+const handleSkillsCommand: CommandHandler = async (harness, input) => {
   if (input === "/skills") {
     const skills = await harness.listSkills();
     return skills.length === 0
@@ -790,6 +811,10 @@ export const dispatchCommand = async (
     return "Usage: /skills";
   }
 
+  return "Usage: /skills";
+};
+
+const handleHistoryCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/history") {
     return harness.getChatTranscript(options.chatId);
   }
@@ -798,9 +823,35 @@ export const dispatchCommand = async (
     return "Usage: /history";
   }
 
-  if (input.startsWith("/")) {
+  return "Usage: /history";
+};
+
+const commandHandlers: Record<string, CommandHandler> = {
+  help: handleHelpCommand,
+  project: handleProjectCommand,
+  config: handleConfigCommand,
+  chat: handleChatCommand,
+  task: handleTaskCommand,
+  agent: handleAgentCommand,
+  skills: handleSkillsCommand,
+  history: handleHistoryCommand,
+};
+
+// Parses user input and dispatches it to a project.
+export const dispatchCommand = async (
+  harness: Harness,
+  input: string,
+  options: DispatchOptions = {},
+): Promise<string | null> => {
+  if (!input.startsWith("/")) {
+    return null;
+  }
+
+  const commandName = input.slice(1).trim().split(/\s+/u, 1)[0] ?? "";
+  const handler = commandHandlers[commandName];
+  if (!handler) {
     return helpText;
   }
 
-  return null;
+  return handler(harness, input, options);
 };
