@@ -54,8 +54,8 @@ const parseConfigValue = (
   value: string,
 ): Partial<ProjectConfig> | string => {
   if (key === "provider") {
-    if (value !== "openai" && value !== "local") {
-      return "provider must be 'openai' or 'local'";
+    if (value !== "openai" && value !== "dummy") {
+      return "provider must be 'openai' or 'dummy'";
     }
 
     return { provider: value };

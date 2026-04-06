@@ -10,7 +10,7 @@ import {
   readJsonLines,
   writeJsonFile,
 } from "./fs-utils.js";
-import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
+import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
 import type {
@@ -73,7 +73,7 @@ const createProvider = (config: ProjectConfig): Provider => {
     return new OpenAIResponsesProvider(config.openAiApiKey, config.model);
   }
 
-  return new LocalFallbackProvider();
+  return new DummyProvider();
 };
 
 const chatPath = (chatsDir: string, chatId: string): string => {

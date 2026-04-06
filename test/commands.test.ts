@@ -151,7 +151,7 @@ test("dispatchCommand lists local skills", async () => {
   try {
     await initProjectConfig(projectDir, {
       name: "skills-project",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
     await mkdir(path.join(projectDir, ".maclaw", "skills"), { recursive: true });
@@ -242,7 +242,7 @@ test("dispatchCommand requires confirmation before wiping project data", async (
   try {
     await initProjectConfig(projectDir, {
       name: "wipeout-project",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
     const harness = Harness.load(projectDir);

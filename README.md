@@ -198,7 +198,7 @@ Environment variables:
 Providers provide your AI model. You can configure both these variables.
 
 - `openai`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
-- `local`: uses the built-in fallback provider for local testing without live model calls
+- `dummy`: uses the built-in stand-in provider for local testing without live model calls
 
 ## Connectors
 

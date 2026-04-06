@@ -45,14 +45,14 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
 
     const upgraded = await harness.initProject({
       name: "test-project",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
 
     assert.equal(upgraded, harness);
     assert.equal(harness.isProjectInitialized(), true);
     assert.equal(harness.config.name, "test-project");
-    assert.equal(harness.config.provider, "local");
+    assert.equal(harness.config.provider, "dummy");
     assert.equal(harness.config.model, "test-model");
 
     const transcript = await harness.getCurrentChatTranscript();
@@ -188,7 +188,7 @@ test("wipeProject deletes .maclaw and returns the harness to headless mode", asy
     const harness = Harness.load(projectDir);
     await harness.initProject({
       name: "wipe-me",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
     await harness.prompt("remember this");
@@ -351,7 +351,7 @@ test("harness suppresses notifications when project notifications are none", asy
     const harness = Harness.load(projectDir);
     await harness.initProject({
       name: "quiet-project",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
       notifications: "none",
     });
@@ -394,7 +394,7 @@ test("harness applies notification allow and deny selectors", async () => {
     const harness = Harness.load(projectDir);
     await harness.initProject({
       name: "selective-project",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
       notifications: {
         allow: ["agent:*", "task:*"],

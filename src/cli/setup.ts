@@ -230,7 +230,7 @@ const runProviderSetup = async (
   }
 
   if (providerChoice === "dummy") {
-    projectConfig.provider = "local";
+    projectConfig.provider = "dummy";
     projectConfig.model = await prompt.askLine("Model?", "dummy-model");
   }
 };

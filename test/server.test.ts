@@ -17,12 +17,12 @@ test("server handles project commands and routes chat messages by active project
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
     await initProjectConfig(workDir, {
       name: "work",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
 
@@ -125,12 +125,12 @@ test("server prompts the user to choose a project when none is selected", async 
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
     await initProjectConfig(workDir, {
       name: "work",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
 
@@ -188,7 +188,7 @@ test("server passes channel origin through to created agents", async () => {
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "local",
+      provider: "dummy",
       model: "test-model",
     });
 

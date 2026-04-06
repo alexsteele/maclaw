@@ -18,7 +18,7 @@ const createHarness = async (): Promise<{
   const config: ProjectConfig = {
     name: path.basename(projectDir),
     createdAt: undefined,
-    provider: "local",
+    provider: "dummy",
     model: "gpt-4.1-mini",
     storage: "json",
     notifications: "all",

@@ -20,7 +20,7 @@ export const defaultAgentsFile = (projectFolder: string): string =>
 export type ProjectConfig = {
   name: string;
   createdAt?: string;
-  provider: "local" | "openai";
+  provider: "dummy" | "openai";
   model: string;
   storage: "json" | "none";
   notifications: NotificationPolicy;
@@ -105,7 +105,7 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   return {
     createdAt: projectFileConfig.createdAt,
     name: projectFileConfig.name ?? path.basename(projectFolder),
-    provider: providerValue === "local" ? "local" : "openai",
+    provider: providerValue === "dummy" ? "dummy" : "openai",
     model:
       process.env.MACLAW_MODEL ??
       process.env.OPENAI_MODEL ??

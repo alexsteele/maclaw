@@ -15,7 +15,7 @@ export const useDummyProviderEnv = (): void => {
       originalEnv.set(key, process.env[key]);
     }
 
-    process.env.MACLAW_PROVIDER = "local";
+    process.env.MACLAW_PROVIDER = "dummy";
     delete process.env.MACLAW_MODEL;
     delete process.env.OPENAI_MODEL;
     delete process.env.OPENAI_API_KEY;

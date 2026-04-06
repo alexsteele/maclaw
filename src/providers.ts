@@ -89,10 +89,10 @@ export interface Provider {
   generate(request: ProviderRequest): Promise<ProviderResult>;
 }
 
-export class LocalFallbackProvider implements Provider {
+export class DummyProvider implements Provider {
   async generate(request: ProviderRequest): Promise<ProviderResult> {
     return {
-      model: "local-fallback",
+      model: "dummy",
       outputText: [
         "No OpenAI API key is configured yet.",
         "",
