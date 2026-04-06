@@ -65,6 +65,7 @@ export const agentHelpText = [
   "  /agent",
   "  /agent list",
   "  /agent create <name> | <prompt> [| <json options>]",
+  "  /agent chat <name>",
   "  /agent show <name>",
   "  /agent pause <name>",
   "  /agent resume <name>",
@@ -688,6 +689,26 @@ export const dispatchCommand = async (
 
     const agent = harness.findAgent(agentRef);
     return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
+  }
+
+  if (input.startsWith("/agent chat ")) {
+    if (options.chatId) {
+      return "/agent chat is not supported in this channel yet.";
+    }
+
+    const agentRef = input.slice("/agent chat ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent chat <name>";
+    }
+
+    const agent = harness.findAgent(agentRef);
+    if (!agent) {
+      return `agent not found: ${agentRef}`;
+    }
+
+    harness.pauseAgent(agentRef);
+    await harness.switchChat(agent.chatId);
+    return `paused agent: ${agent.name}\nswitched to chat: ${agent.chatId}`;
   }
 
   if (input.startsWith("/agent stop ")) {

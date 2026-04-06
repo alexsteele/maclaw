@@ -315,6 +315,30 @@ test("dispatchCommand can steer, pause, resume, and stop an agent", async () => 
   }
 });
 
+test("dispatchCommand can pause an agent and switch into its chat", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-chat-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = harness.createAgent({
+      name: "research-agent",
+      prompt: "Research this",
+    });
+    assert.ok(created.agent);
+
+    const reply = await dispatchCommand(harness, "/agent chat research-agent");
+
+    assert.equal(
+      reply,
+      `paused agent: research-agent\nswitched to chat: ${created.agent.chatId}`,
+    );
+    assert.equal(harness.getCurrentChatId(), created.agent.chatId);
+    assert.equal(harness.getAgent(created.agent.id)?.status, "paused");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand rejects duplicate live agent names", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-duplicate-"));
 
