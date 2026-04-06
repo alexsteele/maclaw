@@ -94,9 +94,9 @@ export class DummyProvider implements Provider {
     return {
       model: "dummy",
       outputText: [
-        "No OpenAI API key is configured yet.",
+        "No model provider configured.",
         "",
-        "The harness is still working locally. Try asking it to list skills or tasks once a model is configured.",
+        "maclaw is still working locally. Try configuring a model or run /help.",
         "",
         `You said: ${request.userInput}`,
       ].join("\n"),
