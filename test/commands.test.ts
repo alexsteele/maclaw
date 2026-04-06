@@ -77,6 +77,26 @@ test("dispatchCommand renders chat list output", async () => {
   }
 });
 
+test("dispatchCommand shows current and named chat info", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-show-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
+
+    const currentReply = await dispatchCommand(harness, "/chat show");
+    const namedReply = await dispatchCommand(harness, "/chat show branch-a");
+
+    assert.match(currentReply ?? "", /^id: default$/mu);
+    assert.match(currentReply ?? "", /^messageCount: 2$/mu);
+    assert.match(namedReply ?? "", /^id: branch-a$/mu);
+    assert.match(namedReply ?? "", /^messageCount: 2$/mu);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand deletes a non-active chat", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-rm-"));
 

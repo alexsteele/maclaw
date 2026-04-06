@@ -43,6 +43,7 @@ export const configHelpText = [
 export const chatHelpText = [
   "Command: /chat",
   "  /chat              Show the current chat id",
+  "  /chat show [X]     Show the current or named chat",
   "  /chat list         List saved chats",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
@@ -337,6 +338,17 @@ const renderChatList = (
   return [header, separator, ...lines].join("\n");
 };
 
+const renderChatInfo = (chat: Awaited<ReturnType<Harness["loadChat"]>>): string =>
+  [
+    `id: ${chat.id}`,
+    `createdAt: ${chat.createdAt}`,
+    `updatedAt: ${chat.updatedAt}`,
+    `messageCount: ${chat.messages.length}`,
+    `retentionDays: ${chat.retentionDays}`,
+    `compressionMode: ${chat.compressionMode}`,
+    `summary: ${chat.summary ?? "(none)"}`,
+  ].join("\n");
+
 const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
   options?.chatId ?? harness.getCurrentChatId();
 
@@ -483,6 +495,19 @@ export const dispatchCommand = async (
 
   if (input === "/chat") {
     return getScopedChatId(harness, options);
+  }
+
+  if (input === "/chat show") {
+    return renderChatInfo(await harness.loadChat(getScopedChatId(harness, options)));
+  }
+
+  if (input.startsWith("/chat show ")) {
+    const requestedId = parseChatId(input.slice("/chat show ".length));
+    if (!requestedId) {
+      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+    }
+
+    return renderChatInfo(await harness.loadChat(requestedId));
   }
 
   if (input === "/chat list") {
