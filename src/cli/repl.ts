@@ -174,7 +174,7 @@ class Repl {
       return false;
     }
 
-    const reply = await this.harness.handleUserInputDetailed(line);
+    const reply = await this.harness.promptDetailed(line);
     const verboseFooter = this.verbose ? this.formatVerboseFooter(reply.providerResult) : null;
     this.writeLine(verboseFooter ? `${reply.message.content}\n${verboseFooter}` : reply.message.content);
     return false;

@@ -186,7 +186,7 @@ export class MaclawServer {
       return commandReply;
     }
 
-    const reply = await harness.handleUserInputForChat(message.userId, message.text, {
+    const reply = await harness.promptChat(message.userId, message.text, {
       origin,
     });
     return reply.content;

@@ -15,7 +15,7 @@ test("dispatchCommand handles history for an explicit chat id", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    await harness.handleUserInputForChat("whatsapp-15551234567", "remember this");
+    await harness.promptChat("whatsapp-15551234567", "remember this");
 
     const reply = await dispatchCommand(harness, "/history", {
       chatId: "whatsapp-15551234567",
@@ -63,8 +63,8 @@ test("dispatchCommand renders chat list output", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    await harness.handleUserInput("hello from default");
-    await harness.handleUserInputForChat("branch-a", "hello from branch");
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
 
     const reply = await dispatchCommand(harness, "/chat list");
 
@@ -82,8 +82,8 @@ test("dispatchCommand deletes a non-active chat", async () => {
 
   try {
     const harness = Harness.load(projectDir);
-    await harness.handleUserInput("hello from default");
-    await harness.handleUserInputForChat("branch-a", "hello from branch");
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
     await harness.createTask({
       chatId: "branch-a",
       title: "Branch Task",

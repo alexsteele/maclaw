@@ -305,30 +305,30 @@ export class ChatRuntime {
     return this.activeChat;
   }
 
-  async handleUserInput(userInput: string, _context?: MessageContext): Promise<Message> {
+  async prompt(userInput: string, _context?: MessageContext): Promise<Message> {
     const chat = await this.loadActiveChat();
-    const reply = await this.handleUserInputForChatDetailed(chat.id, userInput);
+    const reply = await this.promptChatDetailed(chat.id, userInput);
     return reply.message;
   }
 
-  async handleUserInputForChat(
+  async promptChat(
     chatId: string,
     userInput: string,
     _context?: MessageContext,
   ): Promise<Message> {
-    const reply = await this.handleUserInputForChatDetailed(chatId, userInput);
+    const reply = await this.promptChatDetailed(chatId, userInput);
     return reply.message;
   }
 
-  async handleUserInputDetailed(
+  async promptDetailed(
     userInput: string,
     _context?: MessageContext,
   ): Promise<ChatReply> {
     const chat = await this.loadActiveChat();
-    return this.handleUserInputForChatDetailed(chat.id, userInput);
+    return this.promptChatDetailed(chat.id, userInput);
   }
 
-  async handleUserInputForChatDetailed(
+  async promptChatDetailed(
     chatId: string,
     userInput: string,
   ): Promise<ChatReply> {

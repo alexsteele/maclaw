@@ -344,20 +344,20 @@ export class Harness {
     return this._chatStore.deleteChat(chatId);
   }
 
-  async handleUserInput(userInput: string, context?: MessageContext): Promise<Message> {
-    return this._chatRuntime.handleUserInput(userInput, context);
+  async prompt(userInput: string, context?: MessageContext): Promise<Message> {
+    return this._chatRuntime.prompt(userInput, context);
   }
 
-  async handleUserInputDetailed(userInput: string, context?: MessageContext): Promise<ChatReply> {
-    return this._chatRuntime.handleUserInputDetailed(userInput, context);
+  async promptDetailed(userInput: string, context?: MessageContext): Promise<ChatReply> {
+    return this._chatRuntime.promptDetailed(userInput, context);
   }
 
-  async handleUserInputForChat(
+  async promptChat(
     chatId: string,
     userInput: string,
     context?: MessageContext,
   ): Promise<Message> {
-    return this._chatRuntime.handleUserInputForChat(chatId, userInput, context);
+    return this._chatRuntime.promptChat(chatId, userInput, context);
   }
 
   async handleScheduledTask(
@@ -409,7 +409,7 @@ export class Harness {
     const agent = new Agent(
       record,
       this._agentStore,
-      this.handleUserInputForChat.bind(this),
+      this.promptChat.bind(this),
       () => {
         this._runningAgents.delete(record.id);
         const latest = this._agentStore.getAgent(record.id);

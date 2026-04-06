@@ -40,6 +40,7 @@ Alex, your dedicated human-in-the-loop
 - **Provider**: the LLM backend maclaw uses, such as OpenAI or a local fallback provider
 - **Task**: a scheduled job that re-enters the harness later, either once or on
   a recurring schedule
+- **Notification**: Sent to the user over a channel by an agent, task, or other event.
 
 ## Setup
 

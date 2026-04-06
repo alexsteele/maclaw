@@ -36,7 +36,7 @@ test("initProject upgrades a headless harness and preserves chats and tasks", as
   try {
     const harness = Harness.load(projectDir);
 
-    await harness.handleUserInput("remember this");
+    await harness.prompt("remember this");
     await harness.createTask({
       title: "Follow up",
       prompt: "Check back later",
@@ -191,7 +191,7 @@ test("wipeProject deletes .maclaw and returns the harness to headless mode", asy
       provider: "local",
       model: "test-model",
     });
-    await harness.handleUserInput("remember this");
+    await harness.prompt("remember this");
     await harness.createTask({
       title: "Follow up",
       prompt: "Check back later",
@@ -229,7 +229,7 @@ test("harness emits a notification when an origin-backed agent fails", async () 
       },
     );
 
-    harness.handleUserInputForChat = async () => {
+    harness.promptChat = async () => {
       throw new Error("boom");
     };
 
