@@ -37,7 +37,7 @@ Alex, your dedicated human-in-the-loop
 - **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
 - **Tool**: a callable capability the harness can use, such as editing files,
   calling APIs, etc.
-- **Provider**: the LLM backend maclaw uses, such as OpenAI or a local fallback provider
+- **Provider**: the LLM backend maclaw uses, such as OpenAI or the built-in dummy provider
 - **Task**: a scheduled job that re-enters the harness later, either once or on
   a recurring schedule
 - **Notification**: Sent to the user over a channel by an agent, task, or other event.
@@ -153,6 +153,7 @@ my-project/
       daily_summary.md
     chats/
       default.json
+      default.jsonl
     tasks.json
     task-runs.jsonl
 ```
@@ -163,9 +164,10 @@ my-project/
 {
   "createdAt": "2026-04-04T10:00:00.000Z",
   "name": "my-project",
-  "retentionDays": 30,
   "provider": "openai",
   "model": "gpt-4.1-mini",
+  "contextMessages": 20,
+  "retentionDays": 30,
   "skillsDir": ".maclaw/skills"
 }
 ```
@@ -189,6 +191,7 @@ Environment variables:
 - `MACLAW_DATA_DIR`: overrides the default `projectFolder/.maclaw`
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_CHAT_ID`: defaults to `default`
+- `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
 - `MACLAW_RETENTION_DAYS`: defaults to `30`
 - `MACLAW_COMPRESSION_MODE`: `none` or `planned`
 - `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`

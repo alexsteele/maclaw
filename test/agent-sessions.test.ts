@@ -22,6 +22,7 @@ const createHarness = async (): Promise<{
     model: "gpt-4.1-mini",
     storage: "json",
     notifications: "all",
+    contextMessages: 20,
     retentionDays: 30,
     skillsDir: path.join(projectDir, ".maclaw", "skills"),
     compressionMode: "none",
@@ -63,5 +64,67 @@ test("agent can fork and switch chats", async () => {
     assert.equal(switched.messages.length, 0);
   } finally {
     await cleanup();
+  }
+});
+
+test("ChatRuntime only sends the most recent contextMessages to the provider", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-context-"));
+  const tasksFile = defaultTasksFile(projectDir);
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
+
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as { input?: Array<Record<string, unknown>> });
+      return {
+        ok: true,
+        json: async () => ({ output_text: "ok" }),
+      } as Response;
+    }) as typeof fetch;
+
+    const config: ProjectConfig = {
+      name: path.basename(projectDir),
+      createdAt: undefined,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      storage: "json",
+      notifications: "all",
+      contextMessages: 2,
+      retentionDays: 30,
+      skillsDir: path.join(projectDir, ".maclaw", "skills"),
+      compressionMode: "none",
+      schedulerPollMs: 1_000,
+      projectFolder: projectDir,
+      projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+      chatId: "default",
+      chatsDir: path.join(projectDir, ".maclaw", "chats"),
+      openAiApiKey: "test-key",
+    };
+
+    const chatStore = new JsonFileChatStore(config.chatsDir);
+    const scheduler = new TaskScheduler(new JsonFileTaskStore(tasksFile));
+    const runtime = new ChatRuntime(config, scheduler, chatStore);
+    const chat = await runtime.loadActiveChat();
+    appendMessage(chat, "user", "one");
+    appendMessage(chat, "assistant", "two");
+    appendMessage(chat, "user", "three");
+    appendMessage(chat, "assistant", "four");
+    await chatStore.saveChat(chat);
+
+    await runtime.prompt("five");
+
+    assert.equal(requestBodies.length, 1);
+    const input = requestBodies[0]?.input ?? [];
+    assert.equal(input.length, 3);
+    assert.deepEqual(
+      input.slice(1).map((item) => {
+        const content = item.content as Array<{ text?: string }>;
+        return content[0]?.text;
+      }),
+      ["four", "five"],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(projectDir, { recursive: true, force: true });
   }
 });

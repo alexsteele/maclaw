@@ -24,6 +24,7 @@ export type ProjectConfig = {
   model: string;
   storage: "json" | "none";
   notifications: NotificationPolicy;
+  contextMessages: number;
   retentionDays: number;
   skillsDir: string;
   compressionMode: "none" | "planned";
@@ -74,6 +75,7 @@ export const initProjectConfig = async (
     model: mergedConfig.model ?? "gpt-4.1-mini",
     storage: mergedConfig.storage ?? "json",
     notifications: normalizeNotifications(mergedConfig.notifications),
+    contextMessages: mergedConfig.contextMessages ?? 20,
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
     compressionMode: mergedConfig.compressionMode ?? "none",
     schedulerPollMs: mergedConfig.schedulerPollMs ?? 15_000,
@@ -113,6 +115,10 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
       "gpt-4.1-mini",
     storage: storageValue === "json" ? "json" : "none",
     notifications: normalizeNotifications(projectFileConfig.notifications),
+    contextMessages: toPositiveInt(
+      process.env.MACLAW_CONTEXT_MESSAGES,
+      projectFileConfig.contextMessages ?? 20,
+    ),
     retentionDays: toPositiveInt(
       process.env.MACLAW_RETENTION_DAYS,
       projectFileConfig.retentionDays ?? 30,

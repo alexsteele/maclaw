@@ -149,6 +149,7 @@ export const createTools = (
             provider: config.provider,
             storage: config.storage,
             notifications: config.notifications,
+            contextMessages: config.contextMessages,
             chatId,
             skillsDir: config.skillsDir,
             retentionDays: config.retentionDays,

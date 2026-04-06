@@ -76,6 +76,13 @@ const createProvider = (config: ProjectConfig): Provider => {
   return new DummyProvider();
 };
 
+const buildPromptChat = (chat: ChatRecord, contextMessages: number): ChatRecord => {
+  return {
+    ...chat,
+    messages: chat.messages.slice(-contextMessages),
+  };
+};
+
 const chatPath = (chatsDir: string, chatId: string): string => {
   return path.join(chatsDir, `${chatId}.json`);
 };
@@ -404,8 +411,9 @@ export class ChatRuntime {
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
       const tools = createTools(this.config, this.scheduler, chat.id);
+      const promptChat = buildPromptChat(chat, this.config.contextMessages);
       providerResult = await this.provider.generate({
-        chat,
+        chat: promptChat,
         userInput,
         systemPrompt,
         tools,
@@ -443,8 +451,9 @@ export class ChatRuntime {
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
       const tools = createTools(this.config, this.scheduler, chat.id);
+      const promptChat = buildPromptChat(chat, this.config.contextMessages);
       const result = await this.provider.generate({
-        chat,
+        chat: promptChat,
         userInput: prompt,
         systemPrompt,
         tools,

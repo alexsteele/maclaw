@@ -71,3 +71,33 @@ test("runConfigCommand updates notifications from JSON", async () => {
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("runConfigCommand updates contextMessages", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-context-"));
+  const previousCwd = process.cwd();
+  const stdoutWrites: string[] = [];
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+
+  try {
+    await initProjectConfig(projectDir, { model: "gpt-4.1-mini" });
+    process.chdir(projectDir);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutWrites.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      return true;
+    }) as typeof process.stdout.write;
+
+    await runConfigCommand(["set", "contextMessages", "12"]);
+
+    const projectConfigPath = path.join(projectDir, ".maclaw", "maclaw.json");
+    const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
+      contextMessages: number;
+    };
+
+    assert.equal(projectConfig.contextMessages, 12);
+    assert.match(stdoutWrites.join(""), /contextMessages = 12/);
+  } finally {
+    process.chdir(previousCwd);
+    process.stdout.write = originalStdoutWrite;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
