@@ -1,8 +1,15 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { readdir, rm } from "node:fs/promises";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import type { ProjectConfig } from "./config.js";
-import { ensureDir, makeId, readJsonFile, writeJsonFile } from "./fs-utils.js";
+import {
+  appendJsonLine,
+  ensureDir,
+  makeId,
+  readJsonFile,
+  readJsonLines,
+  writeJsonFile,
+} from "./fs-utils.js";
 import { OpenAIResponsesProvider, LocalFallbackProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
 import { createTools } from "./tools.js";
@@ -73,6 +80,14 @@ const chatPath = (chatsDir: string, chatId: string): string => {
   return path.join(chatsDir, `${chatId}.json`);
 };
 
+const chatTranscriptPath = (chatsDir: string, chatId: string): string => {
+  return path.join(chatsDir, `${chatId}.jsonl`);
+};
+
+type ChatMetadata = Omit<ChatRecord, "messages"> & {
+  messageCount: number;
+};
+
 const createEmptyChat = (
   chatId: string,
   options: ChatLoadOptions,
@@ -87,6 +102,16 @@ const createEmptyChat = (
     messages: [],
   };
 };
+
+const toChatMetadata = (chat: ChatRecord): ChatMetadata => ({
+  id: chat.id,
+  createdAt: chat.createdAt,
+  updatedAt: chat.updatedAt,
+  retentionDays: chat.retentionDays,
+  compressionMode: chat.compressionMode,
+  summary: chat.summary,
+  messageCount: chat.messages.length,
+});
 
 const normalizeChat = (
   chat: ChatRecord,
@@ -116,27 +141,54 @@ export class JsonFileChatStore implements ChatStore {
     options: ChatLoadOptions,
   ): Promise<ChatRecord> {
     await ensureDir(this.chatsDir);
-
-    const chat = await readJsonFile<ChatRecord>(
+    const metadata = await readJsonFile<ChatMetadata | null>(
       chatPath(this.chatsDir, chatId),
-      createEmptyChat(chatId, options),
+      null,
     );
+    if (!metadata) {
+      return createEmptyChat(chatId, options);
+    }
 
-    return normalizeChat(chat, options);
+    const messages = await readJsonLines<Message>(chatTranscriptPath(this.chatsDir, chatId));
+    return normalizeChat(
+      {
+        ...metadata,
+        messages,
+      },
+      options,
+    );
   }
 
   async saveChat(chat: ChatRecord): Promise<void> {
     chat.updatedAt = new Date().toISOString();
-    await writeJsonFile(chatPath(this.chatsDir, chat.id), chat);
+    await ensureDir(this.chatsDir);
+
+    const metadataPath = chatPath(this.chatsDir, chat.id);
+    const transcriptPath = chatTranscriptPath(this.chatsDir, chat.id);
+    const existingMetadata = await readJsonFile<ChatMetadata | null>(metadataPath, null);
+    const existingMessageCount = existingMetadata?.messageCount ?? 0;
+
+    if (existingMessageCount > chat.messages.length) {
+      const transcript = chat.messages.map((message) => JSON.stringify(message)).join("\n");
+      await writeFile(transcriptPath, transcript.length > 0 ? `${transcript}\n` : "", "utf8");
+    } else {
+      for (const message of chat.messages.slice(existingMessageCount)) {
+        await appendJsonLine(transcriptPath, message);
+      }
+    }
+
+    await writeJsonFile(metadataPath, toChatMetadata(chat));
   }
 
   async deleteChat(chatId: string): Promise<boolean> {
-    const filePath = chatPath(this.chatsDir, chatId);
-    if (!existsSync(filePath)) {
+    const metadataPath = chatPath(this.chatsDir, chatId);
+    const transcriptPath = chatTranscriptPath(this.chatsDir, chatId);
+    if (!existsSync(metadataPath) && !existsSync(transcriptPath)) {
       return false;
     }
 
-    await rm(filePath, { force: true });
+    await rm(metadataPath, { force: true });
+    await rm(transcriptPath, { force: true });
     return true;
   }
 
@@ -151,12 +203,17 @@ export class JsonFileChatStore implements ChatStore {
       }
 
       const fullPath = path.join(this.chatsDir, entry.name);
-      const chat = await readJsonFile<ChatRecord | null>(fullPath, null);
-      if (!chat) {
+      const metadata = await readJsonFile<ChatMetadata | null>(fullPath, null);
+      if (!metadata) {
         continue;
       }
 
-      chats.push(toChatSummary(chat));
+      chats.push({
+        id: metadata.id,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+        messageCount: metadata.messageCount,
+      });
     }
 
     return chats.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -174,14 +231,18 @@ export class JsonFileChatStore implements ChatStore {
       }
 
       const fullPath = path.join(this.chatsDir, entry.name);
-      const chat = await readJsonFile<ChatRecord | null>(fullPath, null);
-      if (!chat) {
+      const metadata = await readJsonFile<ChatMetadata | null>(fullPath, null);
+      if (!metadata) {
         continue;
       }
 
-      const updatedAt = Date.parse(chat.updatedAt);
+      const updatedAt = Date.parse(metadata.updatedAt);
       if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
         await rm(fullPath, { force: true });
+        await rm(
+          chatTranscriptPath(this.chatsDir, entry.name.replace(/\.json$/u, "")),
+          { force: true },
+        );
         removed += 1;
       }
     }

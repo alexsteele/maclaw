@@ -29,6 +29,23 @@ export const appendJsonLine = async (filePath: string, value: unknown): Promise<
   await appendFile(filePath, `${JSON.stringify(value)}\n`, "utf8");
 };
 
+export const readJsonLines = async <T>(filePath: string): Promise<T[]> => {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as T);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
 export const makeId = (prefix: string): string => {
   const randomPart = Math.random().toString(36).slice(2, 10);
   return `${prefix}_${Date.now()}_${randomPart}`;

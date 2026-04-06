@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -39,7 +40,7 @@ test("loadChat creates a new chat with the requested options", async () => {
 });
 
 test("saveChat persists messages and loadChat reapplies current options", async () => {
-  const { cleanup, store } = await createStore();
+  const { cleanup, dir, store } = await createStore();
 
   try {
     const chat = await store.loadChat("beta", {
@@ -59,6 +60,16 @@ test("saveChat persists messages and loadChat reapplies current options", async 
     assert.equal(reloaded.messages[0]?.content, "hello");
     assert.equal(reloaded.retentionDays, 7);
     assert.equal(reloaded.compressionMode, "planned");
+
+    const metadataRaw = await readFile(path.join(dir, "beta.json"), "utf8");
+    const metadata = JSON.parse(metadataRaw) as { id: string; messageCount: number };
+    assert.equal(metadata.id, "beta");
+    assert.equal(metadata.messageCount, 1);
+
+    const transcriptRaw = await readFile(path.join(dir, "beta.jsonl"), "utf8");
+    const transcriptLines = transcriptRaw.trim().split("\n").map((line) => JSON.parse(line) as { content: string });
+    assert.equal(transcriptLines.length, 1);
+    assert.equal(transcriptLines[0]?.content, "hello");
   } finally {
     await cleanup();
   }
@@ -159,7 +170,7 @@ test("MemoryChatStore keeps chats in memory without filesystem backing", async (
 });
 
 test("deleteChat removes a saved chat from the JSON store", async () => {
-  const { cleanup, store } = await createStore();
+  const { cleanup, dir, store } = await createStore();
 
   try {
     const chat = await store.loadChat("alpha", {
@@ -174,6 +185,8 @@ test("deleteChat removes a saved chat from the JSON store", async () => {
 
     assert.equal(deleted, true);
     assert.equal(chats.length, 0);
+    assert.equal(existsSync(path.join(dir, "alpha.json")), false);
+    assert.equal(existsSync(path.join(dir, "alpha.jsonl")), false);
   } finally {
     await cleanup();
   }
