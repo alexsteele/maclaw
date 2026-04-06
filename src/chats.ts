@@ -12,7 +12,7 @@ import {
 } from "./fs-utils.js";
 import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
-import { createTools } from "./tools.js";
+import { createTools } from "./tools/index.js";
 import type {
   ChatRecord,
   ChatSummary,
@@ -423,7 +423,7 @@ export class ChatRuntime {
     let providerResult: ProviderResult | undefined;
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config, this.scheduler, chat.id);
+      const tools = createTools(this.config);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       providerResult = await this.provider.generate({
         chat: promptChat,
@@ -463,7 +463,7 @@ export class ChatRuntime {
     let assistantMessage: Message;
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
-      const tools = createTools(this.config, this.scheduler, chat.id);
+      const tools = createTools(this.config);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       const result = await this.provider.generate({
         chat: promptChat,
