@@ -150,6 +150,7 @@ export const createTools = (
             storage: config.storage,
             notifications: config.notifications,
             contextMessages: config.contextMessages,
+            maxToolIterations: config.maxToolIterations,
             chatId,
             skillsDir: config.skillsDir,
             retentionDays: config.retentionDays,

@@ -16,6 +16,7 @@ const configHelpText = [
   "  storage",
   "  notifications",
   "  contextMessages",
+  "  maxToolIterations",
   "  retentionDays",
   "  skillsDir",
   "  compressionMode",
@@ -29,6 +30,7 @@ const editableKeys = new Set([
   "storage",
   "notifications",
   "contextMessages",
+  "maxToolIterations",
   "retentionDays",
   "skillsDir",
   "compressionMode",
@@ -45,6 +47,7 @@ const renderConfig = (config: ProjectConfig): string =>
     `storage: ${config.storage}`,
     `notifications: ${JSON.stringify(config.notifications)}`,
     `contextMessages: ${config.contextMessages}`,
+    `maxToolIterations: ${config.maxToolIterations}`,
     `retentionDays: ${config.retentionDays}`,
     `skillsDir: ${config.skillsDir}`,
     `compressionMode: ${config.compressionMode}`,
@@ -92,7 +95,12 @@ const parseConfigValue = (
     }
   }
 
-  if (key === "contextMessages" || key === "retentionDays" || key === "schedulerPollMs") {
+  if (
+    key === "contextMessages" ||
+    key === "maxToolIterations" ||
+    key === "retentionDays" ||
+    key === "schedulerPollMs"
+  ) {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       return `${key} must be a positive integer`;
@@ -100,6 +108,10 @@ const parseConfigValue = (
 
     if (key === "contextMessages") {
       return { contextMessages: parsed };
+    }
+
+    if (key === "maxToolIterations") {
+      return { maxToolIterations: parsed };
     }
 
     return key === "retentionDays" ? { retentionDays: parsed } : { schedulerPollMs: parsed };

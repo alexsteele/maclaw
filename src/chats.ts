@@ -70,7 +70,11 @@ const buildSystemPrompt = async (
 
 const createProvider = (config: ProjectConfig): Provider => {
   if (config.provider === "openai" && config.openAiApiKey) {
-    return new OpenAIResponsesProvider(config.openAiApiKey, config.model);
+    return new OpenAIResponsesProvider(
+      config.openAiApiKey,
+      config.model,
+      config.maxToolIterations,
+    );
   }
 
   return new DummyProvider();

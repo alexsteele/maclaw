@@ -72,8 +72,8 @@ test("runConfigCommand updates notifications from JSON", async () => {
   }
 });
 
-test("runConfigCommand updates contextMessages", async () => {
-  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-context-"));
+test("runConfigCommand updates scalar runtime settings", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-runtime-"));
   const previousCwd = process.cwd();
   const stdoutWrites: string[] = [];
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -87,14 +87,18 @@ test("runConfigCommand updates contextMessages", async () => {
     }) as typeof process.stdout.write;
 
     await runConfigCommand(["set", "contextMessages", "12"]);
+    await runConfigCommand(["set", "maxToolIterations", "5"]);
 
     const projectConfigPath = path.join(projectDir, ".maclaw", "maclaw.json");
     const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
       contextMessages: number;
+      maxToolIterations: number;
     };
 
     assert.equal(projectConfig.contextMessages, 12);
+    assert.equal(projectConfig.maxToolIterations, 5);
     assert.match(stdoutWrites.join(""), /contextMessages = 12/);
+    assert.match(stdoutWrites.join(""), /maxToolIterations = 5/);
   } finally {
     process.chdir(previousCwd);
     process.stdout.write = originalStdoutWrite;

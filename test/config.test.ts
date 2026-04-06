@@ -49,6 +49,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.storage, "json");
     assert.equal(config.notifications, "all");
     assert.equal(config.contextMessages, 20);
+    assert.equal(config.maxToolIterations, 8);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -66,6 +67,7 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
     assert.equal(config.storage, "none");
     assert.equal(config.notifications, "all");
     assert.equal(config.contextMessages, 20);
+    assert.equal(config.maxToolIterations, 8);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -132,6 +134,7 @@ test("initProjectConfig creates a new project config with createdAt", async () =
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.contextMessages, 20);
+    assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -167,6 +170,7 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.contextMessages, 20);
+    assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -191,13 +195,14 @@ test("initProjectConfig merges overrides into the saved project config", async (
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.contextMessages, 20);
+    assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
 });
 
-test("loadConfig reads storage from project config", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-storage-"));
+test("loadConfig reads advanced project config fields", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-advanced-"));
 
   try {
     await mkdir(path.join(rootDir, ".maclaw"), { recursive: true });
@@ -205,63 +210,12 @@ test("loadConfig reads storage from project config", async () => {
       path.join(rootDir, ".maclaw", "maclaw.json"),
       `${JSON.stringify(
         {
-          name: "storage-project",
-          provider: "dummy",
-          model: "test-model",
+          name: "advanced-project",
           storage: "json",
-        },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-
-    const config = loadConfig(rootDir);
-    assert.equal(config.storage, "json");
-  } finally {
-    await rm(rootDir, { recursive: true, force: true });
-  }
-});
-
-test("loadConfig reads contextMessages from project config", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-context-messages-"));
-
-  try {
-    await mkdir(path.join(rootDir, ".maclaw"), { recursive: true });
-    await writeFile(
-      path.join(rootDir, ".maclaw", "maclaw.json"),
-      `${JSON.stringify(
-        {
-          name: "context-project",
           provider: "dummy",
           model: "test-model",
           contextMessages: 12,
-        },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-
-    const config = loadConfig(rootDir);
-    assert.equal(config.contextMessages, 12);
-  } finally {
-    await rm(rootDir, { recursive: true, force: true });
-  }
-});
-
-test("loadConfig reads notifications from project config", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-notifications-"));
-
-  try {
-    await mkdir(path.join(rootDir, ".maclaw"), { recursive: true });
-    await writeFile(
-      path.join(rootDir, ".maclaw", "maclaw.json"),
-      `${JSON.stringify(
-        {
-          name: "notify-project",
-          provider: "dummy",
-          model: "test-model",
+          maxToolIterations: 5,
           notifications: {
             allow: ["agent:*", "task:*"],
             deny: ["taskCompleted"],
@@ -274,6 +228,9 @@ test("loadConfig reads notifications from project config", async () => {
     );
 
     const config = loadConfig(rootDir);
+    assert.equal(config.storage, "json");
+    assert.equal(config.contextMessages, 12);
+    assert.equal(config.maxToolIterations, 5);
     assert.deepEqual(config.notifications, {
       allow: ["agent:*", "task:*"],
       deny: ["taskCompleted"],

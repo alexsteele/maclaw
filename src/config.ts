@@ -25,6 +25,7 @@ export type ProjectConfig = {
   storage: "json" | "none";
   notifications: NotificationPolicy;
   contextMessages: number;
+  maxToolIterations: number;
   retentionDays: number;
   skillsDir: string;
   compressionMode: "none" | "planned";
@@ -76,6 +77,7 @@ export const initProjectConfig = async (
     storage: mergedConfig.storage ?? "json",
     notifications: normalizeNotifications(mergedConfig.notifications),
     contextMessages: mergedConfig.contextMessages ?? 20,
+    maxToolIterations: mergedConfig.maxToolIterations ?? 8,
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
     compressionMode: mergedConfig.compressionMode ?? "none",
     schedulerPollMs: mergedConfig.schedulerPollMs ?? 15_000,
@@ -118,6 +120,10 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
     contextMessages: toPositiveInt(
       process.env.MACLAW_CONTEXT_MESSAGES,
       projectFileConfig.contextMessages ?? 20,
+    ),
+    maxToolIterations: toPositiveInt(
+      process.env.MACLAW_MAX_TOOL_ITERATIONS,
+      projectFileConfig.maxToolIterations ?? 8,
     ),
     retentionDays: toPositiveInt(
       process.env.MACLAW_RETENTION_DAYS,

@@ -107,10 +107,12 @@ export class DummyProvider implements Provider {
 export class OpenAIResponsesProvider implements Provider {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly maxToolIterations: number;
 
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model: string, maxToolIterations: number = 8) {
     this.apiKey = apiKey;
     this.model = model;
+    this.maxToolIterations = maxToolIterations;
   }
 
   async generate(request: ProviderRequest): Promise<ProviderResult> {
@@ -120,7 +122,9 @@ export class OpenAIResponsesProvider implements Provider {
       ...conversationInput(request.chat),
     ];
 
-    for (let iteration = 0; iteration < 8; iteration += 1) {
+    // Each iteration gives the model a chance to either answer directly or
+    // request tools, then continue "thinking" with those tool results.
+    for (let iteration = 0; iteration < this.maxToolIterations; iteration += 1) {
       const response = await this.createResponse(input, request.tools);
       const output = response.output ?? [];
       const toolCalls = output.filter((item) => item.type === "function_call");

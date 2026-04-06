@@ -167,6 +167,7 @@ my-project/
   "provider": "openai",
   "model": "gpt-4.1-mini",
   "contextMessages": 20,
+  "maxToolIterations": 8,
   "retentionDays": 30,
   "skillsDir": ".maclaw/skills"
 }
@@ -192,6 +193,7 @@ Environment variables:
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_CHAT_ID`: defaults to `default`
 - `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
+- `MACLAW_MAX_TOOL_ITERATIONS`: defaults to `8`
 - `MACLAW_RETENTION_DAYS`: defaults to `30`
 - `MACLAW_COMPRESSION_MODE`: `none` or `planned`
 - `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`

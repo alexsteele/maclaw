@@ -262,6 +262,7 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `storage: ${projectConfig.storage}`,
     `notifications: ${JSON.stringify(projectConfig.notifications)}`,
     `contextMessages: ${projectConfig.contextMessages}`,
+    `maxToolIterations: ${projectConfig.maxToolIterations}`,
     `retentionDays: ${projectConfig.retentionDays}`,
     `currentChat: ${currentChatId}`,
     `skillsDir: ${projectConfig.skillsDir}`,
