@@ -505,6 +505,14 @@ export class Harness {
     return this._runningAgents.get(agentId)?.cancel();
   }
 
+  pauseAgent(agentId: string): AgentRecord | undefined {
+    return this._runningAgents.get(agentId)?.pause();
+  }
+
+  resumeAgent(agentId: string): AgentRecord | undefined {
+    return this._runningAgents.get(agentId)?.resume();
+  }
+
   steerAgent(agentId: string, prompt: string): AgentRecord | undefined {
     return this._runningAgents.get(agentId)?.steer(prompt);
   }

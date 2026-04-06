@@ -73,8 +73,7 @@ export class JsonFileAgentStore implements AgentStore {
 }
 
 // TODO:
-// - Resume runnable agents from storage on harness/server startup.
-// - Support pausing agents in addition to cancelling them.
+// - Resume interrupted agents from storage on harness/server startup.
 
 // Agent runs tasks autonomously in a loop.
 // An agent runs in a single project with its own chat (or user provided chat ID).
@@ -112,6 +111,28 @@ export class Agent {
     }
 
     return this.info;
+  }
+
+  pause(): AgentRecord {
+    const record = this.getRecord();
+    if (record.status === "pending" || record.status === "running") {
+      record.status = "paused";
+      this.saveRecord(record);
+    }
+
+    return this.info;
+  }
+
+  resume(): AgentRecord {
+    const record = this.getRecord();
+    if (record.status !== "paused") {
+      return structuredClone(record);
+    }
+
+    record.status = "running";
+    this.saveRecord(record);
+    this.scheduleIteration();
+    return structuredClone(record);
   }
 
   steer(prompt: string): AgentRecord {
@@ -182,13 +203,17 @@ export class Agent {
     try {
       const reply = await this.runStep(record.chatId, input);
       const latest = this.getRecord();
-      if (latest.status !== "running") {
+      if (latest.status !== "running" && latest.status !== "paused") {
         return;
       }
 
       latest.stepCount += 1;
       latest.lastMessage = reply.content;
       this.saveRecord(latest);
+
+      if (latest.status === "paused") {
+        return;
+      }
 
       if (isDoneMessage(reply.content)) {
         this.finish(latest, "completed");

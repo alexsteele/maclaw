@@ -284,7 +284,7 @@ test("dispatchCommand creates an agent with JSON options", async () => {
   }
 });
 
-test("dispatchCommand can steer and stop an agent", async () => {
+test("dispatchCommand can steer, pause, resume, and stop an agent", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-control-"));
 
   try {
@@ -299,6 +299,12 @@ test("dispatchCommand can steer and stop an agent", async () => {
       `/agent steer ${agent.id} | Focus on recent changes`,
     );
     assert.equal(steerReply, `steered agent: ${agent.id}`);
+
+    const pauseReply = await dispatchCommand(harness, `/agent pause ${agent.id}`);
+    assert.equal(pauseReply, `paused agent: ${agent.id}`);
+
+    const resumeReply = await dispatchCommand(harness, `/agent resume ${agent.id}`);
+    assert.equal(resumeReply, `resumed agent: ${agent.id}`);
 
     const stopReply = await dispatchCommand(harness, `/agent stop ${agent.id}`);
     assert.equal(stopReply, `stopped agent: ${agent.id}`);

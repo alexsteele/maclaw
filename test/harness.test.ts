@@ -161,6 +161,27 @@ test("harness can queue a steer prompt for an agent", async () => {
   }
 });
 
+test("harness can pause and resume an agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-pause-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = harness.createAgent({
+      name: "pauseable-agent",
+      prompt: "Start here",
+    });
+
+    const paused = harness.pauseAgent(created.id);
+    assert.equal(paused?.status, "paused");
+    assert.equal(harness.getAgent(created.id)?.status, "paused");
+
+    const resumed = harness.resumeAgent(created.id);
+    assert.equal(resumed?.status, "running");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("teardown cancels running agents", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-teardown-"));
 

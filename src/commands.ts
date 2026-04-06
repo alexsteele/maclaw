@@ -66,6 +66,8 @@ export const agentHelpText = [
   "  /agent list",
   "  /agent create <name> | <prompt> [| <json options>]",
   "  /agent show <agent id>",
+  "  /agent pause <agent id>",
+  "  /agent resume <agent id>",
   "  /agent stop <agent id>",
   "  /agent steer <agent id> | <prompt>",
 ].join("\n");
@@ -692,6 +694,26 @@ export const dispatchCommand = async (
 
     const agent = harness.cancelAgent(agentId);
     return agent ? `stopped agent: ${agentId}` : `agent not found: ${agentId}`;
+  }
+
+  if (input.startsWith("/agent pause ")) {
+    const agentId = input.slice("/agent pause ".length).trim();
+    if (agentId.length === 0) {
+      return "Usage: /agent pause <agent id>";
+    }
+
+    const agent = harness.pauseAgent(agentId);
+    return agent ? `paused agent: ${agentId}` : `agent not found: ${agentId}`;
+  }
+
+  if (input.startsWith("/agent resume ")) {
+    const agentId = input.slice("/agent resume ".length).trim();
+    if (agentId.length === 0) {
+      return "Usage: /agent resume <agent id>";
+    }
+
+    const agent = harness.resumeAgent(agentId);
+    return agent ? `resumed agent: ${agentId}` : `agent not found: ${agentId}`;
   }
 
   if (input.startsWith("/agent steer ")) {

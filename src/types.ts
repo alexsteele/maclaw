@@ -60,6 +60,7 @@ export type NotificationPolicy =
 export type AgentStatus =
   | "pending"
   | "running"
+  | "paused"
   | "completed"
   | "cancelled"
   | "stopped"
