@@ -289,25 +289,46 @@ test("dispatchCommand can steer, pause, resume, and stop an agent", async () => 
 
   try {
     const harness = Harness.load(projectDir);
-    const agent = harness.createAgent({
+    const created = harness.createAgent({
       name: "research-agent",
       prompt: "Research this",
     });
+    assert.ok(created.agent);
+    const agent = created.agent;
 
     const steerReply = await dispatchCommand(
       harness,
-      `/agent steer ${agent.id} | Focus on recent changes`,
+      "/agent steer research-agent | Focus on recent changes",
     );
-    assert.equal(steerReply, `steered agent: ${agent.id}`);
+    assert.equal(steerReply, "steered agent: research-agent");
 
-    const pauseReply = await dispatchCommand(harness, `/agent pause ${agent.id}`);
-    assert.equal(pauseReply, `paused agent: ${agent.id}`);
+    const pauseReply = await dispatchCommand(harness, "/agent pause research-agent");
+    assert.equal(pauseReply, "paused agent: research-agent");
 
-    const resumeReply = await dispatchCommand(harness, `/agent resume ${agent.id}`);
-    assert.equal(resumeReply, `resumed agent: ${agent.id}`);
+    const resumeReply = await dispatchCommand(harness, "/agent resume research-agent");
+    assert.equal(resumeReply, "resumed agent: research-agent");
 
-    const stopReply = await dispatchCommand(harness, `/agent stop ${agent.id}`);
-    assert.equal(stopReply, `stopped agent: ${agent.id}`);
+    const stopReply = await dispatchCommand(harness, "/agent stop research-agent");
+    assert.equal(stopReply, "stopped agent: research-agent");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand rejects duplicate live agent names", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-duplicate-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = harness.createAgent({
+      name: "planner",
+      prompt: "First run",
+    });
+    assert.ok(created.agent);
+
+    const reply = await dispatchCommand(harness, "/agent create planner | Second run");
+
+    assert.equal(reply, "agent already running: planner");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

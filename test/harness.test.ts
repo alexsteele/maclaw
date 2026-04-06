@@ -98,18 +98,19 @@ test("harness createAgent starts a simple agent loop in the background", async (
       prompt: "Work on this task",
       maxSteps: 2,
     });
+    assert.ok(created.agent);
 
-    const initial = harness.getAgent(created.id);
+    const initial = harness.getAgent(created.agent.id);
     assert.ok(initial);
     assert.match(initial.status, /pending|running/u);
 
-    const result = await waitForAgentToSettle(harness, created.id);
+    const result = await waitForAgentToSettle(harness, created.agent.id);
 
-    assert.equal(result.id, created.id);
+    assert.equal(result.id, created.agent.id);
     assert.equal(result.status, "stopped");
     assert.equal(result.stepCount, 2);
 
-    const transcript = await harness.getChatTranscript(created.chatId);
+    const transcript = await harness.getChatTranscript(created.agent.chatId);
     assert.match(transcript, /Work on this task/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -126,17 +127,18 @@ test("harness stores and cancels agents through the agent store", async () => {
       name: "queued-agent",
       prompt: "Wait here",
     });
+    assert.ok(created.agent);
 
     const listed = harness.listAgents();
     assert.equal(listed.length, 1);
-    assert.equal(listed[0]?.id, created.id);
+    assert.equal(listed[0]?.id, created.agent.id);
 
-    const loaded = harness.getAgent(created.id);
+    const loaded = harness.getAgent(created.agent.id);
     assert.equal(loaded?.name, "queued-agent");
 
-    const cancelled = harness.cancelAgent(created.id);
+    const cancelled = harness.cancelAgent("queued-agent");
     assert.equal(cancelled?.status, "cancelled");
-    assert.equal(harness.getAgent(created.id)?.status, "cancelled");
+    assert.equal(harness.getAgent(created.agent.id)?.status, "cancelled");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -151,10 +153,11 @@ test("harness can queue a steer prompt for an agent", async () => {
       name: "steerable-agent",
       prompt: "Start here",
     });
+    assert.ok(created.agent);
 
-    const steered = harness.steerAgent(created.id, "Try a different direction");
+    const steered = harness.steerAgent("steerable-agent", "Try a different direction");
 
-    assert.equal(steered?.id, created.id);
+    assert.equal(steered?.id, created.agent.id);
     assert.ok(steered);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -170,12 +173,13 @@ test("harness can pause and resume an agent", async () => {
       name: "pauseable-agent",
       prompt: "Start here",
     });
+    assert.ok(created.agent);
 
-    const paused = harness.pauseAgent(created.id);
+    const paused = harness.pauseAgent("pauseable-agent");
     assert.equal(paused?.status, "paused");
-    assert.equal(harness.getAgent(created.id)?.status, "paused");
+    assert.equal(harness.getAgent(created.agent.id)?.status, "paused");
 
-    const resumed = harness.resumeAgent(created.id);
+    const resumed = harness.resumeAgent("pauseable-agent");
     assert.equal(resumed?.status, "running");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -192,10 +196,11 @@ test("teardown cancels running agents", async () => {
       prompt: "Keep going",
       maxSteps: 50,
     });
+    assert.ok(created.agent);
 
     harness.teardown();
 
-    const settled = await waitForAgentToSettle(harness, created.id);
+    const settled = await waitForAgentToSettle(harness, created.agent.id);
     assert.equal(settled.status, "cancelled");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -264,8 +269,9 @@ test("harness emits a notification when an origin-backed agent fails", async () 
         userId: "slack-T123-U123",
       },
     });
+    assert.ok(created.agent);
 
-    const settled = await waitForAgentToSettle(harness, created.id);
+    const settled = await waitForAgentToSettle(harness, created.agent.id);
 
     assert.equal(settled.status, "failed");
     assert.equal(notifications.length, 1);
@@ -389,7 +395,7 @@ test("harness suppresses notifications when project notifications are none", asy
       throw new Error("boom");
     };
 
-    harness.createAgent({
+    const created = harness.createAgent({
       name: "quiet-agent",
       prompt: "Do the thing",
       origin: {
@@ -398,10 +404,9 @@ test("harness suppresses notifications when project notifications are none", asy
         userId: "slack-T123-U123",
       },
     });
+    assert.ok(created.agent);
 
-    const agentId = harness.listAgents()[0]?.id;
-    assert.ok(agentId);
-    await waitForAgentToSettle(harness, agentId);
+    await waitForAgentToSettle(harness, created.agent.id);
     assert.equal(notifications.length, 0);
   } finally {
     await rm(projectDir, { recursive: true, force: true });

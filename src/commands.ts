@@ -65,11 +65,11 @@ export const agentHelpText = [
   "  /agent",
   "  /agent list",
   "  /agent create <name> | <prompt> [| <json options>]",
-  "  /agent show <agent id>",
-  "  /agent pause <agent id>",
-  "  /agent resume <agent id>",
-  "  /agent stop <agent id>",
-  "  /agent steer <agent id> | <prompt>",
+  "  /agent show <name>",
+  "  /agent pause <name>",
+  "  /agent resume <name>",
+  "  /agent stop <name>",
+  "  /agent steer <name> | <prompt>",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -673,64 +673,68 @@ export const dispatchCommand = async (
       origin: options.origin,
       ...agentOptions,
     });
-    return `started agent: ${agent.id}`;
+    if (!agent.agent) {
+      return agent.error ?? "Could not create agent.";
+    }
+
+    return `started agent: ${agent.agent.id}`;
   }
 
   if (input.startsWith("/agent show ")) {
-    const agentId = input.slice("/agent show ".length).trim();
-    if (agentId.length === 0) {
-      return "Usage: /agent show <agent id>";
+    const agentRef = input.slice("/agent show ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent show <name>";
     }
 
-    const agent = harness.getAgent(agentId);
-    return agent ? renderAgentInfo(agent) : `agent not found: ${agentId}`;
+    const agent = harness.findAgent(agentRef);
+    return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent stop ")) {
-    const agentId = input.slice("/agent stop ".length).trim();
-    if (agentId.length === 0) {
-      return "Usage: /agent stop <agent id>";
+    const agentRef = input.slice("/agent stop ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent stop <name>";
     }
 
-    const agent = harness.cancelAgent(agentId);
-    return agent ? `stopped agent: ${agentId}` : `agent not found: ${agentId}`;
+    const agent = harness.cancelAgent(agentRef);
+    return agent ? `stopped agent: ${agent.name}` : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent pause ")) {
-    const agentId = input.slice("/agent pause ".length).trim();
-    if (agentId.length === 0) {
-      return "Usage: /agent pause <agent id>";
+    const agentRef = input.slice("/agent pause ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent pause <name>";
     }
 
-    const agent = harness.pauseAgent(agentId);
-    return agent ? `paused agent: ${agentId}` : `agent not found: ${agentId}`;
+    const agent = harness.pauseAgent(agentRef);
+    return agent ? `paused agent: ${agent.name}` : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent resume ")) {
-    const agentId = input.slice("/agent resume ".length).trim();
-    if (agentId.length === 0) {
-      return "Usage: /agent resume <agent id>";
+    const agentRef = input.slice("/agent resume ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent resume <name>";
     }
 
-    const agent = harness.resumeAgent(agentId);
-    return agent ? `resumed agent: ${agentId}` : `agent not found: ${agentId}`;
+    const agent = harness.resumeAgent(agentRef);
+    return agent ? `resumed agent: ${agent.name}` : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent steer ")) {
     const body = input.slice("/agent steer ".length).trim();
     const separatorIndex = body.indexOf("|");
     if (separatorIndex < 0) {
-      return "Usage: /agent steer <agent id> | <prompt>";
+      return "Usage: /agent steer <name> | <prompt>";
     }
 
-    const agentId = body.slice(0, separatorIndex).trim();
+    const agentRef = body.slice(0, separatorIndex).trim();
     const prompt = body.slice(separatorIndex + 1).trim();
-    if (agentId.length === 0 || prompt.length === 0) {
-      return "Usage: /agent steer <agent id> | <prompt>";
+    if (agentRef.length === 0 || prompt.length === 0) {
+      return "Usage: /agent steer <name> | <prompt>";
     }
 
-    const agent = harness.steerAgent(agentId, prompt);
-    return agent ? `steered agent: ${agentId}` : `agent not found: ${agentId}`;
+    const agent = harness.steerAgent(agentRef, prompt);
+    return agent ? `steered agent: ${agent.name}` : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent")) {

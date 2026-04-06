@@ -57,6 +57,10 @@ export type AgentCreateOptions = {
   origin?: AgentRecord["origin"];
 };
 
+type AgentCreateResult =
+  | { agent: AgentRecord; error?: undefined }
+  | { agent?: undefined; error: string };
+
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.storage === "json"
     ? new JsonFileChatStore(config.chatsDir)
@@ -441,7 +445,29 @@ export class Harness {
     throw new Error("Could not create a unique agent id.");
   }
 
-  createAgent(input: AgentCreateOptions): AgentRecord {
+  private isLiveAgentStatus(status: AgentRecord["status"]): boolean {
+    return status === "pending" || status === "running" || status === "paused";
+  }
+
+  private findLiveAgentByName(name: string): AgentRecord | undefined {
+    return this._agentStore
+      .listAgents()
+      .find((agent) => agent.name === name && this.isLiveAgentStatus(agent.status));
+  }
+
+  findAgent(agentRef: string): AgentRecord | undefined {
+    return (
+      this._agentStore
+        .listAgents()
+        .find((agent) => agent.name === agentRef) ?? this._agentStore.getAgent(agentRef)
+    );
+  }
+
+  createAgent(input: AgentCreateOptions): AgentCreateResult {
+    if (this.findLiveAgentByName(input.name)) {
+      return { error: `agent already running: ${input.name}` };
+    }
+
     const now = new Date().toISOString();
     const id = this.createAgentId();
     const record: AgentRecord = {
@@ -490,7 +516,7 @@ export class Harness {
       },
     );
     this._runningAgents.set(record.id, agent);
-    return agent.start();
+    return { agent: agent.start() };
   }
 
   listAgents(): AgentRecord[] {
@@ -501,20 +527,24 @@ export class Harness {
     return this._agentStore.getAgent(agentId);
   }
 
-  cancelAgent(agentId: string): AgentRecord | undefined {
-    return this._runningAgents.get(agentId)?.cancel();
+  cancelAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.cancel() : undefined;
   }
 
-  pauseAgent(agentId: string): AgentRecord | undefined {
-    return this._runningAgents.get(agentId)?.pause();
+  pauseAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.pause() : undefined;
   }
 
-  resumeAgent(agentId: string): AgentRecord | undefined {
-    return this._runningAgents.get(agentId)?.resume();
+  resumeAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
   }
 
-  steerAgent(agentId: string, prompt: string): AgentRecord | undefined {
-    return this._runningAgents.get(agentId)?.steer(prompt);
+  steerAgent(agentRef: string, prompt: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.steer(prompt) : undefined;
   }
 
   async runDueTasks(
