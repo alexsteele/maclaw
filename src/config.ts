@@ -112,7 +112,6 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
     provider: providerValue === "dummy" ? "dummy" : "openai",
     model:
       process.env.MACLAW_MODEL ??
-      process.env.OPENAI_MODEL ??
       projectFileConfig.model ??
       "gpt-4.1-mini",
     storage: storageValue === "json" ? "json" : "none",

@@ -188,8 +188,6 @@ Environment variables:
 - `MACLAW_PROVIDER`: overrides the configured provider
 - `MACLAW_MODEL`: overrides the configured model
 - `OPENAI_API_KEY`: enables the OpenAI provider
-- `OPENAI_MODEL`: backward-compatible override for OpenAI model selection
-- `MACLAW_DATA_DIR`: overrides the default `projectFolder/.maclaw`
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_CHAT_ID`: defaults to `default`
 - `MACLAW_CONTEXT_MESSAGES`: defaults to `20`

@@ -3,7 +3,6 @@ import { afterEach, beforeEach } from "node:test";
 const providerEnvKeys = [
   "MACLAW_PROVIDER",
   "MACLAW_MODEL",
-  "OPENAI_MODEL",
   "OPENAI_API_KEY",
 ] as const;
 
@@ -17,7 +16,6 @@ export const useDummyProviderEnv = (): void => {
 
     process.env.MACLAW_PROVIDER = "dummy";
     delete process.env.MACLAW_MODEL;
-    delete process.env.OPENAI_MODEL;
     delete process.env.OPENAI_API_KEY;
   });
 
