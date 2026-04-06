@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { runConfigCommand } from "./cli/config.js";
+import { runRepl } from "./cli/repl.js";
+import { runSetup } from "./cli/setup.js";
 import { Harness } from "./harness.js";
-import { runRepl } from "./repl.js";
 import { MaclawServer } from "./server.js";
-import { runSetup } from "./setup.js";
 
 const cliHelpText = [
   "Usage: maclaw [command]",

@@ -7,14 +7,14 @@
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
-import { initProjectConfig, type ProjectConfig } from "./config.js";
+import { initProjectConfig, type ProjectConfig } from "../config.js";
 import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
   type ServerConfig,
   type ServerSecrets,
-} from "./server-config.js";
-import { readJsonFile, writeJsonFile } from "./fs-utils.js";
+} from "../server-config.js";
+import { readJsonFile, writeJsonFile } from "../fs-utils.js";
 
 type SetupOptions = {
   answers?: string[];

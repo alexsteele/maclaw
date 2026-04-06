@@ -2,8 +2,8 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { Harness } from "./harness.js";
-import { dispatchCommand, helpText, projectHelpText } from "./commands.js";
+import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
+import { Harness } from "../harness.js";
 
 const replHelpText = [
   helpText,

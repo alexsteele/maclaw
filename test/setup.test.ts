@@ -5,7 +5,7 @@ import { Readable, Writable } from "node:stream";
 import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
-import { runSetup } from "../src/setup.js";
+import { runSetup } from "../src/cli/setup.js";
 
 class CaptureStream extends Writable {
   private readonly chunks: string[] = [];
