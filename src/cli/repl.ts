@@ -83,6 +83,8 @@ class Repl {
 
   private showStartup(): void {
     output.write("maclaw REPL\n");
+    output.write(`project: ${this.harness.config.name}\n`);
+    output.write(`folder: ${this.harness.config.projectFolder}\n`);
     output.write(`chat: ${this.harness.getCurrentChatId()}\n`);
     if (!this.harness.isProjectInitialized()) {
       output.write(
