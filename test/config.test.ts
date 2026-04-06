@@ -47,6 +47,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.provider, "local");
     assert.equal(config.model, "test-model");
     assert.equal(config.storage, "json");
+    assert.equal(config.notifications, "all");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -62,6 +63,7 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
     assert.equal(config.projectConfigFile, path.join(rootDir, ".maclaw", "maclaw.json"));
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
     assert.equal(config.storage, "none");
+    assert.equal(config.notifications, "all");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -126,6 +128,7 @@ test("initProjectConfig creates a new project config with createdAt", async () =
     assert.equal(saved.createdAt, projectConfig.createdAt);
     assert.equal(saved.name, path.basename(rootDir));
     assert.equal(projectConfig.storage, "json");
+    assert.equal(projectConfig.notifications, "all");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -159,6 +162,7 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     assert.equal(projectConfig.provider, "local");
     assert.equal(projectConfig.model, "test-model");
     assert.equal(projectConfig.storage, "json");
+    assert.equal(projectConfig.notifications, "all");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -181,6 +185,7 @@ test("initProjectConfig merges overrides into the saved project config", async (
     assert.equal(projectConfig.model, "override-model");
     assert.equal(projectConfig.retentionDays, 7);
     assert.equal(projectConfig.storage, "json");
+    assert.equal(projectConfig.notifications, "all");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -208,6 +213,39 @@ test("loadConfig reads storage from project config", async () => {
 
     const config = loadConfig(rootDir);
     assert.equal(config.storage, "json");
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig reads notifications from project config", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-notifications-"));
+
+  try {
+    await mkdir(path.join(rootDir, ".maclaw"), { recursive: true });
+    await writeFile(
+      path.join(rootDir, ".maclaw", "maclaw.json"),
+      `${JSON.stringify(
+        {
+          name: "notify-project",
+          provider: "local",
+          model: "test-model",
+          notifications: {
+            allow: ["agent:*", "task:*"],
+            deny: ["taskCompleted"],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadConfig(rootDir);
+    assert.deepEqual(config.notifications, {
+      allow: ["agent:*", "task:*"],
+      deny: ["taskCompleted"],
+    });
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

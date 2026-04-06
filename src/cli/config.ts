@@ -14,6 +14,7 @@ const configHelpText = [
   "  provider",
   "  model",
   "  storage",
+  "  notifications",
   "  retentionDays",
   "  skillsDir",
   "  compressionMode",
@@ -25,6 +26,7 @@ const editableKeys = new Set([
   "provider",
   "model",
   "storage",
+  "notifications",
   "retentionDays",
   "skillsDir",
   "compressionMode",
@@ -39,6 +41,7 @@ const renderConfig = (config: ProjectConfig): string =>
     `provider: ${config.provider}`,
     `model: ${config.model}`,
     `storage: ${config.storage}`,
+    `notifications: ${JSON.stringify(config.notifications)}`,
     `retentionDays: ${config.retentionDays}`,
     `skillsDir: ${config.skillsDir}`,
     `compressionMode: ${config.compressionMode}`,
@@ -72,6 +75,18 @@ const parseConfigValue = (
     }
 
     return { storage: value };
+  }
+
+  if (key === "notifications") {
+    if (value === "all" || value === "none") {
+      return { notifications: value };
+    }
+
+    try {
+      return { notifications: JSON.parse(value) };
+    } catch {
+      return "notifications must be 'all', 'none', or valid JSON";
+    }
   }
 
   if (key === "retentionDays" || key === "schedulerPollMs") {

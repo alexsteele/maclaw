@@ -11,6 +11,7 @@ import {
 } from "./config.js";
 import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
 import { loadSkills } from "./skills.js";
+import { expandNotificationPolicy } from "./notifications.js";
 import {
   JsonFileTaskStore,
   MemoryTaskStore,
@@ -29,6 +30,7 @@ import type {
   ChatRecord,
   ChatSummary,
   MessageContext,
+  NotificationKind,
   Origin,
   Message,
   ScheduledTask,
@@ -40,7 +42,7 @@ type ForkChatResult =
   | { chat?: undefined; error: string };
 
 export type HarnessNotification = {
-  kind: "agent_completed" | "agent_failed" | "task_completed" | "task_failed";
+  kind: NotificationKind;
   origin: Origin;
   text: string;
 };
@@ -84,6 +86,7 @@ const createShortAgentId = (): string => {
 // A default harness has no project. initProject() creates one.
 export class Harness {
   private _config: ProjectConfig;
+  private _allowedNotifications: Set<NotificationKind>;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
   private _chatRuntime: ChatRuntime;
@@ -96,6 +99,7 @@ export class Harness {
 
   constructor(config: ProjectConfig) {
     this._config = config;
+    this._allowedNotifications = expandNotificationPolicy(config.notifications);
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
     this._chatRuntime = new ChatRuntime(config, this._scheduler, this._chatStore);
@@ -171,6 +175,7 @@ export class Harness {
     }
 
     this._config = nextConfig;
+    this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
     this._chatRuntime = nextChatRuntime;
@@ -196,6 +201,7 @@ export class Harness {
 
     const nextConfig = loadConfig(this._config.projectFolder);
     this._config = nextConfig;
+    this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._scheduler = createScheduler(nextConfig);
     this._chatStore = createChatStore(nextConfig);
     this._chatRuntime = new ChatRuntime(nextConfig, this._scheduler, this._chatStore);
@@ -337,16 +343,16 @@ export class Harness {
       await onTaskMessage?.(task, message);
 
       if (task.origin) {
-        await this._notificationListener?.({
-          kind: "task_completed",
+        await this.emitNotification({
+          kind: "taskCompleted",
           origin: task.origin,
           text: `Task ${task.title} completed.`,
         });
       }
     } catch (error) {
       if (task.origin) {
-        await this._notificationListener?.({
-          kind: "task_failed",
+        await this.emitNotification({
+          kind: "taskFailed",
           origin: task.origin,
           text:
             error instanceof Error
@@ -365,6 +371,14 @@ export class Harness {
 
   async deleteTaskForCurrentChat(taskId: string): Promise<boolean> {
     return this.deleteTask(taskId, this.getCurrentChatId());
+  }
+
+  private emitNotification(notification: HarnessNotification): Promise<void> {
+    if (!this._allowedNotifications.has(notification.kind)) {
+      return Promise.resolve();
+    }
+
+    return Promise.resolve(this._notificationListener?.(notification));
   }
 
   async deleteChat(chatId: string): Promise<boolean> {
@@ -454,8 +468,8 @@ export class Harness {
         }
 
         if (latest.status === "completed") {
-          void this._notificationListener?.({
-            kind: "agent_completed",
+          void this.emitNotification({
+            kind: "agentCompleted",
             origin: latest.origin,
             text: `Agent ${latest.name} completed.`,
           });
@@ -463,8 +477,8 @@ export class Harness {
         }
 
         if (latest.status === "failed") {
-          void this._notificationListener?.({
-            kind: "agent_failed",
+          void this.emitNotification({
+            kind: "agentFailed",
             origin: latest.origin,
             text: latest.lastError
               ? `Agent ${latest.name} failed: ${latest.lastError}`

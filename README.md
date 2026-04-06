@@ -57,12 +57,11 @@ Alex, your dedicated human-in-the-loop
 - Run `maclaw server` or `maclaw repl`
 - You message maclaw via a channel.
 - Maclaw's `Channel` code receives, normalizes, and forwards the message to `MaclawServer`
-- `MaclawServer` checks for `/commands` and forwards messages to the 
+- `MaclawServer` checks for `/commands` and forwards messages to the
   `Harness` for the right project and chat
 - The harness constructs and sends the prompt to the AI model.
 - The harness logs the messages and the channel sends the response back to you
 - Agents you start run in a loop in their project `Harness` until completion or cancellation.
-
 
 ## REPL
 
@@ -135,7 +134,6 @@ Example `secrets.json`:
   }
 }
 ```
-
 
 ## Projects
 
@@ -225,16 +223,19 @@ Current notification triggers:
 - scheduled task completed/failed
 
 By default, notifications go back to the originating channel when available,
-such as your slack  channel or REPL session.
+such as your slack channel or REPL session.
 
+Project notification policy lives in `.maclaw/maclaw.json`:
 
-## TODO
+```json
+{
+  "notifications": "all"
+}
+```
 
-- Support other LLMs
-- Improve chat storage and retention policies (sqlite)
-- Better project management.
-- Chat compression and summarization.
-- MCP support
-- Tool approval and policy controls.
-- Tests and end-to-end dev workflow.
-- Consolidate server/repl command handling.
+Policies:
+
+- `"all"`: send all current notification types
+- `"none"`: suppress all notifications
+- `["errors"]`: only send failures
+- `{ "allow": ["agent:*", "task:*"], "deny": ["taskCompleted"] }`: notify for everything except successful tasks

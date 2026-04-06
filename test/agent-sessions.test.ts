@@ -21,6 +21,7 @@ const createHarness = async (): Promise<{
     provider: "local",
     model: "gpt-4.1-mini",
     storage: "json",
+    notifications: "all",
     retentionDays: 30,
     skillsDir: path.join(projectDir, ".maclaw", "skills"),
     compressionMode: "none",

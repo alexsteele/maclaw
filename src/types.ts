@@ -36,6 +36,27 @@ export type MessageContext = {
   origin?: Origin;
 };
 
+export type NotificationKind =
+  | "agentCompleted"
+  | "agentFailed"
+  | "taskCompleted"
+  | "taskFailed";
+
+export type NotificationSelector =
+  | NotificationKind
+  | "agent:*"
+  | "task:*"
+  | "errors";
+
+export type NotificationPolicy =
+  | "all"
+  | "none"
+  | NotificationSelector[]
+  | {
+      allow?: NotificationSelector[];
+      deny?: NotificationSelector[];
+    };
+
 export type AgentStatus =
   | "pending"
   | "running"

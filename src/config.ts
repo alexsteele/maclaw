@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";
+import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
+import type { NotificationPolicy } from "./types.js";
 
 export const defaultProjectDataDir = (projectFolder: string): string =>
   path.join(projectFolder, ".maclaw");
@@ -21,6 +23,7 @@ export type ProjectConfig = {
   provider: "local" | "openai";
   model: string;
   storage: "json" | "none";
+  notifications: NotificationPolicy;
   retentionDays: number;
   skillsDir: string;
   compressionMode: "none" | "planned";
@@ -41,7 +44,6 @@ const toPositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
-
 const readProjectFileConfig = (cwd: string): Partial<ProjectConfig> => {
   const projectConfigFile = path.join(cwd, ".maclaw", "maclaw.json");
   if (!existsSync(projectConfigFile)) {
@@ -71,6 +73,7 @@ export const initProjectConfig = async (
     provider: mergedConfig.provider ?? "openai",
     model: mergedConfig.model ?? "gpt-4.1-mini",
     storage: mergedConfig.storage ?? "json",
+    notifications: normalizeNotifications(mergedConfig.notifications),
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
     compressionMode: mergedConfig.compressionMode ?? "none",
     schedulerPollMs: mergedConfig.schedulerPollMs ?? 15_000,
@@ -109,6 +112,7 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
       projectFileConfig.model ??
       "gpt-4.1-mini",
     storage: storageValue === "json" ? "json" : "none",
+    notifications: normalizeNotifications(projectFileConfig.notifications),
     retentionDays: toPositiveInt(
       process.env.MACLAW_RETENTION_DAYS,
       projectFileConfig.retentionDays ?? 30,
