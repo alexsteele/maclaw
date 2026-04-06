@@ -299,3 +299,17 @@ test("dispatchCommand keeps unknown skills and history variants local", async ()
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("dispatchCommand shows main help for unknown slash commands", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-unknown-slash-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/wat");
+
+    assert.equal(reply, "Commands:\n  /help              Show this help\n  /project           Project information commands\n  /chat              Chat management commands\n  /history           Show the current chat transcript\n  /skills            List local skills\n  /agent             Agent management commands\n  /task              Task scheduling commands");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

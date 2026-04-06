@@ -584,5 +584,9 @@ export const dispatchCommand = async (
     return "Usage: /history";
   }
 
+  if (input.startsWith("/")) {
+    return helpText;
+  }
+
   return null;
 };
