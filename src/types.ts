@@ -28,6 +28,7 @@ export type ChatSummary = {
 export type Origin = {
   channel: string;
   userId: string;
+  conversationId?: string;
   threadId?: string;
 };
 

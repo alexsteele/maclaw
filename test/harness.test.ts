@@ -210,3 +210,48 @@ test("wipeProject deletes .maclaw and returns the harness to headless mode", asy
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("harness emits a notification when an origin-backed agent fails", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-notify-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
+
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        notifications.push({
+          kind: notification.kind,
+          text: notification.text,
+          originUserId: notification.origin.userId,
+        });
+      },
+    );
+
+    harness.handleUserInputForChat = async () => {
+      throw new Error("boom");
+    };
+
+    const created = harness.createAgent({
+      name: "notifier-agent",
+      prompt: "Do the thing",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        threadId: "171234.5678",
+        userId: "slack-T123-U123",
+      },
+    });
+
+    const settled = await waitForAgentToSettle(harness, created.id);
+
+    assert.equal(settled.status, "failed");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.kind, "agent_failed");
+    assert.equal(notifications[0]?.originUserId, "slack-T123-U123");
+    assert.match(notifications[0]?.text ?? "", /notifier-agent failed: boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

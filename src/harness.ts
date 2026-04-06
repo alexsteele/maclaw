@@ -29,6 +29,7 @@ import type {
   ChatRecord,
   ChatSummary,
   MessageContext,
+  Origin,
   Message,
   ScheduledTask,
   Skill,
@@ -37,6 +38,12 @@ import type {
 type ForkChatResult =
   | { chat: ChatRecord; error?: undefined }
   | { chat?: undefined; error: string };
+
+export type HarnessNotification = {
+  kind: "agent_completed" | "agent_failed";
+  origin: Origin;
+  text: string;
+};
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
   return config.storage === "json"
@@ -83,6 +90,9 @@ export class Harness {
   private _agentStore: AgentStore;
   private _runningAgents = new Map<string, Agent>();
   private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
+  private _notificationListener?: (
+    notification: HarnessNotification,
+  ) => void | Promise<void>;
 
   constructor(config: ProjectConfig) {
     this._config = config;
@@ -106,8 +116,10 @@ export class Harness {
 
   start(
     onTaskMessage: (task: ScheduledTask, message: Message) => void | Promise<void>,
+    onNotification?: (notification: HarnessNotification) => void | Promise<void>,
   ): Promise<void> {
     this._taskListener = onTaskMessage;
+    this._notificationListener = onNotification;
     return this.pruneExpiredChats().then(() => {
       this._scheduler.start(this._config.schedulerPollMs, async (task) => {
         const message = await this.handleScheduledTask(task.chatId, task.prompt);
@@ -400,6 +412,29 @@ export class Harness {
       this.handleUserInputForChat.bind(this),
       () => {
         this._runningAgents.delete(record.id);
+        const latest = this._agentStore.getAgent(record.id);
+        if (!latest?.origin) {
+          return;
+        }
+
+        if (latest.status === "completed") {
+          void this._notificationListener?.({
+            kind: "agent_completed",
+            origin: latest.origin,
+            text: `Agent ${latest.name} completed.`,
+          });
+          return;
+        }
+
+        if (latest.status === "failed") {
+          void this._notificationListener?.({
+            kind: "agent_failed",
+            origin: latest.origin,
+            text: latest.lastError
+              ? `Agent ${latest.name} failed: ${latest.lastError}`
+              : `Agent ${latest.name} failed.`,
+          });
+        }
       },
     );
     this._runningAgents.set(record.id, agent);

@@ -162,6 +162,17 @@ export class SlackChannel implements Channel {
     this.websocket = undefined;
   }
 
+  async send(
+    origin: { conversationId?: string; threadId?: string },
+    text: string,
+  ): Promise<void> {
+    if (!origin.conversationId) {
+      throw new Error("Slack origin is missing conversationId.");
+    }
+
+    await this.sendTextMessage(origin.conversationId, text, origin.threadId);
+  }
+
   private async connect(): Promise<void> {
     const socketUrl = await this.openSocketUrl();
     const WebSocketCtor = getSocketModeWebSocket();
@@ -240,6 +251,7 @@ export class SlackChannel implements Channel {
 
     const reply = await this.messageHandler?.({
       channel: this.name,
+      conversationId: event.channel,
       threadId: event.threadTs,
       userId: event.userId,
       text: event.text,

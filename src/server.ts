@@ -4,7 +4,7 @@ import type {
 } from "./channels/channel.js";
 import { DiscordChannel } from "./channels/discord.js";
 import { dispatchCommand } from "./commands.js";
-import { Harness } from "./harness.js";
+import { Harness, type HarnessNotification } from "./harness.js";
 import {
   loadServerConfig,
   loadServerSecrets,
@@ -35,15 +35,14 @@ const helpText = [
 ].join("\n");
 
 type ProjectName = string;
-type ChannelUser = string;
+type ChannelName = string;
+type ChannelUser = string;  // ${channel}:${userId}
 
 export class MaclawServer {
   private readonly config: ServerConfig;
   private readonly secrets: ServerSecrets;
-  // project name -> live project harness
   private readonly projects = new Map<ProjectName, Harness>();
-  private channels: Channel[] = [];
-  // `${channel}:${userId}` -> active project name for that channel user
+  private readonly channels = new Map<ChannelName, Channel>();
   private readonly activeProjects = new Map<ChannelUser, ProjectName>();
   private started = false;
 
@@ -67,7 +66,7 @@ export class MaclawServer {
   }
 
   private resetRuntimeState(): void {
-    this.channels = [];
+    this.channels.clear();
     this.projects.clear();
     this.activeProjects.clear();
     this.started = false;
@@ -126,6 +125,15 @@ export class MaclawServer {
     return `Switched to project: ${projectName}`;
   }
 
+  private async handleNotification(notification: HarnessNotification): Promise<void> {
+    const channel = this.channels.get(notification.origin.channel);
+    if (!channel) {
+      return;
+    }
+
+    await channel.send(notification.origin, notification.text);
+  }
+
   async handleMessage(message: ChannelMessage): Promise<string | null> {
     this.requireStarted();
 
@@ -166,6 +174,7 @@ export class MaclawServer {
     const harness = this.getHarness(projectName);
     const origin: Origin = {
       channel: message.channel,
+      conversationId: message.conversationId,
       userId: message.userId,
       threadId: message.threadId,
     };
@@ -193,19 +202,22 @@ export class MaclawServer {
     }
 
     if (this.config.channels.slack.enabled) {
-      this.channels.push(
+      this.channels.set(
+        "slack",
         new SlackChannel(this.config.channels.slack, this.secrets.slack),
       );
     }
 
     if (this.config.channels.discord.enabled) {
-      this.channels.push(
+      this.channels.set(
+        "discord",
         new DiscordChannel(this.config.channels.discord, this.secrets.discord),
       );
     }
 
     if (this.config.channels.whatsapp.enabled) {
-      this.channels.push(
+      this.channels.set(
+        "whatsapp",
         new WhatsAppChannel(this.config.channels.whatsapp, this.secrets.whatsapp),
       );
     }
@@ -213,10 +225,11 @@ export class MaclawServer {
     for (const [projectName, harness] of this.projects.entries()) {
       await harness.start(async (task, message) =>
         logScheduledTask(projectName, task, message),
+        this.handleNotification.bind(this),
       );
     }
 
-    for (const channel of this.channels) {
+    for (const channel of this.channels.values()) {
       await channel.start(this.handleMessage.bind(this));
     }
 
@@ -224,7 +237,7 @@ export class MaclawServer {
   }
 
   async stop(): Promise<void> {
-    for (const channel of [...this.channels].reverse()) {
+    for (const channel of [...this.channels.values()].reverse()) {
       await channel.stop();
     }
 

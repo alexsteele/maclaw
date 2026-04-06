@@ -180,6 +180,17 @@ export class DiscordChannel implements Channel {
     this.websocket = undefined;
   }
 
+  async send(
+    origin: { conversationId?: string },
+    text: string,
+  ): Promise<void> {
+    if (!origin.conversationId) {
+      throw new Error("Discord origin is missing conversationId.");
+    }
+
+    await this.sendMessage(origin.conversationId, text);
+  }
+
   private async connect(): Promise<void> {
     const gatewayUrl = await this.getGatewayUrl();
     const WebSocketCtor = getDiscordWebSocket();
@@ -292,6 +303,7 @@ export class DiscordChannel implements Channel {
 
     const reply = await this.messageHandler?.({
       channel: this.name,
+      conversationId: event.channelId,
       threadId: event.channelId,
       userId: event.userId,
       text: event.text,

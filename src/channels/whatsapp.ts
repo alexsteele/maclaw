@@ -167,6 +167,15 @@ export class WhatsAppChannel implements Channel {
     });
   }
 
+  async send(origin: { userId: string }, text: string): Promise<void> {
+    const to = origin.userId.replace(/^whatsapp-/u, "");
+    if (!to) {
+      throw new Error("WhatsApp origin is missing a user id.");
+    }
+
+    await this.sendTextMessage(to, text);
+  }
+
   private async handleRequest(
     request: IncomingMessage,
     response: ServerResponse,
