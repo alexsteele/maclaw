@@ -301,6 +301,22 @@ test("dispatchCommand shows project help for unknown project subcommands", async
   }
 });
 
+test("dispatchCommand treats /command help like /help command", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-family-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    assert.equal(await dispatchCommand(harness, "/config help"), await dispatchCommand(harness, "/help config"));
+    assert.equal(await dispatchCommand(harness, "/project help"), await dispatchCommand(harness, "/help project"));
+    assert.equal(await dispatchCommand(harness, "/chat help"), await dispatchCommand(harness, "/help chat"));
+    assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
+    assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows main help for unknown help subcommands", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-help-help-"));
 

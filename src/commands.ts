@@ -377,8 +377,16 @@ export const dispatchCommand = async (
     return helpText;
   }
 
+  if (input === "/project help") {
+    return projectHelpText;
+  }
+
   if (input === "/project" || input === "/project show") {
     return renderProjectInfo(harness, getScopedChatId(harness, options));
+  }
+
+  if (input === "/config help") {
+    return configHelpText;
   }
 
   if (input === "/config") {
@@ -469,6 +477,10 @@ export const dispatchCommand = async (
     return configHelpText;
   }
 
+  if (input === "/chat help") {
+    return chatHelpText;
+  }
+
   if (input === "/chat") {
     return getScopedChatId(harness, options);
   }
@@ -525,7 +537,7 @@ export const dispatchCommand = async (
     return chatHelpText;
   }
 
-  if (input === "/task") {
+  if (input === "/task" || input === "/task help") {
     return taskHelpText;
   }
 
@@ -569,7 +581,7 @@ export const dispatchCommand = async (
     return taskHelpText;
   }
 
-  if (input === "/agent") {
+  if (input === "/agent" || input === "/agent help") {
     return agentHelpText;
   }
 
