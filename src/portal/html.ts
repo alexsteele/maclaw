@@ -342,6 +342,20 @@ export const renderPortalHtml = ({
         font-size: 12px;
       }
 
+      .event-log {
+        display: grid;
+        gap: 8px;
+      }
+
+      .event-item {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel-2);
+        padding: 10px 12px;
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+
       .code {
         font-family: var(--font-mono);
         font-size: 12px;
@@ -441,6 +455,7 @@ export const renderPortalHtml = ({
               <strong>Live events</strong>
               <span>Agent and task lifecycle events will stream here in real time.</span>
             </div>
+            <div class="event-log" id="notification-log"></div>
           </section>
           <section class="card">
             <h3>Theme</h3>
@@ -462,8 +477,10 @@ export const renderPortalHtml = ({
       const status = document.getElementById("chat-status");
       const messageInput = document.getElementById("message");
       const sendButton = document.getElementById("send-button");
+      const notificationLog = document.getElementById("notification-log");
       let displayMessages = [];
       let persistedMessageCount = 0;
+      let eventSource;
 
       const escapeHtml = (value) =>
         value
@@ -490,7 +507,40 @@ export const renderPortalHtml = ({
         transcript.scrollTop = transcript.scrollHeight;
       };
 
+      const appendNotification = (text) => {
+        const item = document.createElement('div');
+        item.className = 'event-item';
+        item.textContent = text;
+        notificationLog.prepend(item);
+        displayMessages = [
+          ...displayMessages,
+          { role: 'assistant', content: text },
+        ];
+        renderMessages();
+      };
+
       const currentProject = () => projectSelect.value || portalState.currentProject || "";
+
+      const connectEvents = () => {
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        const project = currentProject();
+        if (!project) {
+          return;
+        }
+
+        eventSource = new EventSource(
+          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId) + '/events',
+        );
+        eventSource.addEventListener('notification', (event) => {
+          const data = JSON.parse(event.data || '{}');
+          if (data.text) {
+            appendNotification(data.text);
+          }
+        });
+      };
 
       const loadChat = async () => {
         const project = currentProject();
@@ -501,12 +551,14 @@ export const renderPortalHtml = ({
         }
 
         status.textContent = "Loading chat…";
+        notificationLog.innerHTML = "";
         const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId));
         const data = await response.json();
         displayMessages = data.chat?.messages || [];
         persistedMessageCount = displayMessages.length;
         renderMessages();
         status.textContent = project + ' / ' + portalState.chatId;
+        connectEvents();
       };
 
       const sendMessage = async () => {

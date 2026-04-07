@@ -17,6 +17,13 @@ The portal should let a user:
 - update config
 - receive notifications in the browser
 
+Current status:
+
+- portal chat is live
+- browser notifications now stream over SSE through the `web` channel
+- agent/task lifecycle notifications show up in the active portal project/chat
+- richer browser session routing is not implemented yet
+
 ## Proposal
 
 Treat the browser portal as a normal `Channel`.
@@ -56,10 +63,16 @@ Likely browser origin:
 ```ts
 {
   channel: "web",
-  userId: "<session or browser user id>",
-  conversationId?: "<browser session or tab id>"
+  userId: "<chat id>",
+  conversationId: "portal:<project name>"
 }
 ```
+
+Current behavior:
+
+- the portal uses a fixed chat id of `web`
+- the project name is part of `conversationId`
+- this keeps portal notification routing distinct across projects
 
 ## v1 Scope
 
@@ -93,13 +106,15 @@ Likely endpoints:
 - `GET /assets/...`
   - JS/CSS assets
 - `GET /events`
-  - SSE stream for notifications and updates
+  - no longer used
 - `GET /api/projects`
   - list projects
 - `GET /api/projects/:project/chats/:chat`
   - load chat data
 - `POST /api/projects/:project/chats/:chat/messages`
   - send a message
+- `GET /api/projects/:project/chats/:chat/events`
+  - SSE stream for notifications and small live updates
 - `GET /api/projects/:project/tasks`
   - list tasks
 - `POST /api/projects/:project/tasks`
@@ -140,14 +155,18 @@ Instead:
 - the portal fetches current state from the server
 - the `web` channel pushes notifications and small live updates
 
+Current limitation:
+
+- `notifyTarget: { "channel": "web" }` only works when the current origin is already
+  the active portal route for that project/chat
+- we do not yet have richer browser session discovery or cross-channel portal lookup
+
 ## First Implementation Plan
 
-1. Add a `web` channel type and browser session tracking.
-2. Serve a minimal HTML/JS portal from `maclaw server`.
-3. Add chat send/load endpoints.
-4. Add SSE notifications from harness events.
-5. Add task list/create/delete endpoints and UI.
-6. Add agent list/create/control endpoints and UI.
+1. Add task list/create/delete endpoints and UI.
+2. Add agent list/create/control endpoints and UI.
+3. Improve browser-specific notification targeting and session tracking.
+4. Add project/chat management UI.
 
 ## Non-Goals For v1
 

@@ -16,6 +16,7 @@ import {
 import type { Message, Origin, ScheduledTask } from "./types.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
+import { WebChannel } from "./channels/web.js";
 import { renderPortalHtml } from "./portal/index.js";
 
 const logScheduledTask = async (
@@ -73,6 +74,7 @@ export class MaclawServer {
   private readonly options: ServerOptions;
   private readonly projects = new Map<ProjectName, Harness>();
   private readonly channels = new Map<ChannelName, Channel>();
+  private readonly webChannel = new WebChannel();
   private readonly activeProjects = new Map<ChannelUser, ProjectName>();
   private httpServer?: http.Server;
   private portalPort?: number;
@@ -187,6 +189,14 @@ export class MaclawServer {
     await channel.send(notification.origin, notification.text);
   }
 
+  private getPortalOrigin(projectName: string, chatId: string): Origin {
+    return {
+      channel: "web",
+      conversationId: `portal:${projectName}`,
+      userId: chatId,
+    };
+  }
+
   private getPortalProjects() {
     return this.config.projects.map((project) => ({
       isDefault: project.name === this.getDefaultProjectName(),
@@ -240,6 +250,14 @@ export class MaclawServer {
     });
   }
 
+  private subscribePortalEvents(
+    response: ServerResponse,
+    projectName: string,
+    chatId: string,
+  ): void {
+    this.webChannel.subscribe(this.getPortalOrigin(projectName, chatId), response);
+  }
+
   private async postPortalChatMessage(
     request: IncomingMessage,
     response: ServerResponse,
@@ -259,11 +277,7 @@ export class MaclawServer {
       return;
     }
 
-    const origin: Origin = {
-      channel: "web",
-      conversationId: "portal",
-      userId: chatId,
-    };
+    const origin = this.getPortalOrigin(projectName, chatId);
     const commandReply = await dispatchCommand(harness, userInput, {
       chatId,
       origin,
@@ -345,6 +359,23 @@ export class MaclawServer {
         response,
         decodeURIComponent(chatMessagesMatch[1] ?? ""),
         decodeURIComponent(chatMessagesMatch[2] ?? ""),
+      );
+      return;
+    }
+
+    const chatEventsMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/chats\/([^/]+)\/events$/u,
+    );
+    if (chatEventsMatch) {
+      if (request.method !== "GET") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      this.subscribePortalEvents(
+        response,
+        decodeURIComponent(chatEventsMatch[1] ?? ""),
+        decodeURIComponent(chatEventsMatch[2] ?? ""),
       );
       return;
     }
@@ -441,6 +472,8 @@ export class MaclawServer {
     for (const project of this.config.projects) {
       this.projects.set(project.name, Harness.load(project.folder));
     }
+
+    this.channels.set("web", this.webChannel);
 
     if (this.config.channels.slack.enabled) {
       this.channels.set(

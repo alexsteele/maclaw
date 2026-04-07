@@ -167,6 +167,55 @@ test("parseTaskSchedule parses a one-time task in US format", () => {
   assert.equal(parsed?.schedule.type, "once");
 });
 
+test("parseTaskSchedule defaults a one-time US date to 9:00 AM", () => {
+  const parsed = parseTaskSchedule(
+    "once 4/5/2026 | Stock Updates | Send me a monday market update",
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.schedule.type, "once");
+  if (parsed?.schedule.type === "once") {
+    const runAt = new Date(parsed.schedule.runAt);
+    assert.equal(runAt.getHours(), 9);
+    assert.equal(runAt.getMinutes(), 0);
+  }
+});
+
+test("parseTaskSchedule parses relative one-time dates", () => {
+  const today = parseTaskSchedule(
+    "once today | Daily Summary | Give me a summary",
+  );
+  const tomorrow = parseTaskSchedule(
+    "once tomorrow 5:30 PM | Daily Summary | Give me a summary",
+  );
+  const now = parseTaskSchedule(
+    "once now | Daily Summary | Give me a summary",
+  );
+
+  assert.ok(today);
+  assert.ok(tomorrow);
+  assert.ok(now);
+  assert.equal(today?.schedule.type, "once");
+  assert.equal(tomorrow?.schedule.type, "once");
+  assert.equal(now?.schedule.type, "once");
+
+  if (today?.schedule.type === "once") {
+    const runAt = new Date(today.schedule.runAt);
+    assert.equal(runAt.getHours(), 9);
+    assert.equal(runAt.getMinutes(), 0);
+  }
+
+  if (tomorrow?.schedule.type === "once") {
+    const runAt = new Date(tomorrow.schedule.runAt);
+    assert.equal(runAt.getHours(), 17);
+    assert.equal(runAt.getMinutes(), 30);
+  }
+
+  if (now?.schedule.type === "once") {
+    assert.ok(Date.parse(now.schedule.runAt) <= Date.now() + 1_000);
+  }
+});
+
 test("parseTaskSchedule parses a daily task with AM/PM time", () => {
   const parsed = parseTaskSchedule(
     "daily 9:00 AM | Daily Summary | Give me a summary",
