@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  defaultInboxFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   initProjectConfig,
@@ -41,6 +42,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
     assert.equal(defaultTasksFile(rootDir), path.join(rootDir, ".maclaw", "tasks.json"));
     assert.equal(defaultTaskRunsFile(rootDir), path.join(rootDir, ".maclaw", "task-runs.jsonl"));
+    assert.equal(defaultInboxFile(rootDir), path.join(rootDir, ".maclaw", "inbox.jsonl"));
     assert.equal(config.retentionDays, 14);
     assert.equal(config.chatId, "default");
     assert.equal(config.model, "dummy/test-model");

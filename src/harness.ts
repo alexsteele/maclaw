@@ -5,6 +5,7 @@ import { rm } from "node:fs/promises";
 import {
   defaultProjectDataDir,
   defaultAgentsFile,
+  defaultInboxFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   initProjectConfig,
@@ -13,6 +14,12 @@ import {
 } from "./config.js";
 import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
 import { ensureDir } from "./fs-utils.js";
+import {
+  createInboxEntry,
+  JsonFileInboxStore,
+  MemoryInboxStore,
+  type InboxStore,
+} from "./inbox.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
@@ -129,6 +136,12 @@ const createAgentStore = (config: ProjectConfig): AgentStore => {
     : new MemoryAgentStore();
 };
 
+const createInboxStore = (config: ProjectConfig): InboxStore => {
+  return config.storage === "json"
+    ? new JsonFileInboxStore(defaultInboxFile(config.projectFolder))
+    : new MemoryInboxStore();
+};
+
 const AGENT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 const createShortAgentId = (): string => {
@@ -168,6 +181,7 @@ export class Harness {
   private _tools: ToolDefinition[];
   private _chatRuntime: ChatRuntime;
   private _agentStore: AgentStore;
+  private _inboxStore: InboxStore;
   private _runningAgents = new Map<string, Agent>();
   private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
   private _notificationListener?: (
@@ -182,6 +196,7 @@ export class Harness {
     this._tools = createTools(config);
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = createAgentStore(config);
+    this._inboxStore = createInboxStore(config);
   }
 
   static load(cwd?: string): Harness {
@@ -260,6 +275,7 @@ export class Harness {
     this._tools = nextTools;
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
+    this._inboxStore = createInboxStore(nextConfig);
 
     if (this._taskListener) {
       await this.start(this._taskListener);
@@ -287,6 +303,7 @@ export class Harness {
     this._tools = createTools(nextConfig);
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = createAgentStore(nextConfig);
+    this._inboxStore = createInboxStore(nextConfig);
 
     if (this._taskListener) {
       await this.start(this._taskListener);
@@ -480,12 +497,25 @@ export class Harness {
     return this.deleteTask(taskId, this.getCurrentChatId());
   }
 
-  private emitNotification(notification: HarnessNotification): Promise<void> {
+  private async emitNotification(notification: HarnessNotification): Promise<void> {
     if (!this._allowedNotifications.has(notification.kind)) {
-      return Promise.resolve();
+      return;
     }
 
-    return Promise.resolve(this._notificationListener?.(notification));
+    await this.saveNotificationToInbox(notification);
+    await Promise.resolve(this._notificationListener?.(notification));
+  }
+
+  private async saveNotificationToInbox(
+    notification: HarnessNotification,
+  ): Promise<void> {
+    await this._inboxStore.saveEntry(
+      createInboxEntry({
+        kind: notification.kind,
+        text: notification.text,
+        origin: notification.origin,
+      }),
+    );
   }
 
   private resolveNotificationTarget(
@@ -518,7 +548,7 @@ export class Harness {
       return;
     }
 
-    await Promise.resolve(this._notificationListener?.({ kind, origin: target, text }));
+    await this.emitNotification({ kind, origin: target, text });
   }
 
   private emitAgentNotification(
@@ -536,7 +566,7 @@ export class Harness {
       return;
     }
 
-    void Promise.resolve(this._notificationListener?.({ kind, origin: target, text }));
+    void this.emitNotification({ kind, origin: target, text });
   }
 
   async deleteChat(chatId: string): Promise<boolean> {

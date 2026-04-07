@@ -18,6 +18,9 @@ export const defaultTaskRunsFile = (projectFolder: string): string =>
 export const defaultAgentsFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "agents.json");
 
+export const defaultInboxFile = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "inbox.jsonl");
+
 export type ModelProvider = "dummy" | "openai";
 
 export type ProjectConfig = {

@@ -69,6 +69,15 @@ export type NotificationOverride = {
   notifyTarget?: NotificationTarget;
 };
 
+export type InboxEntry = {
+  id: string;
+  kind: NotificationKind;
+  text: string;
+  origin: Origin;
+  createdAt: string;
+  readAt?: string;
+};
+
 export type AgentStatus =
   | "pending"
   | "running"

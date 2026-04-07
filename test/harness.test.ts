@@ -5,6 +5,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
+import { defaultInboxFile } from "../src/config.js";
+import { JsonFileInboxStore } from "../src/inbox.js";
 import type { AgentRecord } from "../src/types.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 
@@ -291,6 +293,51 @@ test("harness emits a notification when an origin-backed agent fails", async () 
     assert.equal(notifications[0]?.kind, "agentFailed");
     assert.equal(notifications[0]?.originUserId, "slack-T123-U123");
     assert.match(notifications[0]?.text ?? "", /notifier-agent failed: boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness saves delivered notifications to the project inbox", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-inbox-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "inbox-project",
+      model: "dummy/test-model",
+    });
+
+    await harness.start(
+      async () => {},
+      async () => {},
+    );
+
+    harness.promptChat = async () => {
+      throw new Error("boom");
+    };
+
+    const created = await harness.createAgent({
+      name: "inbox-agent",
+      prompt: "Do the thing",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        userId: "slack-T123-U123",
+      },
+    });
+    assert.ok(created.agent);
+
+    await waitForAgentToSettle(harness, created.agent.id);
+
+    const inbox = await new JsonFileInboxStore(defaultInboxFile(projectDir)).loadEntries();
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.kind, "agentFailed");
+    assert.equal(inbox[0]?.origin.channel, "slack");
+    assert.equal(inbox[0]?.origin.userId, "slack-T123-U123");
+    assert.match(inbox[0]?.text ?? "", /inbox-agent failed: boom/u);
+    assert.ok(inbox[0]?.id);
+    assert.ok(inbox[0]?.createdAt);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
