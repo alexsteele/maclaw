@@ -6,7 +6,7 @@ Derived from local git history.
 | ---------- | --------: | ---------------------------: | --------------- |
 | 2026-04-04 |        22 |                         6.53 | +8,904 / -2,417 |
 | 2026-04-05 |        30 |                         4.30 | +3,555 / -504   |
-| 2026-04-06 |        25 |                         1.82 | +1,981 / -691   |
+| 2026-04-06 |        41 |                         3.64 | +5,451 / -1,079 |
 
 ## 2026-04-04 Notes
 
@@ -28,10 +28,11 @@ Derived from local git history.
 
 ## 2026-04-06 Notes
 
-- Cleaned up tool organization into `src/tools/` and kept only the safe
-  starter tools.
-- Added `/tools`, `/chat usage`, `/project usage`, and `/save`.
-- Persisted provider usage on assistant messages and aggregated usage by chat
-  and project.
-- Improved test isolation so the suite cannot accidentally talk to OpenAI or
-  any other network unless a test explicitly mocks it.
+- Starter tools in `src/tools`
+- Test isolation. No talking to openai.
+- Added `/tools`, `/chat usage`, `/project usage`, `/usage`, and `/save`.
+- Basic web portal, SSE notifications, chat-first UI.
+- Inbox for notifications. `/inbox`
+- Initial sqlite support. Agents, tasks, inbox, chats. Transcripts stay in
+  jsonl.
+- `docs/config.md`
