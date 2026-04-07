@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { JsonFileTaskStore, MemoryTaskStore, TaskScheduler } from "../src/scheduler.js";
+import { SqliteTaskStore } from "../src/storage/sqlite.js";
 import { parseTaskSchedule } from "../src/task.js";
 import type { TaskRunLogEntry } from "../src/types.js";
 
@@ -316,4 +318,41 @@ test("memory scheduler keeps tasks in memory without writing a task log", async 
   assert.equal(tasks.length, 1);
   assert.equal(tasks[0]?.id, task.id);
   assert.equal(tasks[0]?.status, "completed");
+});
+
+test("sqlite scheduler stores tasks and task run logs", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-scheduler-sqlite-"));
+  const databasePath = path.join(dir, "maclaw.db");
+  const scheduler = new TaskScheduler(new SqliteTaskStore(databasePath));
+
+  try {
+    const task = await scheduler.createTask({
+      chatId: "chat-a",
+      title: "SQLite task",
+      prompt: "Store this in sqlite",
+      runAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await scheduler.runDueTasks(async () => {
+      return;
+    });
+
+    const tasks = await scheduler.listTasks("chat-a");
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0]?.id, task.id);
+    assert.equal(tasks[0]?.status, "completed");
+
+    const database = new DatabaseSync(databasePath);
+    const rows = database
+      .prepare("select task_id, title, status from task_runs order by id asc")
+      .all() as Array<{ task_id: string; title: string; status: string }>;
+    database.close();
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.task_id, task.id);
+    assert.equal(rows[0]?.title, "SQLite task");
+    assert.equal(rows[0]?.status, "completed");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

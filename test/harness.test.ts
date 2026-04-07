@@ -390,6 +390,33 @@ test("harness stores agents and inbox entries in sqlite when configured", async 
   }
 });
 
+test("harness stores tasks in sqlite when configured", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-sqlite-task-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "sqlite-task-project",
+      model: "dummy/test-model",
+      storage: "sqlite",
+    });
+
+    const task = await harness.createTask({
+      chatId: "default",
+      title: "SQLite Task",
+      prompt: "Do the thing later",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    const tasks = await harness.listCurrentChatTasks();
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0]?.id, task.id);
+    assert.equal(tasks[0]?.title, "SQLite Task");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("harness emits a notification when an origin-backed task completes", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-"));
 

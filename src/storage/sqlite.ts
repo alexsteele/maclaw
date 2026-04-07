@@ -5,12 +5,16 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { AgentStore } from "../agent.js";
 import type { InboxStore } from "../inbox.js";
+import type { TaskStore } from "../scheduler.js";
 import type {
   AgentRecord,
   InboxEntry,
   NotificationPolicy,
   NotificationTarget,
   Origin,
+  ScheduledTask,
+  TaskRunLogEntry,
+  TaskSchedule,
 } from "../types.js";
 
 const SQLITE_SCHEMA = `
@@ -45,6 +49,38 @@ const SQLITE_SCHEMA = `
     created_at text not null,
     sent_at text,
     read_at text
+  );
+
+  create table if not exists tasks (
+    id text primary key,
+    chat_id text not null,
+    origin_json text,
+    notify_json text,
+    notify_target_json text,
+    title text not null,
+    prompt text not null,
+    schedule_json text not null,
+    next_run_at text not null,
+    status text not null,
+    created_at text not null,
+    updated_at text not null,
+    last_run_at text,
+    last_error text
+  );
+
+  create table if not exists task_runs (
+    id integer primary key autoincrement,
+    timestamp text not null,
+    task_id text not null,
+    chat_id text not null,
+    title text not null,
+    prompt text not null,
+    schedule_json text not null,
+    scheduled_for text not null,
+    started_at text not null,
+    finished_at text not null,
+    status text not null,
+    error text
   );
 `;
 
@@ -97,6 +133,23 @@ const rowToInboxEntry = (row: Record<string, unknown>): InboxEntry => ({
   createdAt: String(row.created_at),
   sentAt: row.sent_at === null ? undefined : String(row.sent_at),
   readAt: row.read_at === null ? undefined : String(row.read_at),
+});
+
+const rowToScheduledTask = (row: Record<string, unknown>): ScheduledTask => ({
+  id: String(row.id),
+  chatId: String(row.chat_id),
+  origin: parseJsonField<Origin>(row.origin_json),
+  notify: parseJsonField<NotificationPolicy>(row.notify_json),
+  notifyTarget: parseJsonField<NotificationTarget>(row.notify_target_json),
+  title: String(row.title),
+  prompt: String(row.prompt),
+  schedule: JSON.parse(String(row.schedule_json)) as TaskSchedule,
+  nextRunAt: String(row.next_run_at),
+  status: row.status as ScheduledTask["status"],
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at),
+  lastRunAt: row.last_run_at === null ? undefined : String(row.last_run_at),
+  lastError: row.last_error === null ? undefined : String(row.last_error),
 });
 
 export class SqliteAgentStore implements AgentStore {
@@ -201,6 +254,82 @@ export class SqliteInboxStore implements InboxStore {
         entry.createdAt,
         entry.sentAt ?? null,
         entry.readAt ?? null,
+      );
+  }
+}
+
+export class SqliteTaskStore implements TaskStore {
+  private readonly database: DatabaseSync;
+
+  constructor(filePath: string) {
+    this.database = openDatabase(filePath);
+  }
+
+  async loadTasks(): Promise<ScheduledTask[]> {
+    const rows = this.database
+      .prepare("select * from tasks order by next_run_at asc")
+      .all() as Record<string, unknown>[];
+    return rows.map(rowToScheduledTask);
+  }
+
+  async saveTasks(tasks: ScheduledTask[]): Promise<void> {
+    this.database.exec("begin");
+    try {
+      this.database.prepare("delete from tasks").run();
+      const insertTask = this.database.prepare(`
+        insert into tasks (
+          id, chat_id, origin_json, notify_json, notify_target_json,
+          title, prompt, schedule_json, next_run_at, status,
+          created_at, updated_at, last_run_at, last_error
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const task of tasks) {
+        insertTask.run(
+          task.id,
+          task.chatId,
+          stringifyJsonField(task.origin),
+          stringifyJsonField(task.notify),
+          stringifyJsonField(task.notifyTarget),
+          task.title,
+          task.prompt,
+          JSON.stringify(task.schedule),
+          task.nextRunAt,
+          task.status,
+          task.createdAt,
+          task.updatedAt,
+          task.lastRunAt ?? null,
+          task.lastError ?? null,
+        );
+      }
+
+      this.database.exec("commit");
+    } catch (error) {
+      this.database.exec("rollback");
+      throw error;
+    }
+  }
+
+  async logTaskRun(entry: TaskRunLogEntry): Promise<void> {
+    this.database
+      .prepare(`
+        insert into task_runs (
+          timestamp, task_id, chat_id, title, prompt, schedule_json,
+          scheduled_for, started_at, finished_at, status, error
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        entry.timestamp,
+        entry.taskId,
+        entry.chatId,
+        entry.title,
+        entry.prompt,
+        JSON.stringify(entry.schedule),
+        entry.scheduledFor,
+        entry.startedAt,
+        entry.finishedAt,
+        entry.status,
+        entry.error ?? null,
       );
   }
 }

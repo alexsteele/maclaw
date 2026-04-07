@@ -24,7 +24,7 @@ import {
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
-import { SqliteAgentStore, SqliteInboxStore } from "./storage/sqlite.js";
+import { SqliteAgentStore, SqliteInboxStore, SqliteTaskStore } from "./storage/sqlite.js";
 import { createTools } from "./tools/index.js";
 import {
   JsonFileTaskStore,
@@ -126,7 +126,11 @@ const createChatStore = (config: ProjectConfig): ChatStore => {
 };
 
 const createScheduler = (config: ProjectConfig): TaskScheduler => {
-  return config.storage === "json" || config.storage === "sqlite"
+  if (config.storage === "sqlite") {
+    return new TaskScheduler(new SqliteTaskStore(defaultSqliteFile(config.projectFolder)));
+  }
+
+  return config.storage === "json"
     ? new TaskScheduler(
         new JsonFileTaskStore(
           defaultTasksFile(config.projectFolder),
