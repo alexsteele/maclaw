@@ -26,6 +26,9 @@ const renderProjectOptions = (
     .join("");
 };
 
+const serializeForScript = (value: unknown): string =>
+  JSON.stringify(value).replaceAll("<", "\\u003c");
+
 export const renderPortalHtml = ({
   currentProject,
   projects,
@@ -86,7 +89,8 @@ export const renderPortalHtml = ({
       .shell {
         display: grid;
         grid-template-columns: 248px minmax(0, 1fr) 300px;
-        min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
       }
 
       .sidebar {
@@ -112,6 +116,7 @@ export const renderPortalHtml = ({
       .main {
         padding: 18px;
         min-width: 0;
+        min-height: 0;
       }
 
       .stack {
@@ -172,7 +177,8 @@ export const renderPortalHtml = ({
       .chat-app {
         display: grid;
         grid-template-rows: auto minmax(0, 1fr) auto;
-        min-height: calc(100vh - 36px);
+        height: calc(100vh - 36px);
+        min-height: 0;
         border: 1px solid var(--border);
         border-radius: 24px;
         background: var(--panel);
@@ -201,12 +207,18 @@ export const renderPortalHtml = ({
         font-size: 13px;
       }
 
+      .chat-status {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
       .transcript {
-        min-height: 520px;
+        min-height: 0;
         padding: 18px;
         display: grid;
         align-content: start;
         gap: 12px;
+        overflow: auto;
         background:
           linear-gradient(180deg, rgba(37, 99, 235, 0.04), transparent 18rem),
           var(--panel);
@@ -218,6 +230,7 @@ export const renderPortalHtml = ({
         padding: 12px 14px;
         background: var(--panel-2);
         max-width: 46rem;
+        white-space: pre-wrap;
       }
 
       .message-user {
@@ -233,6 +246,14 @@ export const renderPortalHtml = ({
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.08em;
+      }
+
+      .empty-state {
+        color: var(--muted);
+        border: 1px dashed var(--border-strong);
+        border-radius: 16px;
+        padding: 18px;
+        background: var(--panel-2);
       }
 
       .composer {
@@ -296,6 +317,7 @@ export const renderPortalHtml = ({
         border-left: 1px solid var(--border);
         padding: 18px 16px;
         background: color-mix(in srgb, var(--panel) 92%, transparent);
+        overflow: auto;
       }
 
       .inspector h2 {
@@ -341,7 +363,7 @@ export const renderPortalHtml = ({
         }
 
         .chat-app {
-          min-height: auto;
+          height: auto;
         }
       }
     </style>
@@ -384,27 +406,15 @@ export const renderPortalHtml = ({
             <div>
               <h2>Chat</h2>
               <div class="chat-subtitle">Front and center, with agent and task context nearby.</div>
+              <div class="chat-status" id="chat-status">Loading chat…</div>
             </div>
             <span class="pill">web channel</span>
           </header>
-          <div class="transcript">
-            <article class="message">
-              <strong>system</strong>
-              The portal will show the current chat transcript here.
-            </article>
-            <article class="message message-user">
-              <strong>user</strong>
-              Keep the browser workspace minimal and clean.
-            </article>
-            <article class="message">
-              <strong>assistant</strong>
-              Chat is the main interaction point. Agent and task controls stay visible without taking over the screen.
-            </article>
-          </div>
+          <div class="transcript" id="transcript"></div>
           <div class="composer">
             <label for="message">Message</label>
             <textarea id="message" placeholder="Send a message to maclaw..."></textarea>
-            <button type="button">Send</button>
+            <button type="button" id="send-button">Send</button>
           </div>
         </section>
       </main>
@@ -440,6 +450,126 @@ export const renderPortalHtml = ({
         </div>
       </aside>
     </div>
+    <script>
+      const portalState = ${serializeForScript({
+        chatId: "web",
+        currentProject,
+        projects,
+      })};
+
+      const projectSelect = document.getElementById("project-select");
+      const transcript = document.getElementById("transcript");
+      const status = document.getElementById("chat-status");
+      const messageInput = document.getElementById("message");
+      const sendButton = document.getElementById("send-button");
+      let displayMessages = [];
+      let persistedMessageCount = 0;
+
+      const escapeHtml = (value) =>
+        value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+
+      const renderMessages = () => {
+        if (displayMessages.length === 0) {
+          transcript.innerHTML = '<div class="empty-state">No messages yet. Start the conversation here.</div>';
+          return;
+        }
+
+        transcript.innerHTML = displayMessages.map((message) => {
+          const userClass = message.role === "user" ? " message-user" : "";
+          return [
+            '<article class="message' + userClass + '">',
+            '<strong>' + escapeHtml(message.role) + '</strong>',
+            escapeHtml(message.content),
+            '</article>',
+          ].join("");
+        }).join("");
+        transcript.scrollTop = transcript.scrollHeight;
+      };
+
+      const currentProject = () => projectSelect.value || portalState.currentProject || "";
+
+      const loadChat = async () => {
+        const project = currentProject();
+        if (!project) {
+          status.textContent = "No project selected.";
+          renderMessages([]);
+          return;
+        }
+
+        status.textContent = "Loading chat…";
+        const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId));
+        const data = await response.json();
+        displayMessages = data.chat?.messages || [];
+        persistedMessageCount = displayMessages.length;
+        renderMessages();
+        status.textContent = project + ' / ' + portalState.chatId;
+      };
+
+      const sendMessage = async () => {
+        const project = currentProject();
+        const text = messageInput.value.trim();
+        if (!project || !text) {
+          return;
+        }
+
+        sendButton.disabled = true;
+        status.textContent = "Sending…";
+
+        const response = await fetch(
+          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId) + '/messages',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text }),
+          },
+        );
+        const data = await response.json();
+        messageInput.value = "";
+        if (data.command) {
+          displayMessages = [
+            ...displayMessages,
+            { role: 'user', content: data.command.text },
+            { role: 'assistant', content: data.command.reply },
+          ];
+        } else {
+          const nextMessages = data.chat?.messages || [];
+          if (nextMessages.length < persistedMessageCount) {
+            displayMessages = nextMessages;
+          } else {
+            displayMessages = [
+              ...displayMessages,
+              ...nextMessages.slice(persistedMessageCount),
+            ];
+          }
+          persistedMessageCount = nextMessages.length;
+        }
+        renderMessages();
+        status.textContent = project + ' / ' + portalState.chatId;
+        sendButton.disabled = false;
+        messageInput.focus();
+      };
+
+      projectSelect.addEventListener('change', () => {
+        void loadChat();
+      });
+
+      sendButton.addEventListener('click', () => {
+        void sendMessage();
+      });
+
+      messageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          void sendMessage();
+        }
+      });
+
+      void loadChat();
+    </script>
   </body>
 </html>
 `;

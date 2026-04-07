@@ -1,4 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import { URL } from "node:url";
 import type {
   Channel,
   ChannelMessage,
@@ -35,6 +36,27 @@ const helpText = [
   "",
   "Any other message is sent to the current project's chat.",
 ].join("\n");
+
+const readRequestBody = async (request: IncomingMessage): Promise<string> => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+};
+
+const json = (response: ServerResponse, statusCode: number, body: unknown): void => {
+  response.statusCode = statusCode;
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  response.end(`${JSON.stringify(body)}\n`);
+};
+
+const text = (response: ServerResponse, statusCode: number, body: string): void => {
+  response.statusCode = statusCode;
+  response.setHeader("content-type", "text/plain; charset=utf-8");
+  response.end(`${body}\n`);
+};
 
 type ProjectName = string;
 type ChannelName = string;
@@ -165,28 +187,169 @@ export class MaclawServer {
     await channel.send(notification.origin, notification.text);
   }
 
+  private getPortalProjects() {
+    return this.config.projects.map((project) => ({
+      isDefault: project.name === this.getDefaultProjectName(),
+      name: project.name,
+    }));
+  }
+
+  private getPortalHarness(
+    response: ServerResponse,
+    projectName: string,
+  ): Harness | undefined {
+    const harness = this.projects.get(projectName);
+    if (!harness) {
+      json(response, 404, { error: `unknown project: ${projectName}` });
+      return undefined;
+    }
+
+    return harness;
+  }
+
+  private sendPortal(response: ServerResponse): void {
+    response.statusCode = 200;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(this.renderPortal());
+  }
+
+  private sendPortalProjects(response: ServerResponse): void {
+    json(response, 200, {
+      currentProject: this.getDefaultProjectName(),
+      projects: this.getPortalProjects(),
+    });
+  }
+
+  private async sendPortalChat(
+    response: ServerResponse,
+    projectName: string,
+    chatId: string,
+  ): Promise<void> {
+    const harness = this.getPortalHarness(response, projectName);
+    if (!harness) {
+      return;
+    }
+
+    const chat = await harness.loadChat(chatId);
+    json(response, 200, {
+      chat: {
+        id: chat.id,
+        messages: chat.messages,
+      },
+      project: projectName,
+    });
+  }
+
+  private async postPortalChatMessage(
+    request: IncomingMessage,
+    response: ServerResponse,
+    projectName: string,
+    chatId: string,
+  ): Promise<void> {
+    const harness = this.getPortalHarness(response, projectName);
+    if (!harness) {
+      return;
+    }
+
+    const rawBody = await readRequestBody(request);
+    const parsed = JSON.parse(rawBody || "{}") as { text?: string };
+    const userInput = parsed.text?.trim();
+    if (!userInput) {
+      json(response, 400, { error: "text is required" });
+      return;
+    }
+
+    const origin: Origin = {
+      channel: "web",
+      conversationId: "portal",
+      userId: chatId,
+    };
+    const commandReply = await dispatchCommand(harness, userInput, {
+      chatId,
+      origin,
+    });
+    if (commandReply !== null) {
+      const chat = await harness.loadChat(chatId);
+      json(response, 200, {
+        chat: {
+          id: chat.id,
+          messages: chat.messages,
+        },
+        command: {
+          reply: commandReply,
+          text: userInput,
+        },
+        project: projectName,
+      });
+      return;
+    }
+
+    await harness.promptChat(chatId, userInput, {
+      origin,
+    });
+
+    await this.sendPortalChat(response, projectName, chatId);
+  }
+
   private async handlePortalRequest(
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
-    if (request.method !== "GET") {
-      response.statusCode = 405;
-      response.setHeader("content-type", "text/plain; charset=utf-8");
-      response.end("method_not_allowed\n");
+    const url = new URL(request.url ?? "/", "http://localhost");
+    if (url.pathname === "/") {
+      if (request.method !== "GET") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      this.sendPortal(response);
       return;
     }
 
-    const path = request.url ?? "/";
-    if (path !== "/") {
-      response.statusCode = 404;
-      response.setHeader("content-type", "text/plain; charset=utf-8");
-      response.end("not_found\n");
+    if (url.pathname === "/api/projects") {
+      if (request.method !== "GET") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      this.sendPortalProjects(response);
       return;
     }
 
-    response.statusCode = 200;
-    response.setHeader("content-type", "text/html; charset=utf-8");
-    response.end(this.renderPortal());
+    const chatMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/chats\/([^/]+)$/u);
+    if (chatMatch) {
+      if (request.method !== "GET") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      await this.sendPortalChat(
+        response,
+        decodeURIComponent(chatMatch[1] ?? ""),
+        decodeURIComponent(chatMatch[2] ?? ""),
+      );
+      return;
+    }
+
+    const chatMessagesMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/chats\/([^/]+)\/messages$/u,
+    );
+    if (chatMessagesMatch) {
+      if (request.method !== "POST") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      await this.postPortalChatMessage(
+        request,
+        response,
+        decodeURIComponent(chatMessagesMatch[1] ?? ""),
+        decodeURIComponent(chatMessagesMatch[2] ?? ""),
+      );
+      return;
+    }
+
+    text(response, 404, "not_found");
   }
 
   private async startPortal(): Promise<void> {
