@@ -46,6 +46,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(config.model, "dummy/test-model");
     assert.equal(config.storage, "json");
     assert.equal(config.notifications, "all");
+    assert.equal(config.defaultTaskTime, "9:00 AM");
     assert.equal(config.contextMessages, 20);
     assert.equal(config.maxToolIterations, 8);
   } finally {
@@ -64,6 +65,7 @@ test("loadConfig runs in uninitialized mode when .maclaw/maclaw.json is missing"
     assert.equal(config.chatsDir, path.join(rootDir, ".maclaw", "chats"));
     assert.equal(config.storage, "none");
     assert.equal(config.notifications, "all");
+    assert.equal(config.defaultTaskTime, "9:00 AM");
     assert.equal(config.contextMessages, 20);
     assert.equal(config.maxToolIterations, 8);
   } finally {
@@ -131,6 +133,7 @@ test("initProjectConfig creates a new project config with createdAt", async () =
     assert.equal(saved.name, path.basename(rootDir));
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
+    assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
@@ -165,6 +168,7 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     assert.equal(projectConfig.model, "dummy/test-model");
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
+    assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
@@ -188,6 +192,7 @@ test("initProjectConfig merges overrides into the saved project config", async (
     assert.equal(projectConfig.retentionDays, 7);
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
+    assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
@@ -207,6 +212,7 @@ test("loadConfig reads advanced project config fields", async () => {
           name: "advanced-project",
           storage: "json",
           model: "dummy/test-model",
+          defaultTaskTime: "8:15 AM",
           contextMessages: 12,
           maxToolIterations: 5,
           notifications: {
@@ -222,6 +228,7 @@ test("loadConfig reads advanced project config fields", async () => {
 
     const config = loadConfig(rootDir);
     assert.equal(config.storage, "json");
+    assert.equal(config.defaultTaskTime, "8:15 AM");
     assert.equal(config.contextMessages, 12);
     assert.equal(config.maxToolIterations, 5);
     assert.deepEqual(config.notifications, {

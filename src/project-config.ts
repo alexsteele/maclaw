@@ -1,11 +1,13 @@
 // Shared project config helpers used by CLI and slash commands.
 import { normalizeConfiguredModel, parseConfiguredModel, type ProjectConfig } from "./config.js";
+import { parseTimeOfDay } from "./task.js";
 
 export const editableProjectConfigKeys = new Set([
   "name",
   "model",
   "storage",
   "notifications",
+  "defaultTaskTime",
   "contextMessages",
   "maxToolIterations",
   "retentionDays",
@@ -23,6 +25,7 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `modelProvider: ${parseConfiguredModel(config.model).provider}`,
     `storage: ${config.storage}`,
     `notifications: ${JSON.stringify(config.notifications)}`,
+    `defaultTaskTime: ${config.defaultTaskTime}`,
     `contextMessages: ${config.contextMessages}`,
     `maxToolIterations: ${config.maxToolIterations}`,
     `retentionDays: ${config.retentionDays}`,
@@ -66,6 +69,15 @@ export const parseProjectConfigValue = (
     } catch {
       return "notifications must be 'all', 'none', or valid JSON";
     }
+  }
+
+  if (key === "defaultTaskTime") {
+    const trimmed = value.trim();
+    if (!trimmed || !parseTimeOfDay(trimmed)) {
+      return "defaultTaskTime must be a time like '9:00 AM' or '17:30'";
+    }
+
+    return { defaultTaskTime: trimmed };
   }
 
   if (

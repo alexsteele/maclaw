@@ -3,6 +3,7 @@ import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";
 import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
+import { normalizeDefaultTaskTime } from "./task.js";
 import type { NotificationPolicy } from "./types.js";
 
 export const defaultProjectDataDir = (projectFolder: string): string =>
@@ -25,6 +26,7 @@ export type ProjectConfig = {
   model: string;
   storage: "json" | "none";
   notifications: NotificationPolicy;
+  defaultTaskTime: string;
   contextMessages: number;
   maxToolIterations: number;
   retentionDays: number;
@@ -105,6 +107,7 @@ export const initProjectConfig = async (
     model: normalizeConfiguredModel(mergedConfig.model),
     storage: mergedConfig.storage ?? "json",
     notifications: normalizeNotifications(mergedConfig.notifications),
+    defaultTaskTime: normalizeDefaultTaskTime(mergedConfig.defaultTaskTime),
     contextMessages: mergedConfig.contextMessages ?? 20,
     maxToolIterations: mergedConfig.maxToolIterations ?? 8,
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
@@ -143,6 +146,9 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
     ),
     storage: storageValue === "json" ? "json" : "none",
     notifications: normalizeNotifications(projectFileConfig.notifications),
+    defaultTaskTime: normalizeDefaultTaskTime(
+      process.env.MACLAW_DEFAULT_TASK_TIME ?? projectFileConfig.defaultTaskTime,
+    ),
     contextMessages: toPositiveInt(
       process.env.MACLAW_CONTEXT_MESSAGES,
       projectFileConfig.contextMessages ?? 20,

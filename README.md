@@ -165,6 +165,7 @@ my-project/
   "createdAt": "2026-04-04T10:00:00.000Z",
   "name": "my-project",
   "model": "openai/gpt-4.1-mini",
+  "defaultTaskTime": "9:00 AM",
   "contextMessages": 20,
   "maxToolIterations": 8,
   "retentionDays": 30,
@@ -188,6 +189,7 @@ Environment variables:
 - `OPENAI_API_KEY`: enables OpenAI models
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_CHAT_ID`: defaults to `default`
+- `MACLAW_DEFAULT_TASK_TIME`: default time for one-time `today`, `tomorrow`, or date-only tasks
 - `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
 - `MACLAW_MAX_TOOL_ITERATIONS`: defaults to `8`
 - `MACLAW_RETENTION_DAYS`: defaults to `30`

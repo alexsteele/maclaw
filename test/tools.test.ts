@@ -12,6 +12,7 @@ const createConfig = (projectDir: string): ProjectConfig => ({
   model: "dummy/test-model",
   storage: "none",
   notifications: "all",
+  defaultTaskTime: "9:00 AM",
   contextMessages: 20,
   maxToolIterations: 8,
   retentionDays: 30,

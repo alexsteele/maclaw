@@ -1,11 +1,12 @@
 import type { TaskSchedule, Weekday } from "./types.js";
 
 const weekdayOrder: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DEFAULT_TASK_TIME = "9:00 AM";
 
 // Examples:
 // "9:00 AM"
 // "17:30"
-const parseTimeOfDay = (value: string): { hour: number; minute: number } | null => {
+export const parseTimeOfDay = (value: string): { hour: number; minute: number } | null => {
   const trimmed = value.trim();
   const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
   if (twelveHourMatch) {
@@ -39,22 +40,56 @@ const parseTimeOfDay = (value: string): { hour: number; minute: number } | null 
   return { hour, minute };
 };
 
-// Example:
-// "4/5/2026 9:00 AM"
-const parseUsDateTime = (value: string): string | null => {
-  const trimmed = value.trim();
-  const match =
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
-  if (!match) {
+export const normalizeDefaultTaskTime = (value: string | undefined): string => {
+  const trimmed = value?.trim();
+  return trimmed && parseTimeOfDay(trimmed) ? trimmed : DEFAULT_TASK_TIME;
+};
+
+const buildLocalDateTime = (
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): string | null => {
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
     return null;
   }
 
-  const month = Number.parseInt(match[1] ?? "", 10);
-  const day = Number.parseInt(match[2] ?? "", 10);
-  const year = Number.parseInt(match[3] ?? "", 10);
-  const rawHour = Number.parseInt(match[4] ?? "", 10);
-  const minute = Number.parseInt(match[5] ?? "", 10);
-  const meridiem = (match[6] ?? "").toUpperCase();
+  return date.toISOString();
+};
+
+// Examples:
+// "4/5/2026"
+// "4/5/2026 9:00 AM"
+const parseUsDateTime = (value: string, defaultTaskTime: string): string | null => {
+  const defaultTime = parseTimeOfDay(normalizeDefaultTaskTime(defaultTaskTime))!;
+  const trimmed = value.trim();
+  const dateOnlyMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/u.exec(trimmed);
+  if (dateOnlyMatch) {
+    const month = Number.parseInt(dateOnlyMatch[1] ?? "", 10);
+    const day = Number.parseInt(dateOnlyMatch[2] ?? "", 10);
+    const year = Number.parseInt(dateOnlyMatch[3] ?? "", 10);
+    return buildLocalDateTime(year, month, day, defaultTime.hour, defaultTime.minute);
+  }
+
+  const dateTimeMatch =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/u.exec(trimmed);
+  if (!dateTimeMatch) {
+    return null;
+  }
+
+  const month = Number.parseInt(dateTimeMatch[1] ?? "", 10);
+  const day = Number.parseInt(dateTimeMatch[2] ?? "", 10);
+  const year = Number.parseInt(dateTimeMatch[3] ?? "", 10);
+  const rawHour = Number.parseInt(dateTimeMatch[4] ?? "", 10);
+  const minute = Number.parseInt(dateTimeMatch[5] ?? "", 10);
+  const meridiem = (dateTimeMatch[6] ?? "").toUpperCase();
 
   if (
     month < 1 ||
@@ -74,16 +109,46 @@ const parseUsDateTime = (value: string): string | null => {
     hour += 12;
   }
 
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  return buildLocalDateTime(year, month, day, hour, minute);
+};
+
+// Examples:
+// "today"
+// "today 5:30 PM"
+// "tomorrow"
+// "now"
+const parseRelativeDateTime = (value: string, defaultTaskTime: string): string | null => {
+  const defaultTime = parseTimeOfDay(normalizeDefaultTaskTime(defaultTaskTime))!;
+  const trimmed = value.trim();
+  if (trimmed === "now") {
+    return new Date().toISOString();
+  }
+
+  const match = /^(today|tomorrow)(?:\s+(.+))?$/u.exec(trimmed);
+  if (!match) {
     return null;
   }
 
-  return date.toISOString();
+  const base = new Date();
+  if ((match[1] ?? "").toLowerCase() === "tomorrow") {
+    base.setDate(base.getDate() + 1);
+  }
+
+  const explicitTime = match[2]?.trim();
+  const time = explicitTime
+    ? parseTimeOfDay(explicitTime)
+    : { hour: defaultTime.hour, minute: defaultTime.minute };
+  if (!time) {
+    return null;
+  }
+
+  return buildLocalDateTime(
+    base.getFullYear(),
+    base.getMonth() + 1,
+    base.getDate(),
+    time.hour,
+    time.minute,
+  );
 };
 
 // Examples:
@@ -111,11 +176,15 @@ const parseWeekdays = (value: string): Weekday[] | null => {
 };
 
 // Examples:
+// "once today | Stock Updates | Send me a monday market update"
+// "once tomorrow 9:00 AM | Stock Updates | Send me a monday market update"
+// "once now | Stock Updates | Send me a monday market update"
 // "once 4/5/2026 9:00 AM | Stock Updates | Send me a monday market update"
 // "daily 9:00 AM | Daily Summary | Give me a summary"
 // "weekly mon,wed,fri 5:30 PM | Workout | Remind me to work out"
 export const parseTaskSchedule = (
   value: string,
+  defaultTaskTime: string = DEFAULT_TASK_TIME,
 ): { prompt: string; schedule: TaskSchedule; title: string } | null => {
   const parts = value.split("|").map((part) => part.trim());
   if (parts.length !== 3) {
@@ -127,12 +196,14 @@ export const parseTaskSchedule = (
     return null;
   }
 
-  const usDateTime = parseUsDateTime(schedulePart);
-  if (usDateTime) {
+  const oneTimeRunAt =
+    parseRelativeDateTime(schedulePart, defaultTaskTime) ??
+    parseUsDateTime(schedulePart, defaultTaskTime);
+  if (oneTimeRunAt) {
     return {
       schedule: {
         type: "once",
-        runAt: usDateTime,
+        runAt: oneTimeRunAt,
       },
       title,
       prompt,
@@ -143,7 +214,10 @@ export const parseTaskSchedule = (
   const kind = tokens[0]?.toLowerCase();
 
   if (kind === "once" && tokens.length >= 2) {
-    const runAt = parseUsDateTime(tokens.slice(1).join(" "));
+    const onceValue = tokens.slice(1).join(" ");
+    const runAt =
+      parseRelativeDateTime(onceValue, defaultTaskTime) ??
+      parseUsDateTime(onceValue, defaultTaskTime);
     if (!runAt) {
       return null;
     }

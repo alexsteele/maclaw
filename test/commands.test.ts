@@ -8,6 +8,7 @@ import {
   helpText,
   projectHelpText,
   saveHelpText,
+  taskScheduleHelpText,
   usageHelpText,
 } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
@@ -722,9 +723,26 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/project help"), await dispatchCommand(harness, "/help project"));
     assert.equal(await dispatchCommand(harness, "/chat help"), await dispatchCommand(harness, "/help chat"));
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
+    assert.equal(await dispatchCommand(harness, "/task schedule help"), await dispatchCommand(harness, "/help task schedule"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
     assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
     assert.equal(await dispatchCommand(harness, "/usage help"), usageHelpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows detailed task schedule help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-schedule-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/help task schedule");
+
+    assert.equal(reply, taskScheduleHelpText);
+    assert.match(reply ?? "", /defaultTaskTime/u);
+    assert.match(reply ?? "", /once today/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

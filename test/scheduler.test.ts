@@ -216,6 +216,21 @@ test("parseTaskSchedule parses relative one-time dates", () => {
   }
 });
 
+test("parseTaskSchedule uses a configurable default task time", () => {
+  const parsed = parseTaskSchedule(
+    "once tomorrow | Daily Summary | Give me a summary",
+    "8:15 AM",
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.schedule.type, "once");
+  if (parsed?.schedule.type === "once") {
+    const runAt = new Date(parsed.schedule.runAt);
+    assert.equal(runAt.getHours(), 8);
+    assert.equal(runAt.getMinutes(), 15);
+  }
+});
+
 test("parseTaskSchedule parses a daily task with AM/PM time", () => {
   const parsed = parseTaskSchedule(
     "daily 9:00 AM | Daily Summary | Give me a summary",

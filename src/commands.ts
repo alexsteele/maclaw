@@ -69,12 +69,36 @@ export const chatHelpText = [
 export const taskHelpText = [
   "Command: /task",
   "  /task list",
-  "  /task schedule once 4/5/2026 9:00 AM | <title> | <prompt> [| <json options>]",
+  "  /task schedule <date> | <title> | <prompt> [| <json options>]",
+  "  /task delete <task id>",
+  "  /task cancel <task id>",
+  "",
+  "Run /help task schedule for scheduling syntax and examples.",
+].join("\n");
+
+export const taskScheduleHelpText = [
+  "Command: /task schedule",
+  "  /task schedule <date> | <title> | <prompt> [| <json options>]",
+  "  /task schedule once <today|tomorrow|now|4/5/2026 [9:00 AM]> | <title> | <prompt> [| <json options>]",
   "  /task schedule hourly | <title> | <prompt> [| <json options>]",
   "  /task schedule daily 9:00 AM | <title> | <prompt> [| <json options>]",
   "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt> [| <json options>]",
-  "  /task delete <task id>",
-  "  /task cancel <task id>",
+  "",
+  "One-time schedules:",
+  "  today",
+  "  tomorrow",
+  "  now",
+  "  4/5/2026",
+  "  4/5/2026 9:00 AM",
+  "",
+  "Notes:",
+  "  Date-only one-time schedules use the project's defaultTaskTime.",
+  "  JSON options currently support notify and notifyTarget overrides.",
+  "",
+  "Examples:",
+  "  /task schedule once today | Daily Brief | Send the brief",
+  "  /task schedule once tomorrow 5:30 PM | Check In | Ask me how the day went",
+  '  /task schedule daily 9:00 AM | Daily Brief | Send the brief | {"notify":"none"}',
 ].join("\n");
 
 export const agentHelpText = [
@@ -315,6 +339,7 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `modelProvider: ${parseConfiguredModel(projectConfig.model).provider}`,
     `storage: ${projectConfig.storage}`,
     `notifications: ${JSON.stringify(projectConfig.notifications)}`,
+    `defaultTaskTime: ${projectConfig.defaultTaskTime}`,
     `contextMessages: ${projectConfig.contextMessages}`,
     `maxToolIterations: ${projectConfig.maxToolIterations}`,
     `retentionDays: ${projectConfig.retentionDays}`,
@@ -564,6 +589,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
 
   if (input === "/help task") {
     return taskHelpText;
+  }
+
+  if (input === "/help task schedule") {
+    return taskScheduleHelpText;
   }
 
   if (input === "/help agent") {
@@ -832,13 +861,17 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
     return taskHelpText;
   }
 
+  if (input === "/task schedule help") {
+    return taskScheduleHelpText;
+  }
+
   if (input === "/task list") {
     return renderTaskList(await harness.listTasks(getScopedChatId(harness, options)));
   }
 
   if (input.startsWith("/task schedule ")) {
     const body = input.slice("/task schedule ".length).trim();
-    let parsed = parseTaskSchedule(body);
+    let parsed = parseTaskSchedule(body, harness.config.defaultTaskTime);
     let taskOptions: NotificationOverride = {};
 
     if (!parsed) {
@@ -849,18 +882,16 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
           return parsedOptions;
         }
 
-        parsed = parseTaskSchedule(segments.slice(0, -1).join(" | "));
+        parsed = parseTaskSchedule(
+          segments.slice(0, -1).join(" | "),
+          harness.config.defaultTaskTime,
+        );
         taskOptions = parsedOptions;
       }
     }
 
     if (!parsed) {
-      return (
-        "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt> [| <json options>]\n" +
-        "       /task schedule hourly | <title> | <prompt> [| <json options>]\n" +
-        "       /task schedule daily 9:00 AM | <title> | <prompt> [| <json options>]\n" +
-        "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt> [| <json options>]"
-      );
+      return taskScheduleHelpText;
     }
 
     const task = await harness.createTask({
