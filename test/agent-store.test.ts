@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
-import { JsonFileAgentStore } from "../src/agent.js";
+import { JsonFileAgentStore } from "../src/storage/json.js";
 
 test("JsonFileAgentStore persists and reloads agent records", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-store-"));

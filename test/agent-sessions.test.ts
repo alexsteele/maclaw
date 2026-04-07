@@ -5,8 +5,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import type { ProjectConfig } from "../src/config.js";
 import { defaultTasksFile } from "../src/config.js";
-import { JsonFileTaskStore, TaskScheduler } from "../src/scheduler.js";
-import { ChatRuntime, JsonFileChatStore, appendMessage } from "../src/chats.js";
+import { TaskScheduler } from "../src/scheduler.js";
+import { ChatRuntime, appendMessage } from "../src/chats.js";
+import { JsonFileChatStore, JsonFileTaskStore } from "../src/storage/json.js";
 import { createTools } from "../src/tools/index.js";
 
 const createHarness = async (): Promise<{

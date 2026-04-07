@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
 import { defaultInboxFile } from "../src/config.js";
-import { JsonFileInboxStore } from "../src/inbox.js";
+import { JsonFileInboxStore } from "../src/storage/json.js";
 import type { AgentRecord } from "../src/types.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 

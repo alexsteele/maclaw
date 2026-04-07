@@ -1,4 +1,3 @@
-import { appendJsonLine, readJsonFile, writeJsonFile } from "./fs-utils.js";
 import type { ScheduledTask, TaskRunLogEntry, TaskSchedule, Weekday } from "./types.js";
 
 const weekdayOrder: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -7,44 +6,10 @@ const isWeekday = (value: string): value is Weekday => {
   return weekdayOrder.includes(value as Weekday);
 };
 
-const readAllTasks = async (tasksFile: string): Promise<ScheduledTask[]> => {
-  return readJsonFile<ScheduledTask[]>(tasksFile, []);
-};
-
-const writeAllTasks = async (tasksFile: string, tasks: ScheduledTask[]): Promise<void> => {
-  await writeJsonFile(tasksFile, tasks);
-};
-
 export interface TaskStore {
   loadTasks(): Promise<ScheduledTask[]>;
   saveTasks(tasks: ScheduledTask[]): Promise<void>;
   logTaskRun(entry: TaskRunLogEntry): Promise<void>;
-}
-
-export class JsonFileTaskStore implements TaskStore {
-  private readonly tasksFile: string;
-  private readonly taskRunsFile?: string;
-
-  constructor(tasksFile: string, taskRunsFile?: string) {
-    this.tasksFile = tasksFile;
-    this.taskRunsFile = taskRunsFile;
-  }
-
-  async loadTasks(): Promise<ScheduledTask[]> {
-    return readAllTasks(this.tasksFile);
-  }
-
-  async saveTasks(tasks: ScheduledTask[]): Promise<void> {
-    await writeAllTasks(this.tasksFile, tasks);
-  }
-
-  async logTaskRun(entry: TaskRunLogEntry): Promise<void> {
-    if (!this.taskRunsFile) {
-      return;
-    }
-
-    await appendJsonLine(this.taskRunsFile, entry);
-  }
 }
 
 export class MemoryTaskStore implements TaskStore {

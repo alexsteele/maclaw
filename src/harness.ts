@@ -13,11 +13,10 @@ import {
   loadConfig,
   type ProjectConfig,
 } from "./config.js";
-import { Agent, JsonFileAgentStore, MemoryAgentStore, type AgentStore } from "./agent.js";
+import { Agent, MemoryAgentStore, type AgentStore } from "./agent.js";
 import { ensureDir } from "./fs-utils.js";
 import {
   createInboxEntry,
-  JsonFileInboxStore,
   MemoryInboxStore,
   type InboxStore,
 } from "./inbox.js";
@@ -30,16 +29,17 @@ import {
   SqliteInboxStore,
   SqliteTaskStore,
 } from "./storage/sqlite.js";
-import { createTools } from "./tools/index.js";
 import {
+  JsonFileAgentStore,
+  JsonFileChatStore,
+  JsonFileInboxStore,
   JsonFileTaskStore,
-  MemoryTaskStore,
-  TaskScheduler,
-} from "./scheduler.js";
+} from "./storage/json.js";
+import { createTools } from "./tools/index.js";
+import { MemoryTaskStore, TaskScheduler } from "./scheduler.js";
 import {
   ChatRuntime,
   type ChatReply,
-  JsonFileChatStore,
   MemoryChatStore,
   type ChatLoadOptions,
   type ChatStore,

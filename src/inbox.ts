@@ -1,6 +1,6 @@
 // Inbox stores notifications.
 // Stored behind a small store interface so we can swap in sqlite later.
-import { appendJsonLine, makeId, readJsonLines } from "./fs-utils.js";
+import { makeId } from "./fs-utils.js";
 import type { InboxEntry, NotificationKind, Origin } from "./types.js";
 
 export const createInboxEntry = (input: {
@@ -28,22 +28,6 @@ export const createInboxEntry = (input: {
 export interface InboxStore {
   loadEntries(): Promise<InboxEntry[]>;
   saveEntry(entry: InboxEntry): Promise<void>;
-}
-
-export class JsonFileInboxStore implements InboxStore {
-  private readonly filePath: string;
-
-  constructor(filePath: string) {
-    this.filePath = filePath;
-  }
-
-  loadEntries(): Promise<InboxEntry[]> {
-    return readJsonLines<InboxEntry>(this.filePath);
-  }
-
-  saveEntry(entry: InboxEntry): Promise<void> {
-    return appendJsonLine(this.filePath, entry);
-  }
 }
 
 export class MemoryInboxStore implements InboxStore {

@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import type { AgentRecord, Message } from "./types.js";
 
 const CONTINUE_PROMPT =
@@ -32,43 +30,6 @@ export class MemoryAgentStore implements AgentStore {
 
   listAgents(): AgentRecord[] {
     return Array.from(this.agents.values()).map((record) => structuredClone(record));
-  }
-}
-
-export class JsonFileAgentStore implements AgentStore {
-  private readonly filePath: string;
-
-  constructor(filePath: string) {
-    this.filePath = filePath;
-  }
-
-  getAgent(agentId: string): AgentRecord | undefined {
-    const record = this.readAgents()[agentId];
-    return record ? structuredClone(record) : undefined;
-  }
-
-  saveAgent(record: AgentRecord): void {
-    const agents = this.readAgents();
-    agents[record.id] = structuredClone(record);
-    this.writeAgents(agents);
-  }
-
-  listAgents(): AgentRecord[] {
-    return Object.values(this.readAgents()).map((record) => structuredClone(record));
-  }
-
-  private readAgents(): Record<string, AgentRecord> {
-    if (!existsSync(this.filePath)) {
-      return {};
-    }
-
-    const raw = readFileSync(this.filePath, "utf8");
-    return JSON.parse(raw) as Record<string, AgentRecord>;
-  }
-
-  private writeAgents(agents: Record<string, AgentRecord>): void {
-    mkdirSync(path.dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, `${JSON.stringify(agents, null, 2)}\n`, "utf8");
   }
 }
 

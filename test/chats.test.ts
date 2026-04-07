@@ -5,7 +5,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { JsonFileChatStore, MemoryChatStore, appendMessage } from "../src/chats.js";
+import { MemoryChatStore, appendMessage } from "../src/chats.js";
+import { JsonFileChatStore } from "../src/storage/json.js";
 import { SqliteChatStore } from "../src/storage/sqlite.js";
 
 const createStore = async (): Promise<{
