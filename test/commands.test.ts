@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   dispatchCommand,
   helpText,
+  inboxHelpText,
   projectHelpText,
   saveHelpText,
   taskScheduleHelpText,
@@ -135,6 +136,68 @@ test("dispatchCommand saves the current chat transcript to a custom file", async
 
     assert.equal(reply, `saved chat transcript to: ${savedPath}`);
     assert.match(savedContent, /\[user\] hello from default/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows saved inbox notifications", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-inbox-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "inbox-project",
+      model: "dummy/test-model",
+    });
+
+    await harness.start(
+      async () => {},
+      async () => {},
+    );
+
+    harness.promptChat = async () => {
+      throw new Error("boom");
+    };
+
+    const created = await harness.createAgent({
+      name: "inbox-agent",
+      prompt: "Do the thing",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        userId: "slack-T123-U123",
+      },
+    });
+    assert.ok(created.agent);
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const agent = harness.getAgent(created.agent.id);
+      if (agent && agent.status === "failed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const reply = await dispatchCommand(harness, "/inbox");
+
+    assert.match(reply ?? "", /agentFailed/u);
+    assert.match(reply ?? "", /to: slack\/slack-T123-U123/u);
+    assert.match(reply ?? "", /inbox-agent failed: boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows inbox help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-inbox-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/inbox help");
+
+    assert.equal(reply, inboxHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

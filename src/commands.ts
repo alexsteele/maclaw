@@ -8,6 +8,7 @@ import {
 import { parseTaskSchedule } from "./task.js";
 import type {
   AgentRecord,
+  InboxEntry,
   NotificationOverride,
   NotificationPolicy,
   NotificationTarget,
@@ -34,6 +35,7 @@ export const helpText = [
   "  /skills            List local skills",
   "  /agent             Agent management commands",
   "  /task              Task scheduling commands",
+  "  /inbox             Show saved notifications",
 ].join("\n");
 
 export const projectHelpText = [
@@ -124,6 +126,11 @@ export const saveHelpText = [
   "Command: /save",
   "  /save              Save the current chat transcript to .maclaw/exports/<chat>.md",
   "  /save <path>       Save the current chat transcript to a file",
+].join("\n");
+
+export const inboxHelpText = [
+  "Command: /inbox",
+  "  /inbox             Show saved notifications",
 ].join("\n");
 
 export const usageHelpText = [
@@ -423,6 +430,24 @@ const renderChatInfo = (chat: Awaited<ReturnType<Harness["loadChat"]>>): string 
     `summary: ${chat.summary ?? "(none)"}`,
   ].join("\n");
 
+const renderInbox = (entries: InboxEntry[]): string => {
+  if (entries.length === 0) {
+    return "Inbox is empty.";
+  }
+
+  return [...entries]
+    .reverse()
+    .map(
+      (entry) =>
+        [
+          `${entry.kind} ${formatTaskTimestamp(entry.createdAt)}`,
+          `to: ${entry.origin.channel}/${entry.origin.userId}`,
+          entry.text,
+        ].join("\n"),
+    )
+    .join("\n\n");
+};
+
 const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
   options?.chatId ?? harness.getCurrentChatId();
 
@@ -687,6 +712,18 @@ const handleSaveCommand: CommandHandler = async (harness, input, options) => {
   }
 
   return saveHelpText;
+};
+
+const handleInboxCommand: CommandHandler = async (harness, input) => {
+  if (input === "/inbox") {
+    return renderInbox(await harness.listInbox());
+  }
+
+  if (input === "/inbox help" || input.startsWith("/inbox ")) {
+    return inboxHelpText;
+  }
+
+  return inboxHelpText;
 };
 
 const handleUsageCommand: CommandHandler = async (harness, input, options) => {
@@ -1116,6 +1153,7 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
 
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
+  inbox: handleInboxCommand,
   save: handleSaveCommand,
   usage: handleUsageCommand,
   project: handleProjectCommand,

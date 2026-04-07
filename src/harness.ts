@@ -47,6 +47,7 @@ import type {
   NotificationPolicy,
   NotificationTarget,
   Origin,
+  InboxEntry,
   Message,
   ScheduledTask,
   Skill,
@@ -726,6 +727,10 @@ export class Harness {
 
   listAgents(): AgentRecord[] {
     return this._agentStore.listAgents();
+  }
+
+  async listInbox(): Promise<InboxEntry[]> {
+    return this._inboxStore.loadEntries();
   }
 
   getAgent(agentId: string): AgentRecord | undefined {
