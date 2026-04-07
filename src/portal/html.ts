@@ -568,8 +568,15 @@ export const renderPortalHtml = ({
           return;
         }
 
+        displayMessages = [
+          ...displayMessages,
+          { role: 'user', content: text },
+          { role: 'assistant', content: '...' },
+        ];
+        renderMessages();
         sendButton.disabled = true;
         status.textContent = "Sending…";
+        messageInput.value = "";
 
         const response = await fetch(
           '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId) + '/messages',
@@ -580,10 +587,9 @@ export const renderPortalHtml = ({
           },
         );
         const data = await response.json();
-        messageInput.value = "";
         if (data.command) {
           displayMessages = [
-            ...displayMessages,
+            ...displayMessages.slice(0, -2),
             { role: 'user', content: data.command.text },
             { role: 'assistant', content: data.command.reply },
           ];
@@ -593,7 +599,7 @@ export const renderPortalHtml = ({
             displayMessages = nextMessages;
           } else {
             displayMessages = [
-              ...displayMessages,
+              ...displayMessages.slice(0, -2),
               ...nextMessages.slice(persistedMessageCount),
             ];
           }
