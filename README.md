@@ -81,7 +81,7 @@ Commands:
 
 ## Server
 
-maclaw can also run as a long-lived server:
+maclaw can also run as a long-lived server. The server provides a portal webapp to control maclaw. It also sends notifications.
 
 - `maclaw server`
 
@@ -90,50 +90,7 @@ Server mode currently supports WhatsApp, Slack, and Discord channels, and loads 
 - `~/.maclaw/server.json`
 - `~/.maclaw/secrets.json`
 
-`server.json` is for non-secret settings such as projects, ports, webhook paths,
-and channel options. `secrets.json` is for private credentials such as
-WhatsApp tokens, Slack app/bot tokens, and Discord bot tokens.
-
-Example `server.json`:
-
-```json
-{
-  "defaultProject": "home",
-  "projects": [{ "name": "home", "folder": "/path/to/home-project" }],
-  "channels": {
-    "discord": {
-      "enabled": true
-    },
-    "slack": {
-      "enabled": true,
-      "botUserId": "U12345678"
-    },
-    "whatsapp": {
-      "enabled": true,
-      "port": 3000,
-      "webhookPath": "/whatsapp/webhook"
-    }
-  }
-}
-```
-
-Example `secrets.json`:
-
-```json
-{
-  "discord": {
-    "botToken": "your-discord-bot-token"
-  },
-  "slack": {
-    "appToken": "xapp-your-slack-app-token",
-    "botToken": "xoxb-your-slack-bot-token"
-  },
-  "whatsapp": {
-    "accessToken": "your-whatsapp-access-token",
-    "verifyToken": "your-whatsapp-verify-token"
-  }
-}
-```
+See [docs/config.md](docs/config.md) for the full server config and secrets shape.
 
 ## Projects
 
@@ -160,48 +117,11 @@ my-project/
 
 `maclaw.json` contains the config.
 
-```json
-{
-  "createdAt": "2026-04-04T10:00:00.000Z",
-  "name": "my-project",
-  "model": "openai/gpt-4.1-mini",
-  "defaultTaskTime": "9:00 AM",
-  "contextMessages": 20,
-  "maxToolIterations": 8,
-  "retentionDays": 30,
-  "skillsDir": ".maclaw/skills"
-}
-```
-
-`skillsDir` is optional. If you omit it, maclaw uses `.maclaw/skills` by default.
+See [docs/config.md](docs/config.md) for the full project config shape, environment variables, model configuration, and notification policy.
 
 ## Configuration
 
-Config precedence is:
-
-1. environment variables
-2. `maclaw.json`
-3. built-in defaults
-
-Environment variables:
-
-- `MACLAW_MODEL`: overrides the configured model
-- `OPENAI_API_KEY`: enables OpenAI models
-- `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
-- `MACLAW_CHAT_ID`: defaults to `default`
-- `MACLAW_DEFAULT_TASK_TIME`: default time for one-time `today`, `tomorrow`, or date-only tasks
-- `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
-- `MACLAW_MAX_TOOL_ITERATIONS`: defaults to `8`
-- `MACLAW_RETENTION_DAYS`: defaults to `30`
-- `MACLAW_COMPRESSION_MODE`: `none` or `planned`
-- `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`
-
-## Models
-
-Project config stores models as `<provider>/<model>`.
-
-- `openai/gpt-5.4-mini`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
-- `dummy/default`: uses the built-in stand-in provider for local testing without live model calls
+See [docs/config.md](docs/config.md).
 
 ## Connectors
 
@@ -222,29 +142,9 @@ maclaw can send notifications to the user over channels.
 
 Current notification triggers:
 
-- agent completed/failed
-- scheduled task completed/failed
+- agent/task completion
 
 By default, notifications go back to the originating channel when available,
 such as your slack channel or REPL session.
 
-Project notification policy lives in `.maclaw/maclaw.json`:
-
-```json
-{
-  "notifications": "all"
-}
-```
-
-Policies:
-
-- `"all"`: send all current notification types
-- `"none"`: suppress all notifications
-- `["errors"]`: only send failures
-- `{ "allow": ["agent:*", "task:*"], "deny": ["taskCompleted"] }`: notify for everything except successful tasks
-
-Agents and scheduled tasks can override project notifications with JSON options:
-
-- `/agent create planner | Do the work | {"notify":["errors"]}`
-- `/task schedule daily 9:00 AM | Daily Brief | Send the brief | {"notify":"none"}`
-- `/agent create planner | Do the work | {"notifyTarget":{"channel":"slack"}}`
+See [docs/config.md](docs/config.md) for notification policy and override examples.
