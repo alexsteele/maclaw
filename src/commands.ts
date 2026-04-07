@@ -6,7 +6,15 @@ import {
   renderProjectConfig,
 } from "./project-config.js";
 import { parseTaskSchedule } from "./task.js";
-import type { AgentRecord, Origin, TaskSchedule, UsageSummary } from "./types.js";
+import type {
+  AgentRecord,
+  NotificationOverride,
+  NotificationPolicy,
+  NotificationTarget,
+  Origin,
+  TaskSchedule,
+  UsageSummary,
+} from "./types.js";
 
 type DispatchOptions = {
   chatId?: string;
@@ -61,10 +69,10 @@ export const chatHelpText = [
 export const taskHelpText = [
   "Command: /task",
   "  /task list",
-  "  /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>",
-  "  /task schedule hourly | <title> | <prompt>",
-  "  /task schedule daily 9:00 AM | <title> | <prompt>",
-  "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>",
+  "  /task schedule once 4/5/2026 9:00 AM | <title> | <prompt> [| <json options>]",
+  "  /task schedule hourly | <title> | <prompt> [| <json options>]",
+  "  /task schedule daily 9:00 AM | <title> | <prompt> [| <json options>]",
+  "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt> [| <json options>]",
   "  /task delete <task id>",
 ].join("\n");
 
@@ -395,9 +403,80 @@ const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
 const readCurrentProjectConfig = (harness: Harness) =>
   loadConfig(harness.config.projectFolder);
 
+const parseNotifyTarget = (value: unknown): NotificationTarget | undefined => {
+  if (value === "origin") {
+    return "origin";
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const object = value as {
+    channel?: unknown;
+    userId?: unknown;
+    conversationId?: unknown;
+    threadId?: unknown;
+  };
+  if (typeof object.channel !== "string" || object.channel.trim().length === 0) {
+    return undefined;
+  }
+
+  if (object.userId === undefined) {
+    return { channel: object.channel };
+  }
+
+  if (typeof object.userId !== "string" || object.userId.trim().length === 0) {
+    return undefined;
+  }
+
+  return {
+    channel: object.channel,
+    userId: object.userId,
+    ...(typeof object.conversationId === "string" ? { conversationId: object.conversationId } : {}),
+    ...(typeof object.threadId === "string" ? { threadId: object.threadId } : {}),
+  };
+};
+
+const parseNotificationOverride = (value: unknown): NotificationOverride | string => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const object = value as { notify?: unknown; notifyTarget?: unknown };
+  const override: NotificationOverride = {};
+
+  if (object.notify !== undefined) {
+    if (
+      object.notify !== "all" &&
+      object.notify !== "none" &&
+      !Array.isArray(object.notify) &&
+      (typeof object.notify !== "object" || object.notify === null)
+    ) {
+      return "notify must be 'all', 'none', or a valid notification policy object";
+    }
+
+    override.notify = object.notify as NotificationPolicy;
+  }
+
+  if (object.notifyTarget !== undefined) {
+    const notifyTarget = parseNotifyTarget(object.notifyTarget);
+    if (!notifyTarget) {
+      return "notifyTarget must be 'origin', { channel }, or a full notification target object";
+    }
+
+    override.notifyTarget = notifyTarget;
+  }
+
+  return override;
+};
+
 const parseAgentCreateOptions = (
   value: string,
-): Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> | string => {
+): Pick<
+  AgentCreateOptions,
+  "maxSteps" | "timeoutMs" | "stepIntervalMs" | "notify" | "notifyTarget"
+> | string => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -411,16 +490,44 @@ const parseAgentCreateOptions = (
 
   const optionsObject = parsed as Record<string, unknown>;
   for (const key of Object.keys(optionsObject)) {
-    if (!["maxSteps", "timeoutMs", "stepIntervalMs"].includes(key)) {
+    if (!["maxSteps", "timeoutMs", "stepIntervalMs", "notify", "notifyTarget"].includes(key)) {
       return `Unknown agent option: ${key}`;
     }
+  }
+
+  const notificationOverride = parseNotificationOverride(optionsObject);
+  if (typeof notificationOverride === "string") {
+    return notificationOverride;
   }
 
   return {
     maxSteps: optionsObject.maxSteps as AgentCreateOptions["maxSteps"],
     timeoutMs: optionsObject.timeoutMs as AgentCreateOptions["timeoutMs"],
     stepIntervalMs: optionsObject.stepIntervalMs as AgentCreateOptions["stepIntervalMs"],
+    ...notificationOverride,
   };
+};
+
+const parseTaskScheduleOptions = (value: string): NotificationOverride | string => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return "Invalid task options JSON.";
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "Task options must be a JSON object.";
+  }
+
+  const optionsObject = parsed as Record<string, unknown>;
+  for (const key of Object.keys(optionsObject)) {
+    if (!["notify", "notifyTarget"].includes(key)) {
+      return `Unknown task option: ${key}`;
+    }
+  }
+
+  return parseNotificationOverride(optionsObject);
 };
 
 type CommandHandler = (
@@ -729,19 +836,36 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/task schedule ")) {
-    const parsed = parseTaskSchedule(input.slice("/task schedule ".length).trim());
+    const body = input.slice("/task schedule ".length).trim();
+    let parsed = parseTaskSchedule(body);
+    let taskOptions: NotificationOverride = {};
+
+    if (!parsed) {
+      const segments = body.split("|").map((segment) => segment.trim());
+      if (segments.length >= 4) {
+        const parsedOptions = parseTaskScheduleOptions(segments.at(-1) ?? "");
+        if (typeof parsedOptions === "string") {
+          return parsedOptions;
+        }
+
+        parsed = parseTaskSchedule(segments.slice(0, -1).join(" | "));
+        taskOptions = parsedOptions;
+      }
+    }
+
     if (!parsed) {
       return (
-        "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt>\n" +
-        "       /task schedule hourly | <title> | <prompt>\n" +
-        "       /task schedule daily 9:00 AM | <title> | <prompt>\n" +
-        "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt>"
+        "Usage: /task schedule once 4/5/2026 9:00 AM | <title> | <prompt> [| <json options>]\n" +
+        "       /task schedule hourly | <title> | <prompt> [| <json options>]\n" +
+        "       /task schedule daily 9:00 AM | <title> | <prompt> [| <json options>]\n" +
+        "       /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt> [| <json options>]"
       );
     }
 
     const task = await harness.createTask({
       chatId: getScopedChatId(harness, options),
       origin: options.origin,
+      ...taskOptions,
       title: parsed.title,
       prompt: parsed.prompt,
       schedule: parsed.schedule,

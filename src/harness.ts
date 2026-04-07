@@ -36,6 +36,9 @@ import type {
   ChatSummary,
   MessageContext,
   NotificationKind,
+  NotificationOverride,
+  NotificationPolicy,
+  NotificationTarget,
   Origin,
   Message,
   ScheduledTask,
@@ -63,7 +66,7 @@ export type AgentCreateOptions = {
   stepIntervalMs?: number;
   chatId?: string;
   origin?: AgentRecord["origin"];
-};
+} & NotificationOverride;
 
 type AgentCreateResult =
   | { agent: AgentRecord; error?: undefined }
@@ -97,6 +100,10 @@ const addUsage = (summary: UsageSummary, chat: ChatRecord): UsageSummary => {
   }
 
   return summary;
+};
+
+const isOriginTarget = (value: NotificationTarget): value is Origin => {
+  return typeof value === "object" && "userId" in value;
 };
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
@@ -425,6 +432,8 @@ export class Harness {
   async createTask(input: {
     chatId?: string;
     origin?: ScheduledTask["origin"];
+    notify?: NotificationPolicy;
+    notifyTarget?: NotificationTarget;
     title: string;
     prompt: string;
     schedule?: ScheduledTask["schedule"];
@@ -449,25 +458,15 @@ export class Harness {
         task.origin ? { origin: task.origin } : undefined,
       );
       await onTaskMessage?.(task, message);
-
-      if (task.origin) {
-        await this.emitNotification({
-          kind: "taskCompleted",
-          origin: task.origin,
-          text: `Task ${task.title} completed.`,
-        });
-      }
+      await this.emitTaskNotification(task, "taskCompleted", `Task ${task.title} completed.`);
     } catch (error) {
-      if (task.origin) {
-        await this.emitNotification({
-          kind: "taskFailed",
-          origin: task.origin,
-          text:
-            error instanceof Error
-              ? `Task ${task.title} failed: ${error.message}`
-              : `Task ${task.title} failed: ${String(error)}`,
-        });
-      }
+      await this.emitTaskNotification(
+        task,
+        "taskFailed",
+        error instanceof Error
+          ? `Task ${task.title} failed: ${error.message}`
+          : `Task ${task.title} failed: ${String(error)}`,
+      );
 
       throw error;
     }
@@ -487,6 +486,57 @@ export class Harness {
     }
 
     return Promise.resolve(this._notificationListener?.(notification));
+  }
+
+  private resolveNotificationTarget(
+    origin: Origin | undefined,
+    notifyTarget: NotificationTarget | undefined,
+  ): Origin | undefined {
+    if (!notifyTarget || notifyTarget === "origin") {
+      return origin;
+    }
+
+    if (isOriginTarget(notifyTarget)) {
+      return notifyTarget;
+    }
+
+    return origin?.channel === notifyTarget.channel ? origin : undefined;
+  }
+
+  private async emitTaskNotification(
+    task: ScheduledTask,
+    kind: NotificationKind,
+    text: string,
+  ): Promise<void> {
+    const allowed = expandNotificationPolicy(task.notify ?? this._config.notifications);
+    if (!allowed.has(kind)) {
+      return;
+    }
+
+    const target = this.resolveNotificationTarget(task.origin, task.notifyTarget);
+    if (!target) {
+      return;
+    }
+
+    await Promise.resolve(this._notificationListener?.({ kind, origin: target, text }));
+  }
+
+  private emitAgentNotification(
+    agent: AgentRecord,
+    kind: NotificationKind,
+    text: string,
+  ): void {
+    const allowed = expandNotificationPolicy(agent.notify ?? this._config.notifications);
+    if (!allowed.has(kind)) {
+      return;
+    }
+
+    const target = this.resolveNotificationTarget(agent.origin, agent.notifyTarget);
+    if (!target) {
+      return;
+    }
+
+    void Promise.resolve(this._notificationListener?.({ kind, origin: target, text }));
   }
 
   async deleteChat(chatId: string): Promise<boolean> {
@@ -590,27 +640,23 @@ export class Harness {
   private handleAgentStopped(agentId: string): void {
     this._runningAgents.delete(agentId);
     const latest = this._agentStore.getAgent(agentId);
-    if (!latest?.origin) {
+    if (!latest) {
       return;
     }
 
     if (latest.status === "completed") {
-      void this.emitNotification({
-        kind: "agentCompleted",
-        origin: latest.origin,
-        text: `Agent ${latest.name} completed.`,
-      });
+      this.emitAgentNotification(latest, "agentCompleted", `Agent ${latest.name} completed.`);
       return;
     }
 
     if (latest.status === "failed") {
-      void this.emitNotification({
-        kind: "agentFailed",
-        origin: latest.origin,
-        text: latest.lastError
+      this.emitAgentNotification(
+        latest,
+        "agentFailed",
+        latest.lastError
           ? `Agent ${latest.name} failed: ${latest.lastError}`
           : `Agent ${latest.name} failed.`,
-      });
+      );
     }
   }
 
@@ -628,6 +674,8 @@ export class Harness {
       prompt,
       chatId: input.chatId ?? id,
       origin: input.origin,
+      notify: input.notify,
+      notifyTarget: input.notifyTarget,
       status: "pending",
       maxSteps: input.maxSteps ?? 100,
       timeoutMs: input.timeoutMs ?? 60 * 60 * 1000,

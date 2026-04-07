@@ -425,6 +425,77 @@ test("harness suppresses notifications when project notifications are none", asy
   }
 });
 
+test("harness suppresses agent notifications when the agent notify override is none", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-notify-none-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string }> = [];
+
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        notifications.push({ kind: notification.kind });
+      },
+    );
+
+    harness.promptChat = async () => {
+      throw new Error("boom");
+    };
+
+    const created = await harness.createAgent({
+      name: "quiet-agent",
+      prompt: "Do the thing",
+      notify: "none",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        userId: "slack-T123-U123",
+      },
+    });
+    assert.ok(created.agent);
+
+    await waitForAgentToSettle(harness, created.agent.id);
+    assert.equal(notifications.length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness suppresses task notifications when the task notify override is none", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-none-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string }> = [];
+
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        notifications.push({ kind: notification.kind });
+      },
+    );
+
+    await harness.createTask({
+      chatId: "slack-T123-U123",
+      notify: "none",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        userId: "slack-T123-U123",
+      },
+      title: "Quiet Task",
+      prompt: "This should stay quiet",
+      runAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await harness.runDueTasks(async () => {});
+    assert.equal(notifications.length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("harness applies notification allow and deny selectors", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-selective-notify-"));
 

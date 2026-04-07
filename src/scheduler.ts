@@ -200,6 +200,8 @@ export class TaskScheduler {
   async createTask(input: {
     chatId: string;
     origin?: ScheduledTask["origin"];
+    notify?: ScheduledTask["notify"];
+    notifyTarget?: ScheduledTask["notifyTarget"];
     title: string;
     prompt: string;
     schedule?: TaskSchedule;
@@ -229,6 +231,8 @@ export class TaskScheduler {
       id: createTaskId(tasks),
       chatId: input.chatId,
       origin: input.origin,
+      notify: input.notify,
+      notifyTarget: input.notifyTarget,
       title: input.title,
       prompt: input.prompt,
       schedule,

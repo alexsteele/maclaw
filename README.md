@@ -240,3 +240,9 @@ Policies:
 - `"none"`: suppress all notifications
 - `["errors"]`: only send failures
 - `{ "allow": ["agent:*", "task:*"], "deny": ["taskCompleted"] }`: notify for everything except successful tasks
+
+Agents and scheduled tasks can override project notifications with JSON options:
+
+- `/agent create planner | Do the work | {"notify":["errors"]}`
+- `/task schedule daily 9:00 AM | Daily Brief | Send the brief | {"notify":"none"}`
+- `/agent create planner | Do the work | {"notifyTarget":{"channel":"slack"}}`

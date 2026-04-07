@@ -470,6 +470,35 @@ test("dispatchCommand creates an agent with JSON options", async () => {
   }
 });
 
+test("dispatchCommand creates an agent with notification overrides", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-notify-options-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      '/agent create planner | work through the task | {"notify":["errors"],"notifyTarget":{"channel":"slack"}}',
+      {
+        origin: {
+          channel: "slack",
+          conversationId: "C123",
+          userId: "slack-T123-U123",
+        },
+      },
+    );
+
+    assert.match(reply ?? "", /^started agent: agent_/u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.ok(agent);
+    assert.deepEqual(agent.notify, ["errors"]);
+    assert.deepEqual(agent.notifyTarget, { channel: "slack" });
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand loads agent and task prompts from @files", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-prompt-files-"));
 
@@ -496,6 +525,34 @@ test("dispatchCommand loads agent and task prompts from @files", async () => {
 
     const tasks = await harness.listCurrentChatTasks();
     assert.equal(tasks[0]?.prompt, "Task prompt from file\n");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand schedules a task with notification overrides", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-notify-options-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      '/task schedule daily 9:00 AM | Daily Brief | Send the brief | {"notify":"none","notifyTarget":{"channel":"slack"}}',
+      {
+        origin: {
+          channel: "slack",
+          conversationId: "C123",
+          userId: "slack-T123-U123",
+        },
+      },
+    );
+
+    assert.match(reply ?? "", /^scheduled task: /u);
+
+    const tasks = await harness.listCurrentChatTasks();
+    assert.equal(tasks[0]?.notify, "none");
+    assert.deepEqual(tasks[0]?.notifyTarget, { channel: "slack" });
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

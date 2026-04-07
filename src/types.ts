@@ -59,6 +59,16 @@ export type NotificationPolicy =
       deny?: NotificationSelector[];
     };
 
+export type NotificationTarget =
+  | "origin"
+  | { channel: string }
+  | Origin;
+
+export type NotificationOverride = {
+  notify?: NotificationPolicy;
+  notifyTarget?: NotificationTarget;
+};
+
 export type AgentStatus =
   | "pending"
   | "running"
@@ -74,6 +84,8 @@ export type AgentRecord = {
   prompt: string;
   chatId: string;
   origin?: Origin;
+  notify?: NotificationPolicy;
+  notifyTarget?: NotificationTarget;
   status: AgentStatus;
   maxSteps?: number;
   timeoutMs: number;
@@ -120,6 +132,8 @@ export type ScheduledTask = {
   id: string;
   chatId: string;
   origin?: Origin;
+  notify?: NotificationPolicy;
+  notifyTarget?: NotificationTarget;
   title: string;
   prompt: string;
   schedule: TaskSchedule;
