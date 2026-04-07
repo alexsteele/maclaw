@@ -7,13 +7,23 @@ export const createInboxEntry = (input: {
   kind: NotificationKind;
   text: string;
   origin: Origin;
-}): InboxEntry => ({
-  id: makeId("inbox"),
-  kind: input.kind,
-  text: input.text,
-  origin: input.origin,
-  createdAt: new Date().toISOString(),
-});
+  sourceType: InboxEntry["sourceType"];
+  sourceId: string;
+  sourceName?: string;
+}): InboxEntry => {
+  const timestamp = new Date().toISOString();
+  return {
+    id: makeId("inbox"),
+    kind: input.kind,
+    text: input.text,
+    origin: input.origin,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    sourceName: input.sourceName,
+    createdAt: timestamp,
+    sentAt: timestamp,
+  };
+};
 
 export interface InboxStore {
   loadEntries(): Promise<InboxEntry[]>;

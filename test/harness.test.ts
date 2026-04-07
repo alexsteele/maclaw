@@ -343,6 +343,53 @@ test("harness saves delivered notifications to the project inbox", async () => {
   }
 });
 
+test("harness stores agents and inbox entries in sqlite when configured", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-sqlite-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "sqlite-project",
+      model: "dummy/test-model",
+      storage: "sqlite",
+    });
+
+    await harness.start(
+      async () => {},
+      async () => {},
+    );
+
+    harness.promptChat = async () => {
+      throw new Error("boom");
+    };
+
+    const created = await harness.createAgent({
+      name: "sqlite-agent",
+      prompt: "Do the thing",
+      origin: {
+        channel: "slack",
+        conversationId: "C123",
+        userId: "slack-T123-U123",
+      },
+    });
+    assert.ok(created.agent);
+
+    const settled = await waitForAgentToSettle(harness, created.agent.id);
+    assert.equal(settled.status, "failed");
+
+    const agents = harness.listAgents();
+    assert.equal(agents.length, 1);
+    assert.equal(agents[0]?.name, "sqlite-agent");
+
+    const inbox = await harness.listInbox();
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.kind, "agentFailed");
+    assert.match(inbox[0]?.text ?? "", /sqlite-agent failed: boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("harness emits a notification when an origin-backed task completes", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-"));
 

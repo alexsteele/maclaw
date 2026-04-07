@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import {
   defaultInboxFile,
+  defaultSqliteFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   initProjectConfig,
@@ -43,6 +44,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(defaultTasksFile(rootDir), path.join(rootDir, ".maclaw", "tasks.json"));
     assert.equal(defaultTaskRunsFile(rootDir), path.join(rootDir, ".maclaw", "task-runs.jsonl"));
     assert.equal(defaultInboxFile(rootDir), path.join(rootDir, ".maclaw", "inbox.jsonl"));
+    assert.equal(defaultSqliteFile(rootDir), path.join(rootDir, ".maclaw", "maclaw.db"));
     assert.equal(config.retentionDays, 14);
     assert.equal(config.chatId, "default");
     assert.equal(config.model, "dummy/test-model");
@@ -237,6 +239,31 @@ test("loadConfig reads advanced project config fields", async () => {
       allow: ["agent:*", "task:*"],
       deny: ["taskCompleted"],
     });
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig supports sqlite storage", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-sqlite-"));
+
+  try {
+    await mkdir(path.join(rootDir, ".maclaw"), { recursive: true });
+    await writeFile(
+      path.join(rootDir, ".maclaw", "maclaw.json"),
+      `${JSON.stringify(
+        {
+          model: "dummy/test-model",
+          storage: "sqlite",
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadConfig(rootDir);
+    assert.equal(config.storage, "sqlite");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

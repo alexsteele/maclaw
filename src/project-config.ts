@@ -52,8 +52,8 @@ export const parseProjectConfigValue = (
   }
 
   if (key === "storage") {
-    if (value !== "json" && value !== "none") {
-      return "storage must be 'json' or 'none'";
+    if (value !== "json" && value !== "sqlite" && value !== "none") {
+      return "storage must be 'json', 'sqlite', or 'none'";
     }
 
     return { storage: value };

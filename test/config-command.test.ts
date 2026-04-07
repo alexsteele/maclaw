@@ -89,20 +89,24 @@ test("runConfigCommand updates scalar runtime settings", async () => {
     await runConfigCommand(["set", "contextMessages", "12"]);
     await runConfigCommand(["set", "maxToolIterations", "5"]);
     await runConfigCommand(["set", "defaultTaskTime", "8:30 AM"]);
+    await runConfigCommand(["set", "storage", "sqlite"]);
 
     const projectConfigPath = path.join(projectDir, ".maclaw", "maclaw.json");
     const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
       contextMessages: number;
       defaultTaskTime: string;
       maxToolIterations: number;
+      storage: string;
     };
 
     assert.equal(projectConfig.contextMessages, 12);
     assert.equal(projectConfig.maxToolIterations, 5);
     assert.equal(projectConfig.defaultTaskTime, "8:30 AM");
+    assert.equal(projectConfig.storage, "sqlite");
     assert.match(stdoutWrites.join(""), /contextMessages = 12/);
     assert.match(stdoutWrites.join(""), /maxToolIterations = 5/);
     assert.match(stdoutWrites.join(""), /defaultTaskTime = 8:30 AM/);
+    assert.match(stdoutWrites.join(""), /storage = sqlite/);
   } finally {
     process.chdir(previousCwd);
     process.stdout.write = originalStdoutWrite;

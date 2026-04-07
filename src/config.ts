@@ -21,13 +21,16 @@ export const defaultAgentsFile = (projectFolder: string): string =>
 export const defaultInboxFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "inbox.jsonl");
 
+export const defaultSqliteFile = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "maclaw.db");
+
 export type ModelProvider = "dummy" | "openai";
 
 export type ProjectConfig = {
   name: string;
   createdAt?: string;
   model: string;
-  storage: "json" | "none";
+  storage: "json" | "sqlite" | "none";
   notifications: NotificationPolicy;
   defaultTaskTime: string;
   contextMessages: number;
@@ -147,7 +150,8 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
       process.env.MACLAW_MODEL ?? projectFileConfig.model,
       legacyProvider ?? "openai",
     ),
-    storage: storageValue === "json" ? "json" : "none",
+    storage:
+      storageValue === "json" || storageValue === "sqlite" ? storageValue : "none",
     notifications: normalizeNotifications(projectFileConfig.notifications),
     defaultTaskTime: normalizeDefaultTaskTime(
       process.env.MACLAW_DEFAULT_TASK_TIME ?? projectFileConfig.defaultTaskTime,

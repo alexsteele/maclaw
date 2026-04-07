@@ -74,7 +74,11 @@ export type InboxEntry = {
   kind: NotificationKind;
   text: string;
   origin: Origin;
+  sourceType: "agent" | "task";
+  sourceId: string;
+  sourceName?: string;
   createdAt: string;
+  sentAt?: string;
   readAt?: string;
 };
 

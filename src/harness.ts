@@ -6,6 +6,7 @@ import {
   defaultProjectDataDir,
   defaultAgentsFile,
   defaultInboxFile,
+  defaultSqliteFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   initProjectConfig,
@@ -23,6 +24,7 @@ import {
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
+import { SqliteAgentStore, SqliteInboxStore } from "./storage/sqlite.js";
 import { createTools } from "./tools/index.js";
 import {
   JsonFileTaskStore,
@@ -64,6 +66,9 @@ export type HarnessNotification = {
   kind: NotificationKind;
   origin: Origin;
   text: string;
+  sourceType: InboxEntry["sourceType"];
+  sourceId: string;
+  sourceName?: string;
 };
 
 export type AgentCreateOptions = {
@@ -115,13 +120,13 @@ const isOriginTarget = (value: NotificationTarget): value is Origin => {
 };
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
-  return config.storage === "json"
+  return config.storage === "json" || config.storage === "sqlite"
     ? new JsonFileChatStore(config.chatsDir)
     : new MemoryChatStore();
 };
 
 const createScheduler = (config: ProjectConfig): TaskScheduler => {
-  return config.storage === "json"
+  return config.storage === "json" || config.storage === "sqlite"
     ? new TaskScheduler(
         new JsonFileTaskStore(
           defaultTasksFile(config.projectFolder),
@@ -132,12 +137,20 @@ const createScheduler = (config: ProjectConfig): TaskScheduler => {
 };
 
 const createAgentStore = (config: ProjectConfig): AgentStore => {
+  if (config.storage === "sqlite") {
+    return new SqliteAgentStore(defaultSqliteFile(config.projectFolder));
+  }
+
   return config.storage === "json"
     ? new JsonFileAgentStore(defaultAgentsFile(config.projectFolder))
     : new MemoryAgentStore();
 };
 
 const createInboxStore = (config: ProjectConfig): InboxStore => {
+  if (config.storage === "sqlite") {
+    return new SqliteInboxStore(defaultSqliteFile(config.projectFolder));
+  }
+
   return config.storage === "json"
     ? new JsonFileInboxStore(defaultInboxFile(config.projectFolder))
     : new MemoryInboxStore();
@@ -515,6 +528,9 @@ export class Harness {
         kind: notification.kind,
         text: notification.text,
         origin: notification.origin,
+        sourceType: notification.sourceType,
+        sourceId: notification.sourceId,
+        sourceName: notification.sourceName,
       }),
     );
   }
@@ -549,7 +565,14 @@ export class Harness {
       return;
     }
 
-    await this.emitNotification({ kind, origin: target, text });
+    await this.emitNotification({
+      kind,
+      origin: target,
+      text,
+      sourceType: "task",
+      sourceId: task.id,
+      sourceName: task.title,
+    });
   }
 
   private emitAgentNotification(
@@ -567,7 +590,14 @@ export class Harness {
       return;
     }
 
-    void this.emitNotification({ kind, origin: target, text });
+    void this.emitNotification({
+      kind,
+      origin: target,
+      text,
+      sourceType: "agent",
+      sourceId: agent.id,
+      sourceName: agent.name,
+    });
   }
 
   async deleteChat(chatId: string): Promise<boolean> {
