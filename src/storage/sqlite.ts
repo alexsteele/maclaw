@@ -2,12 +2,18 @@
 // This starts with agents and inbox to prove the storage seam cleanly.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import type { AgentStore } from "../agent.js";
+import type { ChatLoadOptions, ChatStore } from "../chats.js";
+import { appendJsonLine, ensureDir, readJsonLines } from "../fs-utils.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
 import type {
   AgentRecord,
+  ChatRecord,
+  ChatSummary,
+  Message,
   InboxEntry,
   NotificationPolicy,
   NotificationTarget,
@@ -18,6 +24,16 @@ import type {
 } from "../types.js";
 
 const SQLITE_SCHEMA = `
+  create table if not exists chats (
+    id text primary key,
+    created_at text not null,
+    updated_at text not null,
+    retention_days integer not null,
+    compression_mode text not null,
+    summary text,
+    message_count integer not null
+  );
+
   create table if not exists agents (
     id text primary key,
     name text not null,
@@ -82,6 +98,7 @@ const SQLITE_SCHEMA = `
     status text not null,
     error text
   );
+
 `;
 
 const parseJsonField = <T>(value: unknown): T | undefined => {
@@ -151,6 +168,48 @@ const rowToScheduledTask = (row: Record<string, unknown>): ScheduledTask => ({
   lastRunAt: row.last_run_at === null ? undefined : String(row.last_run_at),
   lastError: row.last_error === null ? undefined : String(row.last_error),
 });
+
+const chatTranscriptPath = (chatsDir: string, chatId: string): string =>
+  path.join(chatsDir, `${chatId}.jsonl`);
+
+const createEmptyChat = (chatId: string, options: ChatLoadOptions): ChatRecord => {
+  const now = new Date().toISOString();
+  return {
+    id: chatId,
+    createdAt: now,
+    updatedAt: now,
+    retentionDays: options.retentionDays,
+    compressionMode: options.compressionMode,
+    messages: [],
+  };
+};
+
+const normalizeChat = (
+  chat: ChatRecord,
+  options: ChatLoadOptions,
+): ChatRecord => ({
+  ...chat,
+  retentionDays: options.retentionDays,
+  compressionMode: options.compressionMode,
+});
+
+const rowToChatMetadata = (
+  row: Record<string, unknown>,
+  messages: Message[],
+  options: ChatLoadOptions,
+): ChatRecord =>
+  normalizeChat(
+    {
+      id: String(row.id),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+      retentionDays: Number(row.retention_days),
+      compressionMode: row.compression_mode as ChatRecord["compressionMode"],
+      summary: row.summary === null ? undefined : String(row.summary),
+      messages,
+    },
+    options,
+  );
 
 export class SqliteAgentStore implements AgentStore {
   private readonly database: DatabaseSync;
@@ -331,5 +390,99 @@ export class SqliteTaskStore implements TaskStore {
         entry.status,
         entry.error ?? null,
       );
+  }
+}
+
+// note: chat transcripts stored in jsonl
+// TODO: sepparate appendMessage() from saveChat()
+export class SqliteChatStore implements ChatStore {
+  private readonly database: DatabaseSync;
+  private readonly chatsDir: string;
+
+  constructor(filePath: string, chatsDir: string) {
+    this.database = openDatabase(filePath);
+    this.chatsDir = chatsDir;
+  }
+
+  async loadChat(chatId: string, options: ChatLoadOptions): Promise<ChatRecord> {
+    await ensureDir(this.chatsDir);
+    const row = this.database
+      .prepare("select * from chats where id = ?")
+      .get(chatId) as Record<string, unknown> | undefined;
+    if (!row) {
+      return createEmptyChat(chatId, options);
+    }
+
+    const transcript = await readJsonLines<Message>(chatTranscriptPath(this.chatsDir, chatId));
+    return rowToChatMetadata(row, transcript, options);
+  }
+
+  async saveChat(chat: ChatRecord): Promise<void> {
+    chat.updatedAt = new Date().toISOString();
+    await ensureDir(this.chatsDir);
+
+    const transcriptPath = chatTranscriptPath(this.chatsDir, chat.id);
+    const existingRow = this.database
+      .prepare("select message_count from chats where id = ?")
+      .get(chat.id) as { message_count: number } | undefined;
+    const existingMessageCount = existingRow?.message_count ?? 0;
+
+    if (existingMessageCount > chat.messages.length) {
+      const transcript = chat.messages.map((message) => JSON.stringify(message)).join("\n");
+      await writeFile(transcriptPath, transcript.length > 0 ? `${transcript}\n` : "", "utf8");
+    } else {
+      for (const message of chat.messages.slice(existingMessageCount)) {
+        await appendJsonLine(transcriptPath, message);
+      }
+    }
+
+    this.database.prepare("delete from chats where id = ?").run(chat.id);
+    this.database
+      .prepare(`
+        insert into chats (
+          id, created_at, updated_at, retention_days, compression_mode, summary, message_count
+        ) values (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        chat.id,
+        chat.createdAt,
+        chat.updatedAt,
+        chat.retentionDays,
+        chat.compressionMode,
+        chat.summary ?? null,
+        chat.messages.length,
+      );
+  }
+
+  async deleteChat(chatId: string): Promise<boolean> {
+    const result = this.database.prepare("delete from chats where id = ?").run(chatId);
+    await rm(chatTranscriptPath(this.chatsDir, chatId), { force: true });
+    return result.changes > 0;
+  }
+
+  async listChats(): Promise<ChatSummary[]> {
+    const rows = this.database
+      .prepare("select * from chats order by updated_at desc")
+      .all() as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: String(row.id),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+      messageCount: Number(row.message_count),
+    }));
+  }
+
+  async pruneExpiredChats(retentionDays: number): Promise<number> {
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const staleRows = this.database
+      .prepare("select id from chats where updated_at < ?")
+      .all(cutoff) as Array<{ id: string }>;
+
+    this.database.prepare("delete from chats where updated_at < ?").run(cutoff);
+    for (const row of staleRows) {
+      await rm(chatTranscriptPath(this.chatsDir, row.id), { force: true });
+    }
+
+    return staleRows.length;
   }
 }

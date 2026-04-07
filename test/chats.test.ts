@@ -2,16 +2,18 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { JsonFileChatStore, MemoryChatStore, appendMessage } from "../src/chats.js";
+import { SqliteChatStore } from "../src/storage/sqlite.js";
 
 const createStore = async (): Promise<{
   cleanup: () => Promise<void>;
   dir: string;
   store: JsonFileChatStore;
 }> => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-sessions-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chats-"));
   return {
     cleanup: async () => rm(dir, { recursive: true, force: true }),
     dir,
@@ -67,7 +69,10 @@ test("saveChat persists messages and loadChat reapplies current options", async 
     assert.equal(metadata.messageCount, 1);
 
     const transcriptRaw = await readFile(path.join(dir, "beta.jsonl"), "utf8");
-    const transcriptLines = transcriptRaw.trim().split("\n").map((line) => JSON.parse(line) as { content: string });
+    const transcriptLines = transcriptRaw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { content: string });
     assert.equal(transcriptLines.length, 1);
     assert.equal(transcriptLines[0]?.content, "hello");
   } finally {
@@ -189,5 +194,45 @@ test("deleteChat removes a saved chat from the JSON store", async () => {
     assert.equal(existsSync(path.join(dir, "alpha.jsonl")), false);
   } finally {
     await cleanup();
+  }
+});
+
+test("SqliteChatStore keeps chat metadata in sqlite and transcripts on disk", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chats-sqlite-"));
+  const store = new SqliteChatStore(path.join(dir, "maclaw.db"), path.join(dir, "chats"));
+
+  try {
+    const chat = await store.loadChat("alpha", {
+      retentionDays: 30,
+      compressionMode: "none",
+    });
+    appendMessage(chat, "user", "hello");
+    await store.saveChat(chat);
+
+    const reloaded = await store.loadChat("alpha", {
+      retentionDays: 7,
+      compressionMode: "planned",
+    });
+    const database = new DatabaseSync(path.join(dir, "maclaw.db"));
+    const row = database
+      .prepare("select id, message_count from chats where id = ?")
+      .get("alpha") as { id: string; message_count: number } | undefined;
+    database.close();
+
+    assert.equal(reloaded.messages.length, 1);
+    assert.equal(reloaded.retentionDays, 7);
+    assert.equal(reloaded.compressionMode, "planned");
+    assert.equal(row?.id, "alpha");
+    assert.equal(row?.message_count, 1);
+
+    const transcriptRaw = await readFile(path.join(dir, "chats", "alpha.jsonl"), "utf8");
+    const transcriptLines = transcriptRaw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { content: string });
+    assert.equal(transcriptLines.length, 1);
+    assert.equal(transcriptLines[0]?.content, "hello");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

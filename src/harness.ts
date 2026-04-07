@@ -24,7 +24,12 @@ import {
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
-import { SqliteAgentStore, SqliteInboxStore, SqliteTaskStore } from "./storage/sqlite.js";
+import {
+  SqliteAgentStore,
+  SqliteChatStore,
+  SqliteInboxStore,
+  SqliteTaskStore,
+} from "./storage/sqlite.js";
 import { createTools } from "./tools/index.js";
 import {
   JsonFileTaskStore,
@@ -120,7 +125,11 @@ const isOriginTarget = (value: NotificationTarget): value is Origin => {
 };
 
 const createChatStore = (config: ProjectConfig): ChatStore => {
-  return config.storage === "json" || config.storage === "sqlite"
+  if (config.storage === "sqlite") {
+    return new SqliteChatStore(defaultSqliteFile(config.projectFolder), config.chatsDir);
+  }
+
+  return config.storage === "json"
     ? new JsonFileChatStore(config.chatsDir)
     : new MemoryChatStore();
 };
