@@ -1,3 +1,4 @@
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type {
   Channel,
   ChannelMessage,
@@ -14,6 +15,7 @@ import {
 import type { Message, Origin, ScheduledTask } from "./types.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
+import { renderPortalHtml } from "./portal/index.js";
 
 const logScheduledTask = async (
   projectName: string,
@@ -38,25 +40,38 @@ type ProjectName = string;
 type ChannelName = string;
 type ChannelUser = string;  // ${channel}:${userId}
 
+export type ServerOptions = {
+  port?: number;
+  servePortal?: boolean;
+};
+
 export class MaclawServer {
   private readonly config: ServerConfig;
   private readonly secrets: ServerSecrets;
+  private readonly options: ServerOptions;
   private readonly projects = new Map<ProjectName, Harness>();
   private readonly channels = new Map<ChannelName, Channel>();
   private readonly activeProjects = new Map<ChannelUser, ProjectName>();
+  private httpServer?: http.Server;
+  private portalPort?: number;
   private started = false;
 
-  private constructor(config: ServerConfig, secrets: ServerSecrets) {
+  private constructor(config: ServerConfig, secrets: ServerSecrets, options: ServerOptions = {}) {
     this.config = config;
     this.secrets = secrets;
+    this.options = options;
   }
 
-  static load(): MaclawServer {
-    return new MaclawServer(loadServerConfig(), loadServerSecrets());
+  static load(options: ServerOptions = {}): MaclawServer {
+    return new MaclawServer(loadServerConfig(), loadServerSecrets(), options);
   }
 
-  static create(config: ServerConfig, secrets: ServerSecrets): MaclawServer {
-    return new MaclawServer(config, secrets);
+  static create(
+    config: ServerConfig,
+    secrets: ServerSecrets,
+    options: ServerOptions = {},
+  ): MaclawServer {
+    return new MaclawServer(config, secrets, options);
   }
 
   private requireStarted(): void {
@@ -66,6 +81,8 @@ export class MaclawServer {
   }
 
   private resetRuntimeState(): void {
+    this.httpServer = undefined;
+    this.portalPort = undefined;
     this.channels.clear();
     this.projects.clear();
     this.activeProjects.clear();
@@ -88,6 +105,20 @@ export class MaclawServer {
     }
 
     return this.config.defaultProject;
+  }
+
+  getPortalPort(): number | undefined {
+    return this.portalPort;
+  }
+
+  renderPortal(): string {
+    return renderPortalHtml({
+      currentProject: this.getDefaultProjectName(),
+      projects: this.config.projects.map((project) => ({
+        isDefault: project.name === this.getDefaultProjectName(),
+        name: project.name,
+      })),
+    });
   }
 
   listProjectNames(): ProjectName[] {
@@ -132,6 +163,53 @@ export class MaclawServer {
     }
 
     await channel.send(notification.origin, notification.text);
+  }
+
+  private async handlePortalRequest(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    if (request.method !== "GET") {
+      response.statusCode = 405;
+      response.setHeader("content-type", "text/plain; charset=utf-8");
+      response.end("method_not_allowed\n");
+      return;
+    }
+
+    const path = request.url ?? "/";
+    if (path !== "/") {
+      response.statusCode = 404;
+      response.setHeader("content-type", "text/plain; charset=utf-8");
+      response.end("not_found\n");
+      return;
+    }
+
+    response.statusCode = 200;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(this.renderPortal());
+  }
+
+  private async startPortal(): Promise<void> {
+    this.httpServer = http.createServer((request, response) => {
+      void this.handlePortalRequest(request, response).catch((error) => {
+        response.statusCode = 500;
+        response.setHeader("content-type", "text/plain; charset=utf-8");
+        response.end(
+          `${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      this.httpServer?.once("error", reject);
+      this.httpServer?.listen(this.options.port ?? 4000, resolve);
+    });
+
+    const address = this.httpServer.address();
+    if (address && typeof address === "object") {
+      this.portalPort = address.port;
+      process.stdout.write(`Web portal listening on http://localhost:${address.port}/\n`);
+    }
   }
 
   async handleMessage(message: ChannelMessage): Promise<string | null> {
@@ -229,6 +307,10 @@ export class MaclawServer {
       );
     }
 
+    if (this.options.servePortal !== false) {
+      await this.startPortal();
+    }
+
     for (const channel of this.channels.values()) {
       await channel.start(this.handleMessage.bind(this));
     }
@@ -239,6 +321,21 @@ export class MaclawServer {
   async stop(): Promise<void> {
     for (const channel of [...this.channels.values()].reverse()) {
       await channel.stop();
+    }
+
+    if (this.httpServer) {
+      const server = this.httpServer;
+      this.httpServer = undefined;
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
     }
 
     for (const harness of this.projects.values()) {

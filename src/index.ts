@@ -11,7 +11,7 @@ const cliHelpText = [
   "",
   "Commands:",
   "  repl            Start the local REPL (default)",
-  "  server          Start the maclaw server",
+  "  server          Start the maclaw server and web portal",
   "  setup           Run guided setup",
   "  config          Show or update project config",
   "  -h, --help      Show this help",
@@ -22,8 +22,25 @@ const runReplCommand = async (): Promise<void> => {
   await runRepl(harness);
 };
 
-const runServer = async (): Promise<void> => {
-  const server = MaclawServer.load();
+const parsePortFlag = (args: string[]): number | undefined => {
+  const portIndex = args.indexOf("--port");
+  if (portIndex < 0) {
+    return undefined;
+  }
+
+  const rawPort = args[portIndex + 1];
+  const port = Number.parseInt(rawPort ?? "", 10);
+  if (!Number.isFinite(port) || port < 0) {
+    throw new Error("Usage: maclaw server [--port <port>]");
+  }
+
+  return port;
+};
+
+const runServer = async (args: string[]): Promise<void> => {
+  const server = MaclawServer.load({
+    port: parsePortFlag(args),
+  });
   await server.start();
 };
 
@@ -41,7 +58,7 @@ const main = async (): Promise<void> => {
   }
 
   if (command === "server") {
-    await runServer();
+    await runServer(process.argv.slice(3));
     return;
   }
 
