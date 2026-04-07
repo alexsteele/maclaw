@@ -40,10 +40,29 @@ export type ChatReply = {
   providerResult?: ProviderResult;
 };
 
+const formatLocalDateTime = (date: Date): string => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  });
+
+  return formatter.format(date);
+};
+
+const getLocalTimeZone = (): string => {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
+};
+
 const buildSystemPrompt = async (
   config: ProjectConfig,
   chat: ChatRecord,
 ): Promise<string> => {
+  const now = new Date();
   const skills = await loadSkills(config.skillsDir);
   const skillsBlock =
     skills.length === 0
@@ -64,7 +83,9 @@ const buildSystemPrompt = async (
     skillsBlock,
     "",
     `Current chat id: ${chat.id}`,
-    `Current time: ${new Date().toISOString()}`,
+    `Current time: ${now.toISOString()}`,
+    `Current local time: ${formatLocalDateTime(now)}`,
+    `Local timezone: ${getLocalTimeZone()}`,
   ].join("\n");
 };
 
