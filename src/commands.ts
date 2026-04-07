@@ -74,6 +74,7 @@ export const taskHelpText = [
   "  /task schedule daily 9:00 AM | <title> | <prompt> [| <json options>]",
   "  /task schedule weekly mon,wed,fri 5:30 PM | <title> | <prompt> [| <json options>]",
   "  /task delete <task id>",
+  "  /task cancel <task id>",
 ].join("\n");
 
 export const agentHelpText = [
@@ -874,14 +875,18 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
     return `scheduled task: ${task.id}`;
   }
 
-  if (input.startsWith("/task delete ")) {
-    const taskId = input.slice("/task delete ".length).trim();
+  if (input.startsWith("/task delete ") || input.startsWith("/task cancel ")) {
+    const taskId = input.startsWith("/task delete ")
+      ? input.slice("/task delete ".length).trim()
+      : input.slice("/task cancel ".length).trim();
     if (taskId.length === 0) {
-      return "Usage: /task delete <task id>";
+      return input.startsWith("/task delete ")
+        ? "Usage: /task delete <task id>"
+        : "Usage: /task cancel <task id>";
     }
 
     const deleted = await harness.deleteTask(taskId, getScopedChatId(harness, options));
-    return deleted ? `deleted task: ${taskId}` : `task not found: ${taskId}`;
+    return deleted ? `cancelled task: ${taskId}` : `task not found: ${taskId}`;
   }
 
   if (input.startsWith("/task")) {

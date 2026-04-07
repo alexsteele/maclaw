@@ -317,6 +317,26 @@ test("dispatchCommand renders task list output for a scoped chat", async () => {
   }
 });
 
+test("dispatchCommand cancels a scheduled task", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-cancel-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const task = await harness.createTask({
+      title: "Follow up",
+      prompt: "Send me a reminder",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    const reply = await dispatchCommand(harness, `/task cancel ${task.id}`);
+
+    assert.equal(reply, `cancelled task: ${task.id}`);
+    assert.equal((await harness.listCurrentChatTasks()).length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand lists local skills", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-skills-"));
 
