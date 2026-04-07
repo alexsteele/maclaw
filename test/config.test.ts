@@ -22,8 +22,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
           createdAt: "2026-04-04T10:00:00.000Z",
           name: "example-project",
           retentionDays: 14,
-          provider: "dummy",
-          model: "test-model",
+          model: "dummy/test-model",
           skillsDir: "project-skills",
         },
         null,
@@ -44,8 +43,7 @@ test("loadConfig derives project-local paths from the current folder and maclaw.
     assert.equal(defaultTaskRunsFile(rootDir), path.join(rootDir, ".maclaw", "task-runs.jsonl"));
     assert.equal(config.retentionDays, 14);
     assert.equal(config.chatId, "default");
-    assert.equal(config.provider, "dummy");
-    assert.equal(config.model, "test-model");
+    assert.equal(config.model, "dummy/test-model");
     assert.equal(config.storage, "json");
     assert.equal(config.notifications, "all");
     assert.equal(config.contextMessages, 20);
@@ -151,8 +149,7 @@ test("initProjectConfig backfills missing createdAt without dropping project set
         {
           name: "existing-project",
           retentionDays: 10,
-          provider: "dummy",
-          model: "test-model",
+          model: "dummy/test-model",
         },
         null,
         2,
@@ -165,8 +162,7 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     assert.ok(projectConfig.createdAt);
     assert.equal(projectConfig.name, "existing-project");
     assert.equal(projectConfig.retentionDays, 10);
-    assert.equal(projectConfig.provider, "dummy");
-    assert.equal(projectConfig.model, "test-model");
+    assert.equal(projectConfig.model, "dummy/test-model");
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.contextMessages, 20);
@@ -182,15 +178,13 @@ test("initProjectConfig merges overrides into the saved project config", async (
   try {
     const projectConfig = await initProjectConfig(rootDir, {
       name: "override-project",
-      provider: "dummy",
-      model: "override-model",
+      model: "dummy/override-model",
       retentionDays: 7,
     });
 
     assert.ok(projectConfig.createdAt);
     assert.equal(projectConfig.name, "override-project");
-    assert.equal(projectConfig.provider, "dummy");
-    assert.equal(projectConfig.model, "override-model");
+    assert.equal(projectConfig.model, "dummy/override-model");
     assert.equal(projectConfig.retentionDays, 7);
     assert.equal(projectConfig.storage, "json");
     assert.equal(projectConfig.notifications, "all");
@@ -212,8 +206,7 @@ test("loadConfig reads advanced project config fields", async () => {
         {
           name: "advanced-project",
           storage: "json",
-          provider: "dummy",
-          model: "test-model",
+          model: "dummy/test-model",
           contextMessages: 12,
           maxToolIterations: 5,
           notifications: {

@@ -52,7 +52,6 @@ test("runSetup writes project, server config, and secrets from a simple guided f
     const secretsPath = path.join(homeDir, ".maclaw", "secrets.json");
 
     const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
-      provider: string;
       model: string;
     };
     const serverConfig = JSON.parse(await readFile(serverConfigPath, "utf8")) as {
@@ -77,8 +76,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       whatsapp: { accessToken?: string; verifyToken?: string };
     };
 
-    assert.equal(projectConfig.provider, "openai");
-    assert.equal(projectConfig.model, "gpt-5.4-mini");
+    assert.equal(projectConfig.model, "openai/gpt-5.4-mini");
     assert.equal(serverConfig.projects.length, 1);
     assert.equal(serverConfig.defaultProject, "default");
     assert.equal(serverConfig.channels?.slack?.enabled, true);

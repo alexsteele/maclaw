@@ -1,7 +1,6 @@
 import { afterEach, beforeEach } from "node:test";
 
 const providerEnvKeys = [
-  "MACLAW_PROVIDER",
   "MACLAW_MODEL",
   "OPENAI_API_KEY",
 ] as const;
@@ -15,7 +14,6 @@ beforeEach(() => {
   }
 
   originalFetch = globalThis.fetch;
-  process.env.MACLAW_PROVIDER = "dummy";
   delete process.env.MACLAW_MODEL;
   delete process.env.OPENAI_API_KEY;
   globalThis.fetch = (async () => {

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
-import type { ProjectConfig } from "./config.js";
+import { parseConfiguredModel, type ProjectConfig } from "./config.js";
 import {
   appendJsonLine,
   ensureDir,
@@ -69,10 +69,11 @@ const buildSystemPrompt = async (
 };
 
 const createProvider = (config: ProjectConfig): Provider => {
-  if (config.provider === "openai" && config.openAiApiKey) {
+  const configuredModel = parseConfiguredModel(config.model);
+  if (configuredModel.provider === "openai" && config.openAiApiKey) {
     return new OpenAIResponsesProvider(
       config.openAiApiKey,
-      config.model,
+      configuredModel.modelName,
       config.maxToolIterations,
     );
   }

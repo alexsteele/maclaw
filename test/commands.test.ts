@@ -142,11 +142,9 @@ test("dispatchCommand saves the current chat transcript to a custom file", async
 test("dispatchCommand shows chat and project usage from persisted assistant messages", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-"));
   const originalFetch = globalThis.fetch;
-  const originalProvider = process.env.MACLAW_PROVIDER;
   const originalApiKey = process.env.OPENAI_API_KEY;
 
   try {
-    delete process.env.MACLAW_PROVIDER;
     process.env.OPENAI_API_KEY = "test-key";
     globalThis.fetch = (async () =>
       ({
@@ -169,8 +167,7 @@ test("dispatchCommand shows chat and project usage from persisted assistant mess
 
     await initProjectConfig(projectDir, {
       name: "usage-project",
-      provider: "openai",
-      model: "test-model",
+      model: "openai/test-model",
       openAiApiKey: "test-key",
     });
 
@@ -196,11 +193,6 @@ test("dispatchCommand shows chat and project usage from persisted assistant mess
     assert.match(projectReply ?? "", /^reasoningTokens: 4$/mu);
   } finally {
     globalThis.fetch = originalFetch;
-    if (originalProvider === undefined) {
-      delete process.env.MACLAW_PROVIDER;
-    } else {
-      process.env.MACLAW_PROVIDER = originalProvider;
-    }
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else {
@@ -213,11 +205,9 @@ test("dispatchCommand shows chat and project usage from persisted assistant mess
 test("dispatchCommand aliases usage to current chat and project usage", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-alias-"));
   const originalFetch = globalThis.fetch;
-  const originalProvider = process.env.MACLAW_PROVIDER;
   const originalApiKey = process.env.OPENAI_API_KEY;
 
   try {
-    delete process.env.MACLAW_PROVIDER;
     process.env.OPENAI_API_KEY = "test-key";
     globalThis.fetch = (async () =>
       ({
@@ -234,8 +224,7 @@ test("dispatchCommand aliases usage to current chat and project usage", async ()
 
     await initProjectConfig(projectDir, {
       name: "usage-alias-project",
-      provider: "openai",
-      model: "test-model",
+      model: "openai/test-model",
       openAiApiKey: "test-key",
     });
 
@@ -251,11 +240,6 @@ test("dispatchCommand aliases usage to current chat and project usage", async ()
     assert.equal(helpReply, usageHelpText);
   } finally {
     globalThis.fetch = originalFetch;
-    if (originalProvider === undefined) {
-      delete process.env.MACLAW_PROVIDER;
-    } else {
-      process.env.MACLAW_PROVIDER = originalProvider;
-    }
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else {
@@ -339,8 +323,7 @@ test("dispatchCommand lists local skills", async () => {
   try {
     await initProjectConfig(projectDir, {
       name: "skills-project",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
     await mkdir(path.join(projectDir, ".maclaw", "skills"), { recursive: true });
     await writeFile(
@@ -384,8 +367,7 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
   try {
     await initProjectConfig(projectDir, {
       name: "config-project",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
     const harness = Harness.load(projectDir);
 
@@ -394,7 +376,7 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
     assert.match(showReply ?? "", /contextMessages: 20/u);
 
     const getReply = await dispatchCommand(harness, "/config get model");
-    assert.equal(getReply, "test-model");
+    assert.equal(getReply, "dummy/test-model");
 
     const setReply = await dispatchCommand(harness, "/config set contextMessages 12");
     assert.equal(setReply, "contextMessages = 12");
@@ -623,8 +605,7 @@ test("dispatchCommand requires confirmation before wiping project data", async (
   try {
     await initProjectConfig(projectDir, {
       name: "wipeout-project",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
     const harness = Harness.load(projectDir);
 

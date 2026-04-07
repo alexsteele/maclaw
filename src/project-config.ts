@@ -1,9 +1,8 @@
 // Shared project config helpers used by CLI and slash commands.
-import type { ProjectConfig } from "./config.js";
+import { normalizeConfiguredModel, parseConfiguredModel, type ProjectConfig } from "./config.js";
 
 export const editableProjectConfigKeys = new Set([
   "name",
-  "provider",
   "model",
   "storage",
   "notifications",
@@ -20,8 +19,8 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `name: ${config.name}`,
     `folder: ${config.projectFolder}`,
     `config: ${config.projectConfigFile}`,
-    `provider: ${config.provider}`,
     `model: ${config.model}`,
+    `modelProvider: ${parseConfiguredModel(config.model).provider}`,
     `storage: ${config.storage}`,
     `notifications: ${JSON.stringify(config.notifications)}`,
     `contextMessages: ${config.contextMessages}`,
@@ -37,12 +36,8 @@ export const parseProjectConfigValue = (
   key: string,
   value: string,
 ): Partial<ProjectConfig> | string => {
-  if (key === "provider") {
-    if (value !== "openai" && value !== "dummy") {
-      return "provider must be 'openai' or 'dummy'";
-    }
-
-    return { provider: value };
+  if (key === "model") {
+    return { model: normalizeConfiguredModel(value) };
   }
 
   if (key === "compressionMode") {

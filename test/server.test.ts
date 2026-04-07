@@ -17,13 +17,11 @@ test("server handles project commands and routes chat messages by active project
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
     await initProjectConfig(workDir, {
       name: "work",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
 
     const server = MaclawServer.create(
@@ -129,13 +127,11 @@ test("server prompts the user to choose a project when none is selected", async 
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
     await initProjectConfig(workDir, {
       name: "work",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
 
     const server = MaclawServer.create(
@@ -196,8 +192,7 @@ test("server passes channel origin through to created agents", async () => {
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
 
     const server = MaclawServer.create(
@@ -256,8 +251,7 @@ test("server renders the portal shell", async () => {
   try {
     await initProjectConfig(homeDir, {
       name: "home",
-      provider: "dummy",
-      model: "test-model",
+      model: "dummy/test-model",
     });
 
     const server = MaclawServer.create(

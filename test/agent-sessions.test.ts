@@ -19,8 +19,7 @@ const createHarness = async (): Promise<{
   const config: ProjectConfig = {
     name: path.basename(projectDir),
     createdAt: undefined,
-    provider: "dummy",
-    model: "gpt-4.1-mini",
+    model: "dummy/gpt-4.1-mini",
     storage: "json",
     notifications: "all",
     contextMessages: 20,
@@ -85,8 +84,7 @@ test("ChatRuntime only sends the most recent contextMessages to the provider", a
     const config: ProjectConfig = {
       name: path.basename(projectDir),
       createdAt: undefined,
-      provider: "openai",
-      model: "gpt-4.1-mini",
+      model: "openai/gpt-4.1-mini",
       storage: "json",
       notifications: "all",
       contextMessages: 2,

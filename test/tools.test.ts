@@ -9,8 +9,7 @@ import { createTools } from "../src/tools/index.js";
 const createConfig = (projectDir: string): ProjectConfig => ({
   name: path.basename(projectDir),
   createdAt: undefined,
-  provider: "dummy",
-  model: "test-model",
+  model: "dummy/test-model",
   storage: "none",
   notifications: "all",
   contextMessages: 20,

@@ -12,7 +12,7 @@ first-run choices in one streamlined terminal dialogue.
 
 Provide an interactive CLI flow. `maclaw setup` will help the user:
 
-1. Choose provider and model.
+1. Choose a model.
 1. Choose a default project.
 1. Optionally create or initialize that project.
 1. Configure server and connectors. Optional.
@@ -38,7 +38,7 @@ $ maclaw setup
 Welcome to maclaw setup.
 
 This setup will help you:
-  1. Choose a provider and model
+  1. Choose a model
   2. Pick a default project
   3. Optionally configure maclaw server and connectors
 
@@ -110,4 +110,4 @@ Run:
 - It is okay if the first version writes config but does not validate every
   token live.
 - Later we can add a non-interactive mode such as `maclaw setup --yes` or
-  `maclaw setup --provider openai`.
+  `maclaw setup --model openai/gpt-5.4-mini`.

@@ -1,5 +1,5 @@
 import { Harness, type AgentCreateOptions } from "./harness.js";
-import { initProjectConfig, loadConfig } from "./config.js";
+import { initProjectConfig, loadConfig, parseConfiguredModel } from "./config.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -302,8 +302,8 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `createdAt: ${projectConfig.createdAt ?? "(not set)"}`,
     `folder: ${projectConfig.projectFolder}`,
     `config: ${isProjectInitialized ? projectConfig.projectConfigFile : "(not set)"}`,
-    `provider: ${projectConfig.provider}`,
     `model: ${projectConfig.model}`,
+    `modelProvider: ${parseConfiguredModel(projectConfig.model).provider}`,
     `storage: ${projectConfig.storage}`,
     `notifications: ${JSON.stringify(projectConfig.notifications)}`,
     `contextMessages: ${projectConfig.contextMessages}`,

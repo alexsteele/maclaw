@@ -37,7 +37,7 @@ Alex, your dedicated human-in-the-loop
 - **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
 - **Tool**: a callable capability the harness can use, such as editing files,
   calling APIs, etc.
-- **Provider**: the LLM backend maclaw uses, such as OpenAI or the built-in dummy provider
+- **Model**: the configured LLM target, such as `openai/gpt-5.4-mini` or `dummy/default`
 - **Task**: a scheduled job that re-enters the harness later, either once or on
   a recurring schedule
 - **Notification**: Sent to the user over a channel by an agent, task, or other event.
@@ -164,8 +164,7 @@ my-project/
 {
   "createdAt": "2026-04-04T10:00:00.000Z",
   "name": "my-project",
-  "provider": "openai",
-  "model": "gpt-4.1-mini",
+  "model": "openai/gpt-4.1-mini",
   "contextMessages": 20,
   "maxToolIterations": 8,
   "retentionDays": 30,
@@ -185,9 +184,8 @@ Config precedence is:
 
 Environment variables:
 
-- `MACLAW_PROVIDER`: overrides the configured provider
 - `MACLAW_MODEL`: overrides the configured model
-- `OPENAI_API_KEY`: enables the OpenAI provider
+- `OPENAI_API_KEY`: enables OpenAI models
 - `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`, which defaults to `projectFolder/.maclaw/skills`
 - `MACLAW_CHAT_ID`: defaults to `default`
 - `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
@@ -196,12 +194,12 @@ Environment variables:
 - `MACLAW_COMPRESSION_MODE`: `none` or `planned`
 - `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`
 
-## Providers
+## Models
 
-Providers provide your AI model. You can configure both these variables.
+Project config stores models as `<provider>/<model>`.
 
-- `openai`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
-- `dummy`: uses the built-in stand-in provider for local testing without live model calls
+- `openai/gpt-5.4-mini`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
+- `dummy/default`: uses the built-in stand-in provider for local testing without live model calls
 
 ## Connectors
 

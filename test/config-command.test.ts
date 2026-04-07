@@ -16,7 +16,7 @@ test("runConfigCommand updates the project model", async () => {
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 
   try {
-    await initProjectConfig(projectDir, { model: "gpt-4.1-mini" });
+    await initProjectConfig(projectDir, { model: "openai/gpt-4.1-mini" });
     process.chdir(projectDir);
     process.stdout.write = ((chunk: string | Uint8Array) => {
       stdoutWrites.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
@@ -30,8 +30,8 @@ test("runConfigCommand updates the project model", async () => {
       model: string;
     };
 
-    assert.equal(projectConfig.model, "gpt-5.4-mini");
-    assert.match(stdoutWrites.join(""), /model = gpt-5.4-mini/);
+    assert.equal(projectConfig.model, "openai/gpt-5.4-mini");
+    assert.match(stdoutWrites.join(""), /model = openai\/gpt-5.4-mini/);
   } finally {
     process.chdir(previousCwd);
     process.stdout.write = originalStdoutWrite;

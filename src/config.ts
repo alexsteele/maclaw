@@ -17,10 +17,11 @@ export const defaultTaskRunsFile = (projectFolder: string): string =>
 export const defaultAgentsFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "agents.json");
 
+export type ModelProvider = "dummy" | "openai";
+
 export type ProjectConfig = {
   name: string;
   createdAt?: string;
-  provider: "dummy" | "openai";
   model: string;
   storage: "json" | "none";
   notifications: NotificationPolicy;
@@ -37,6 +38,35 @@ export type ProjectConfig = {
   chatsDir: string;
 };
 
+const DEFAULT_MODEL = "openai/gpt-4.1-mini";
+
+export const normalizeConfiguredModel = (
+  value: string | undefined,
+  fallbackProvider: ModelProvider = "openai",
+): string => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return fallbackProvider === "dummy" ? "dummy/default" : DEFAULT_MODEL;
+  }
+
+  const prefixedMatch = trimmed.match(/^(dummy|openai)\/(.+)$/u);
+  if (prefixedMatch) {
+    return `${prefixedMatch[1]}/${prefixedMatch[2]!.trim()}`;
+  }
+
+  return `${fallbackProvider}/${trimmed}`;
+};
+
+export const parseConfiguredModel = (
+  value: string,
+): { modelName: string; provider: ModelProvider } => {
+  const normalized = normalizeConfiguredModel(value);
+  const separatorIndex = normalized.indexOf("/");
+  return {
+    provider: normalized.startsWith("dummy/") ? "dummy" : "openai",
+    modelName: normalized.slice(separatorIndex + 1),
+  };
+};
 
 const toPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -72,8 +102,7 @@ export const initProjectConfig = async (
     createdAt: mergedConfig.createdAt ?? new Date().toISOString(),
     name: mergedConfig.name ?? path.basename(projectFolder),
     retentionDays: mergedConfig.retentionDays ?? 30,
-    provider: mergedConfig.provider ?? "openai",
-    model: mergedConfig.model ?? "gpt-4.1-mini",
+    model: normalizeConfiguredModel(mergedConfig.model),
     storage: mergedConfig.storage ?? "json",
     notifications: normalizeNotifications(mergedConfig.notifications),
     contextMessages: mergedConfig.contextMessages ?? 20,
@@ -95,10 +124,9 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   const projectConfigFile = path.join(projectFolder, ".maclaw", "maclaw.json");
   const hasProjectConfig = existsSync(projectConfigFile);
   const serverSecrets = loadServerSecrets();
+  const legacyProvider = (projectFileConfig as Partial<{ provider: ModelProvider }>).provider;
   const compressionModeValue =
     process.env.MACLAW_COMPRESSION_MODE ?? projectFileConfig.compressionMode ?? "none";
-  const providerValue =
-    process.env.MACLAW_PROVIDER ?? projectFileConfig.provider ?? "openai";
   const storageValue =
     process.env.MACLAW_STORAGE ?? projectFileConfig.storage ?? (hasProjectConfig ? "json" : "none");
   const skillsDir = path.resolve(
@@ -109,11 +137,10 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   return {
     createdAt: projectFileConfig.createdAt,
     name: projectFileConfig.name ?? path.basename(projectFolder),
-    provider: providerValue === "dummy" ? "dummy" : "openai",
-    model:
-      process.env.MACLAW_MODEL ??
-      projectFileConfig.model ??
-      "gpt-4.1-mini",
+    model: normalizeConfiguredModel(
+      process.env.MACLAW_MODEL ?? projectFileConfig.model,
+      legacyProvider ?? "openai",
+    ),
     storage: storageValue === "json" ? "json" : "none",
     notifications: normalizeNotifications(projectFileConfig.notifications),
     contextMessages: toPositiveInt(

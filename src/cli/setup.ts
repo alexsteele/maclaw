@@ -7,7 +7,11 @@
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
-import { initProjectConfig, type ProjectConfig } from "../config.js";
+import {
+  initProjectConfig,
+  normalizeConfiguredModel,
+  type ProjectConfig,
+} from "../config.js";
 import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
@@ -220,8 +224,10 @@ const runProviderSetup = async (
     prompt.print("OpenAI API setup:");
     prompt.print(`  ${OPENAI_SETUP_URL}`);
 
-    projectConfig.provider = "openai";
-    projectConfig.model = await prompt.askLine("Model?", "gpt-5.4-mini");
+    projectConfig.model = normalizeConfiguredModel(
+      await prompt.askLine("Model?", "gpt-5.4-mini"),
+      "openai",
+    );
     const apiKey = await prompt.askLine("OpenAI API key");
     if (apiKey) {
       serverSecrets.openai = { apiKey };
@@ -230,8 +236,10 @@ const runProviderSetup = async (
   }
 
   if (providerChoice === "dummy") {
-    projectConfig.provider = "dummy";
-    projectConfig.model = await prompt.askLine("Model?", "dummy-model");
+    projectConfig.model = normalizeConfiguredModel(
+      await prompt.askLine("Model?", "default"),
+      "dummy",
+    );
   }
 };
 
