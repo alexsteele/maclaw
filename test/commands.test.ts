@@ -163,8 +163,12 @@ test("dispatchCommand shows current and named chat info", async () => {
 
     assert.match(currentReply ?? "", /^id: default$/mu);
     assert.match(currentReply ?? "", /^messageCount: 2$/mu);
+    assert.match(currentReply ?? "", /^contextMessageCount: 2$/mu);
+    assert.match(currentReply ?? "", /^contextBytes: \d+$/mu);
     assert.match(namedReply ?? "", /^id: branch-a$/mu);
     assert.match(namedReply ?? "", /^messageCount: 2$/mu);
+    assert.match(namedReply ?? "", /^contextMessageCount: 2$/mu);
+    assert.match(namedReply ?? "", /^contextBytes: \d+$/mu);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

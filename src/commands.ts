@@ -424,16 +424,33 @@ const renderChatList = (
   return [header, separator, ...lines].join("\n");
 };
 
-const renderChatInfo = (chat: Awaited<ReturnType<Harness["loadChat"]>>): string =>
-  [
+const renderChatInfo = (
+  chat: Awaited<ReturnType<Harness["loadChat"]>>,
+  contextMessages: number,
+): string => {
+  const contextSlice = chat.messages.slice(-contextMessages);
+  const contextBytes = Buffer.byteLength(
+    JSON.stringify(
+      contextSlice.map((message) => ({
+        content: message.content,
+        role: message.role,
+      })),
+    ),
+    "utf8",
+  );
+
+  return [
     `id: ${chat.id}`,
     `createdAt: ${chat.createdAt}`,
     `updatedAt: ${chat.updatedAt}`,
     `messageCount: ${chat.messages.length}`,
+    `contextMessageCount: ${contextSlice.length}`,
+    `contextBytes: ${contextBytes}`,
     `retentionDays: ${chat.retentionDays}`,
     `compressionMode: ${chat.compressionMode}`,
     `summary: ${chat.summary ?? "(none)"}`,
   ].join("\n");
+};
 
 const renderInbox = (entries: InboxEntry[]): string => {
   if (entries.length === 0) {
@@ -822,7 +839,10 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input === "/chat show") {
-    return renderChatInfo(await harness.loadChat(getScopedChatId(harness, options)));
+    return renderChatInfo(
+      await harness.loadChat(getScopedChatId(harness, options)),
+      harness.config.contextMessages,
+    );
   }
 
   if (input === "/chat usage") {
@@ -835,7 +855,10 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
       return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
     }
 
-    return renderChatInfo(await harness.loadChat(requestedId));
+    return renderChatInfo(
+      await harness.loadChat(requestedId),
+      harness.config.contextMessages,
+    );
   }
 
   if (input.startsWith("/chat usage ")) {
