@@ -77,14 +77,6 @@ export const parseConfiguredModel = (
   };
 };
 
-const toPositiveInt = (value: string | undefined, fallback: number): number => {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
 const readProjectFileConfig = (cwd: string): Partial<ProjectConfig> => {
   const projectConfigFile = path.join(cwd, ".maclaw", "maclaw.json");
   if (!existsSync(projectConfigFile)) {
@@ -136,54 +128,40 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
   const hasProjectConfig = existsSync(projectConfigFile);
   const serverSecrets = loadServerSecrets();
   const legacyProvider = (projectFileConfig as Partial<{ provider: ModelProvider }>).provider;
-  const compressionModeValue =
-    process.env.MACLAW_COMPRESSION_MODE ?? projectFileConfig.compressionMode ?? "none";
-  const storageValue =
-    process.env.MACLAW_STORAGE ?? projectFileConfig.storage ?? (hasProjectConfig ? "json" : "none");
   const skillsDir = path.resolve(
     projectFolder,
-    process.env.MACLAW_SKILLS_DIR ?? projectFileConfig.skillsDir ?? ".maclaw/skills",
+    projectFileConfig.skillsDir ?? ".maclaw/skills",
   );
 
   return {
     createdAt: projectFileConfig.createdAt,
     name: projectFileConfig.name ?? path.basename(projectFolder),
     model: normalizeConfiguredModel(
-      process.env.MACLAW_MODEL ?? projectFileConfig.model,
+      projectFileConfig.model,
       legacyProvider ?? "openai",
     ),
     storage:
-      storageValue === "json" || storageValue === "sqlite" ? storageValue : "none",
+      projectFileConfig.storage === "json" || projectFileConfig.storage === "sqlite"
+        ? projectFileConfig.storage
+        : hasProjectConfig
+          ? "json"
+          : "none",
     notifications: normalizeNotifications(projectFileConfig.notifications),
-    defaultTaskTime: normalizeDefaultTaskTime(
-      process.env.MACLAW_DEFAULT_TASK_TIME ?? projectFileConfig.defaultTaskTime,
-    ),
-    contextMessages: toPositiveInt(
-      process.env.MACLAW_CONTEXT_MESSAGES,
-      projectFileConfig.contextMessages ?? 20,
-    ),
-    maxToolIterations: toPositiveInt(
-      process.env.MACLAW_MAX_TOOL_ITERATIONS,
-      projectFileConfig.maxToolIterations ?? 8,
-    ),
-    retentionDays: toPositiveInt(
-      process.env.MACLAW_RETENTION_DAYS,
-      projectFileConfig.retentionDays ?? 30,
-    ),
+    defaultTaskTime: normalizeDefaultTaskTime(projectFileConfig.defaultTaskTime),
+    contextMessages: projectFileConfig.contextMessages ?? 20,
+    maxToolIterations: projectFileConfig.maxToolIterations ?? 8,
+    retentionDays: projectFileConfig.retentionDays ?? 30,
     skillsDir,
     basePromptFile:
       projectFileConfig.basePromptFile
         ? path.resolve(projectFolder, projectFileConfig.basePromptFile)
         : undefined,
-    compressionMode: compressionModeValue === "planned" ? "planned" : "none",
-    schedulerPollMs: toPositiveInt(
-      process.env.MACLAW_SCHEDULER_POLL_MS,
-      projectFileConfig.schedulerPollMs ?? 15_000,
-    ),
+    compressionMode: projectFileConfig.compressionMode === "planned" ? "planned" : "none",
+    schedulerPollMs: projectFileConfig.schedulerPollMs ?? 15_000,
     projectConfigFile,
     projectFolder,
     chatsDir: path.join(defaultProjectDataDir(projectFolder), "chats"),
-    chatId: process.env.MACLAW_CHAT_ID ?? "default",
+    chatId: "default",
     openAiApiKey: process.env.OPENAI_API_KEY ?? serverSecrets.openai.apiKey,
   };
 };

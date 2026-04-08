@@ -8,11 +8,12 @@ maclaw uses:
 
 ## Precedence
 
-Config precedence is:
+Project config precedence is:
 
-1. environment variables
-2. config files
-3. built-in defaults
+1. project config files
+2. built-in defaults
+
+For secrets and global paths, environment variables still override file values.
 
 ## Project Config
 
@@ -96,23 +97,7 @@ Example `secrets.json`:
 
 ## Environment Variables
 
-### Project
-
-- `MACLAW_HOME`: home dir for config and managed projects
-- `MACLAW_MODEL`: overrides the configured model
-- `OPENAI_API_KEY`: enables OpenAI models
-- `MACLAW_STORAGE`: overrides the configured storage backend
-- `MACLAW_SKILLS_DIR`: overrides the configured `skillsDir`
-- `MACLAW_CHAT_ID`: defaults to `default`
-- `MACLAW_DEFAULT_TASK_TIME`: default time for one-time `today`, `tomorrow`, or date-only tasks
-- `MACLAW_CONTEXT_MESSAGES`: defaults to `20`
-- `MACLAW_MAX_TOOL_ITERATIONS`: defaults to `8`
-- `MACLAW_RETENTION_DAYS`: defaults to `30`
-- `MACLAW_COMPRESSION_MODE`: `none` or `planned`
-- `MACLAW_SCHEDULER_POLL_MS`: defaults to `15000`
-
-### Server
-
+- `MACLAW_HOME`: home dir for global config and managed projects
 - `MACLAW_SERVER_CONFIG`: overrides the path to `server.json`
 - `MACLAW_SERVER_SECRETS`: overrides the path to `secrets.json`
 - `OPENAI_API_KEY`: overrides `secrets.json` OpenAI API key
@@ -149,11 +134,9 @@ Policies:
 - `{ "allow": ["agent:*", "task:*"], "deny": ["taskCompleted"] }`: notify for
   everything except successful tasks
 
-Agents and scheduled tasks can override project notifications with JSON options:
+Agents and scheduled tasks can override project notifications with JSON options `notify` and `notifyTarget`.
 
 - `/agent create planner | Do the work | {"notify":["errors"]}`
-- `/task schedule daily 9:00 AM | Daily Brief | Send the brief | {"notify":"none"}`
-- `/agent create planner | Do the work | {"notifyTarget":{"channel":"slack"}}`
 
 ## Server Notes
 
