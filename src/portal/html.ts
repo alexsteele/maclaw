@@ -552,7 +552,6 @@ export const renderPortalHtml = ({
           <header class="chat-header">
             <div>
               <h2>Chat</h2>
-              <div class="chat-subtitle">Front and center, with lightweight project navigation on the left.</div>
               <div class="chat-status" id="chat-status">Loading chat…</div>
             </div>
             <span class="pill">web channel</span>
