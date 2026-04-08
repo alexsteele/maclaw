@@ -7,6 +7,7 @@ Derived from local git history.
 | 2026-04-04 |        22 |                         6.53 | +8,904 / -2,417 |
 | 2026-04-05 |        30 |                         4.30 | +3,555 / -504   |
 | 2026-04-06 |        41 |                         3.64 | +5,451 / -1,079 |
+| 2026-04-08 |         8 |                         0.78 | +658 / -181     |
 
 ## 2026-04-04 Notes
 
@@ -36,3 +37,12 @@ Derived from local git history.
 - Initial sqlite support. Agents, tasks, inbox, chats. Transcripts stay in
   jsonl.
 - `docs/config.md`
+
+## 2026-04-08 Notes
+
+- portal polish. sidebar, dark mode, chat switch
+- Added `/new`, `/fork`, and `/reset` as chat aliases.
+- Added `basePromptFile` project config support.
+- Added `MACLAW_HOME` as the global root.
+- REPL uses `MACLAW_HOME` default project.
+- Removed most env vars. Paths and secrets only.
