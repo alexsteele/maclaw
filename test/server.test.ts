@@ -285,9 +285,10 @@ test("server renders the portal shell", async () => {
 
     assert.match(html, /maclaw/u);
     assert.match(html, /web channel/u);
-    assert.match(html, /home \(default\)/u);
+    assert.match(html, />home</u);
     assert.match(html, /\/events/u);
-    assert.match(html, /notification-log/u);
+    assert.match(html, /Recent chats/u);
+    assert.match(html, /\/chat switch/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

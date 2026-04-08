@@ -85,6 +85,22 @@ test("dispatchCommand renders chat list output", async () => {
   }
 });
 
+test("dispatchCommand persists a switched chat so it appears in chat list output", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-switch-list-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const switchReply = await dispatchCommand(harness, "/chat switch jazz");
+    const listReply = await dispatchCommand(harness, "/chat list");
+
+    assert.equal(switchReply, "switched to chat: jazz");
+    assert.match(listReply ?? "", /jazz/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows current and named chat info", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-show-"));
 

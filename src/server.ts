@@ -1,5 +1,6 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
+import { loadConfig } from "./config.js";
 import type {
   Channel,
   ChannelMessage,
@@ -138,10 +139,7 @@ export class MaclawServer {
   renderPortal(): string {
     return renderPortalHtml({
       currentProject: this.getDefaultProjectName(),
-      projects: this.config.projects.map((project) => ({
-        isDefault: project.name === this.getDefaultProjectName(),
-        name: project.name,
-      })),
+      projects: this.getPortalProjects(),
     });
   }
 
@@ -199,6 +197,7 @@ export class MaclawServer {
 
   private getPortalProjects() {
     return this.config.projects.map((project) => ({
+      defaultChatId: this.projects.get(project.name)?.config.chatId ?? loadConfig(project.folder).chatId,
       isDefault: project.name === this.getDefaultProjectName(),
       name: project.name,
     }));
@@ -262,6 +261,42 @@ export class MaclawServer {
     const chats = await harness.listChats();
     json(response, 200, {
       chats,
+      project: projectName,
+    });
+  }
+
+  private async postPortalChats(
+    request: IncomingMessage,
+    response: ServerResponse,
+    projectName: string,
+  ): Promise<void> {
+    const harness = this.getPortalHarness(response, projectName);
+    if (!harness) {
+      return;
+    }
+
+    const rawBody = await readRequestBody(request);
+    const parsed = JSON.parse(rawBody || "{}") as {
+      mode?: string;
+      sourceChatId?: string;
+    };
+
+    const mode = parsed.mode === "fork" ? "fork" : "new";
+    const result =
+      mode === "fork"
+        ? await harness.forkChatFrom(parsed.sourceChatId ?? "web")
+        : await harness.createChat();
+
+    if (!result.chat) {
+      json(response, 400, { error: result.error ?? "Could not create chat." });
+      return;
+    }
+
+    json(response, 200, {
+      chat: {
+        id: result.chat.id,
+        messages: result.chat.messages,
+      },
       project: projectName,
     });
   }
@@ -363,16 +398,27 @@ export class MaclawServer {
 
     const chatsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/chats$/u);
     if (chatsMatch) {
+      if (request.method === "GET") {
+        await this.sendPortalChats(
+          response,
+          decodeURIComponent(chatsMatch[1] ?? ""),
+        );
+        return;
+      }
+
+      if (request.method === "POST") {
+        await this.postPortalChats(
+          request,
+          response,
+          decodeURIComponent(chatsMatch[1] ?? ""),
+        );
+        return;
+      }
+
       if (request.method !== "GET") {
         text(response, 405, "method_not_allowed");
         return;
       }
-
-      await this.sendPortalChats(
-        response,
-        decodeURIComponent(chatsMatch[1] ?? ""),
-      );
-      return;
     }
 
     const chatMessagesMatch = url.pathname.match(

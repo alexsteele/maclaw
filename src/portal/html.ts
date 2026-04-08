@@ -20,7 +20,7 @@ const renderProjectOptions = (
   return projects
     .map((project) => {
       const selected = project.name === currentProject ? " selected" : "";
-      const label = project.isDefault ? `${project.name} (default)` : project.name;
+      const label = project.name;
       return `<option value="${escapeHtml(project.name)}"${selected}>${escapeHtml(label)}</option>`;
     })
     .join("");
@@ -171,7 +171,6 @@ export const renderPortalHtml = ({
 
       .nav-item,
       .chat-link,
-      .tab-button,
       .theme-button {
         padding: 10px 12px;
         border: 1px solid var(--border);
@@ -180,7 +179,6 @@ export const renderPortalHtml = ({
       }
 
       .chat-link,
-      .tab-button,
       .theme-button {
         width: 100%;
         color: var(--text);
@@ -189,7 +187,6 @@ export const renderPortalHtml = ({
       }
 
       .chat-link.is-active,
-      .tab-button.is-active,
       .theme-button.is-active {
         border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
         background: var(--accent-soft);
@@ -210,6 +207,33 @@ export const renderPortalHtml = ({
       .tab-list {
         display: grid;
         gap: 8px;
+      }
+
+      .tab-list {
+        gap: 2px;
+      }
+
+      .tab-button {
+        width: 100%;
+        margin: 0;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .tab-button:hover {
+        background: color-mix(in srgb, var(--panel-2) 75%, transparent);
+        color: var(--text);
+      }
+
+      .tab-button.is-active {
+        background: var(--accent-soft);
+        color: var(--text);
       }
 
       .chat-link strong {
@@ -240,6 +264,12 @@ export const renderPortalHtml = ({
         border-radius: 12px;
         padding: 12px;
         background: var(--panel-2);
+      }
+
+      .sidebar-note {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .chat-app {
@@ -356,7 +386,8 @@ export const renderPortalHtml = ({
       }
 
       textarea {
-        min-height: 112px;
+        min-height: 44px;
+        height: 44px;
         resize: vertical;
         line-height: 1.55;
       }
@@ -471,7 +502,7 @@ export const renderPortalHtml = ({
             </select>
           </section>
           <section class="card">
-            <p class="sidebar-section-title">Sidebar tabs</p>
+            <p class="sidebar-section-title">Browse</p>
             <div class="tab-list">
               <button type="button" class="tab-button is-active" data-tab="agents">Agents</button>
               <button type="button" class="tab-button" data-tab="tasks">Tasks</button>
@@ -480,6 +511,7 @@ export const renderPortalHtml = ({
           </section>
           <section class="card">
             <p class="sidebar-section-title">Recent chats</p>
+            <p class="sidebar-note">Use <code>/chat switch</code> or <code>/chat fork</code> in the chat to manage chats.</p>
             <div class="chat-list" id="chat-list">
               <div class="empty-mini">Loading chats…</div>
             </div>
@@ -535,15 +567,6 @@ export const renderPortalHtml = ({
       </main>
       <aside class="inspector">
         <h2>Appearance</h2>
-        <div class="stack">
-          <section class="card">
-            <h3>Portal</h3>
-            <div class="stat">
-              <strong>Minimal and focused</strong>
-              <span>The browser UI keeps chat central and tucks navigation into the side rails.</span>
-            </div>
-          </section>
-        </div>
         <div class="theme-spacer"></div>
         <div class="theme-footer">
           <button type="button" class="theme-toggle" id="theme-toggle">Dark mode</button>
@@ -552,7 +575,6 @@ export const renderPortalHtml = ({
     </div>
     <script>
       const portalState = ${serializeForScript({
-        chatId: "web",
         currentProject,
         projects,
       })};
@@ -573,7 +595,9 @@ export const renderPortalHtml = ({
       let displayMessages = [];
       let persistedMessageCount = 0;
       let eventSource;
-      let currentChatId = portalState.chatId;
+      let currentChatId = "";
+
+      const chatStorageKey = (project) => 'maclaw-portal-chat:' + project;
 
       const escapeHtml = (value) =>
         value
@@ -581,6 +605,24 @@ export const renderPortalHtml = ({
           .replaceAll("<", "&lt;")
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;");
+
+      const readStoredChatId = (project) => {
+        if (!project) {
+          return "";
+        }
+
+        const projectSummary = portalState.projects.find((entry) => entry.name === project);
+        return window.localStorage.getItem(chatStorageKey(project)) || projectSummary?.defaultChatId || "default";
+      };
+
+      const saveCurrentChatId = () => {
+        const project = currentProject();
+        if (!project) {
+          return;
+        }
+
+        window.localStorage.setItem(chatStorageKey(project), currentChatId);
+      };
 
       const renderMessages = () => {
         if (displayMessages.length === 0) {
@@ -622,7 +664,9 @@ export const renderPortalHtml = ({
 
         for (const element of chatList.querySelectorAll('.chat-link')) {
           element.addEventListener('click', () => {
-            currentChatId = element.getAttribute('data-chat-id') || portalState.chatId;
+            currentChatId = element.getAttribute('data-chat-id') || readStoredChatId(currentProject());
+            saveCurrentChatId();
+            showLoadingChat('Loading chat…');
             void loadChat();
           });
         }
@@ -634,6 +678,13 @@ export const renderPortalHtml = ({
           { role: 'assistant', content: text },
         ];
         renderMessages();
+      };
+
+      const showLoadingChat = (message) => {
+        displayMessages = [];
+        persistedMessageCount = 0;
+        renderMessages();
+        status.textContent = message;
       };
 
       const currentProject = () => projectSelect.value || portalState.currentProject || "";
@@ -660,12 +711,55 @@ export const renderPortalHtml = ({
         const project = currentProject();
         if (!project) {
           renderChatList([]);
-          return;
+          return [];
         }
 
         const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats');
         const data = await response.json();
-        renderChatList(data.chats || []);
+        const chats = data.chats || [];
+        renderChatList(chats);
+        return chats;
+      };
+
+      const chooseCurrentChatId = (chats) => {
+        const project = currentProject();
+        const storedChatId = readStoredChatId(project);
+        if (chats.some((chat) => chat.id === currentChatId)) {
+          return;
+        }
+
+        if (chats.some((chat) => chat.id === storedChatId)) {
+          currentChatId = storedChatId;
+          saveCurrentChatId();
+          return;
+        }
+
+        if (chats.length > 0) {
+          currentChatId = chats[0].id;
+          saveCurrentChatId();
+          return;
+        }
+
+        currentChatId = storedChatId;
+        saveCurrentChatId();
+      };
+
+      const updateChatFromCommandReply = (reply) => {
+        const switchedMatch = reply.match(/^switched to chat: (.+)$/m);
+        if (switchedMatch?.[1]) {
+          currentChatId = switchedMatch[1].trim();
+          saveCurrentChatId();
+          return true;
+        }
+
+        const forkedMatch = reply.match(/^forked current chat to: (.+)$/m);
+        if (forkedMatch?.[1]) {
+          currentChatId = forkedMatch[1].trim();
+          saveCurrentChatId();
+          return true;
+        }
+
+        return false;
       };
 
       const connectEvents = () => {
@@ -698,14 +792,15 @@ export const renderPortalHtml = ({
           return;
         }
 
-        status.textContent = "Loading chat…";
+        showLoadingChat("Loading chat…");
+        const chats = await loadChats();
+        chooseCurrentChatId(chats);
         const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(currentChatId));
         const data = await response.json();
         displayMessages = data.chat?.messages || [];
         persistedMessageCount = displayMessages.length;
         renderMessages();
         status.textContent = project + ' / ' + currentChatId;
-        await loadChats();
         connectEvents();
       };
 
@@ -736,11 +831,18 @@ export const renderPortalHtml = ({
         );
         const data = await response.json();
         if (data.command) {
-          displayMessages = [
-            ...displayMessages.slice(0, -2),
-            { role: 'user', content: data.command.text },
-            { role: 'assistant', content: data.command.reply },
-          ];
+          if (updateChatFromCommandReply(data.command.reply)) {
+            await loadChat();
+          } else {
+            displayMessages = [
+              ...displayMessages.slice(0, -2),
+              { role: 'user', content: data.command.text },
+              { role: 'assistant', content: data.command.reply },
+            ];
+            renderMessages();
+            status.textContent = project + ' / ' + currentChatId;
+            await loadChats();
+          }
         } else {
           const nextMessages = data.chat?.messages || [];
           if (nextMessages.length < persistedMessageCount) {
@@ -752,15 +854,17 @@ export const renderPortalHtml = ({
             ];
           }
           persistedMessageCount = nextMessages.length;
+          renderMessages();
+          status.textContent = project + ' / ' + currentChatId;
+          await loadChats();
         }
-        renderMessages();
-        status.textContent = project + ' / ' + currentChatId;
-        await loadChats();
         sendButton.disabled = false;
         messageInput.focus();
       };
 
       projectSelect.addEventListener('change', () => {
+        currentChatId = readStoredChatId(currentProject());
+        showLoadingChat('Loading chat…');
         void loadChat();
       });
 
@@ -788,6 +892,7 @@ export const renderPortalHtml = ({
 
       applyTheme(window.localStorage.getItem('maclaw-theme') || 'light');
       setActiveTab('agents');
+      currentChatId = readStoredChatId(currentProject());
       void loadChat();
     </script>
   </body>

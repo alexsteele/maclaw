@@ -31,6 +31,10 @@ export type ChatReply = {
   providerResult?: ProviderResult;
 };
 
+type ChatCreateResult =
+  | { chat: ChatRecord; error?: undefined }
+  | { chat?: undefined; error: string };
+
 const formatLocalDateTime = (date: Date): string => {
   const formatter = new Intl.DateTimeFormat("en-US", {
     year: "numeric",
@@ -227,11 +231,29 @@ export class ChatRuntime {
     }
     this.activeChatId = chatId;
     this.activeChat = await this.loadChat(chatId);
+    await this.chatStore.saveChat(this.activeChat);
     return this.activeChat;
   }
 
-  async forkChat(newChatId: string): Promise<ChatRecord> {
-    const sourceChat = await this.loadActiveChat();
+  async createChat(chatId: string): Promise<ChatCreateResult> {
+    const existingChats = await this.listChats();
+    if (existingChats.some((chat) => chat.id === chatId)) {
+      return { error: `chat already exists: ${chatId}` };
+    }
+
+    const chat = await this.loadChat(chatId);
+    await this.chatStore.saveChat(chat);
+    return { chat };
+  }
+
+  async forkChatFrom(sourceChatId: string, newChatId: string): Promise<ChatCreateResult> {
+    const existingChats = await this.listChats();
+    if (existingChats.some((chat) => chat.id === newChatId)) {
+      return { error: `chat already exists: ${newChatId}` };
+    }
+
+    const sourceChat =
+      sourceChatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(sourceChatId);
     const now = new Date().toISOString();
     const forkedChat: ChatRecord = {
       ...structuredClone(sourceChat),
@@ -241,6 +263,16 @@ export class ChatRuntime {
     };
 
     await this.chatStore.saveChat(forkedChat);
+    return { chat: forkedChat };
+  }
+
+  async forkChat(newChatId: string): Promise<ChatRecord> {
+    const result = await this.forkChatFrom(this.activeChatId, newChatId);
+    if (!result.chat) {
+      throw new Error(result.error ?? `Could not fork chat: ${newChatId}`);
+    }
+
+    const forkedChat = result.chat;
     this.previousChatId = this.activeChatId;
     this.activeChatId = newChatId;
     this.activeChat = forkedChat;

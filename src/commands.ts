@@ -451,6 +451,10 @@ const renderInbox = (entries: InboxEntry[]): string => {
 const getScopedChatId = (harness: Harness, options?: DispatchOptions): string =>
   options?.chatId ?? harness.getCurrentChatId();
 
+const isPinnedChannelContext = (options?: DispatchOptions): boolean => {
+  return Boolean(options?.chatId) && options?.origin?.channel !== "web";
+};
+
 const readCurrentProjectConfig = (harness: Harness) =>
   loadConfig(harness.config.projectFolder);
 
@@ -843,7 +847,7 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/chat switch ")) {
-    if (options.chatId) {
+    if (isPinnedChannelContext(options)) {
       return "/chat switch is not supported in this channel yet.";
     }
 
@@ -857,7 +861,7 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input === "/chat fork" || input.startsWith("/chat fork ")) {
-    if (options.chatId) {
+    if (isPinnedChannelContext(options)) {
       return "/chat fork is not supported in this channel yet.";
     }
 

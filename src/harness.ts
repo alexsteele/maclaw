@@ -404,6 +404,36 @@ export class Harness {
     return null;
   }
 
+  private async buildNewChatId(requestedId?: string): Promise<string | null> {
+    if (requestedId && requestedId.trim().length > 0) {
+      return this.parseRequestedChatId(requestedId);
+    }
+
+    const baseId = "chat";
+    const existingIds = new Set((await this.listChats()).map((chat) => chat.id));
+    if (!existingIds.has(baseId)) {
+      return baseId;
+    }
+
+    for (let index = 2; index < 10_000; index += 1) {
+      const candidate = `${baseId}-${index}`;
+      if (!existingIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  async createChat(requestedId?: string): Promise<ForkChatResult> {
+    const chatId = await this.buildNewChatId(requestedId);
+    if (!chatId) {
+      return { error: "Could not create a valid chat id." };
+    }
+
+    return this._chatRuntime.createChat(chatId);
+  }
+
   async forkChat(requestedId?: string): Promise<ForkChatResult> {
     const newChatId = await this.buildForkChatId(requestedId);
     if (!newChatId) {
@@ -416,6 +446,15 @@ export class Harness {
     }
 
     return { chat: await this._chatRuntime.forkChat(newChatId) };
+  }
+
+  async forkChatFrom(sourceChatId: string, requestedId?: string): Promise<ForkChatResult> {
+    const newChatId = await this.buildForkChatId(requestedId);
+    if (!newChatId) {
+      return { error: "Could not create a valid chat id for the fork." };
+    }
+
+    return this._chatRuntime.forkChatFrom(sourceChatId, newChatId);
   }
 
   async loadCurrentChat(): Promise<ChatRecord> {
