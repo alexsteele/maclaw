@@ -66,6 +66,55 @@ test("dispatchCommand forks the current chat with an explicit name", async () =>
   }
 });
 
+test("dispatchCommand creates and switches to a new chat with /new", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-new-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/new jazz");
+
+    assert.equal(reply, "switched to chat: jazz");
+    assert.equal(harness.getCurrentChatId(), "jazz");
+    assert.equal((await harness.listChats()).some((chat) => chat.id === "jazz"), true);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand forks the current chat with /fork", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-fork-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/fork jazz");
+
+    assert.equal(reply, "forked current chat to: jazz");
+    assert.equal(harness.getCurrentChatId(), "jazz");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand clears the current chat with /reset", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-reset-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello before reset");
+
+    const reply = await dispatchCommand(harness, "/reset");
+    const chat = await harness.loadCurrentChat();
+
+    assert.equal(reply, "reset chat: default");
+    assert.equal(chat.id, "default");
+    assert.equal(chat.messages.length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand renders chat list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-list-"));
 

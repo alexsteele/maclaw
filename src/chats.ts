@@ -266,6 +266,17 @@ export class ChatRuntime {
     return { chat: forkedChat };
   }
 
+  async resetChat(chatId: string): Promise<ChatRecord> {
+    const chat = createEmptyChat(chatId, this.getChatLoadOptions());
+    await this.chatStore.saveChat(chat);
+
+    if (chatId === this.activeChatId) {
+      this.activeChat = chat;
+    }
+
+    return chat;
+  }
+
   async forkChat(newChatId: string): Promise<ChatRecord> {
     const result = await this.forkChatFrom(this.activeChatId, newChatId);
     if (!result.chat) {

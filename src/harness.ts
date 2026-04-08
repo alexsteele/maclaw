@@ -665,6 +665,10 @@ export class Harness {
     return this._chatStore.deleteChat(chatId);
   }
 
+  async resetChat(chatId?: string): Promise<ChatRecord> {
+    return this._chatRuntime.resetChat(chatId ?? this.getCurrentChatId());
+  }
+
   async prompt(userInput: string, context?: MessageContext): Promise<Message> {
     const prompt = await resolvePromptText(this.config.projectFolder, userInput);
     return this._chatRuntime.prompt(prompt, context);

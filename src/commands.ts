@@ -25,6 +25,9 @@ type DispatchOptions = {
 export const helpText = [
   "Commands:",
   "  /help              Show this help",
+  "  /new               Create and switch to a new chat",
+  "  /fork              Fork the current chat",
+  "  /reset             Clear the current chat",
   "  /save              Save the current chat transcript to a file",
   "  /usage             Show token usage for the current chat",
   "  /config            Project config commands",
@@ -63,8 +66,10 @@ export const chatHelpText = [
   "  /chat show [X]     Show the current or named chat",
   "  /chat usage [X]    Show token usage for the current or named chat",
   "  /chat list         List saved chats",
+  "  /chat new [X]      Create and switch to a new chat",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
+  "  /chat reset        Clear the current chat",
   "  /chat rm X         Delete chat X",
 ].join("\n");
 
@@ -846,6 +851,24 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     return renderChatList(await harness.listChats(), getScopedChatId(harness, options));
   }
 
+  if (input === "/chat new" || input.startsWith("/chat new ")) {
+    if (isPinnedChannelContext(options)) {
+      return "/chat new is not supported in this channel yet.";
+    }
+
+    const requestedId = input.slice("/chat new".length).trim();
+    const result = await harness.createChat(requestedId.length > 0 ? requestedId : undefined);
+    if (result.error) {
+      return result.error;
+    }
+    if (!result.chat) {
+      return "Could not create chat.";
+    }
+
+    const chat = await harness.switchChat(result.chat.id);
+    return `switched to chat: ${chat.id}`;
+  }
+
   if (input.startsWith("/chat switch ")) {
     if (isPinnedChannelContext(options)) {
       return "/chat switch is not supported in this channel yet.";
@@ -874,6 +897,11 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     }
 
     return `forked current chat to: ${result.chat.id}`;
+  }
+
+  if (input === "/chat reset") {
+    const chat = await harness.resetChat(getScopedChatId(harness, options));
+    return `reset chat: ${chat.id}`;
   }
 
   if (input.startsWith("/chat rm ")) {
@@ -1155,8 +1183,47 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
   return "Usage: /history";
 };
 
+const handleNewCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/new") {
+    return handleChatCommand(harness, "/chat new", options);
+  }
+
+  if (input.startsWith("/new ")) {
+    return handleChatCommand(harness, `/chat new ${input.slice("/new ".length).trim()}`, options);
+  }
+
+  return handleChatCommand(harness, "/chat new", options);
+};
+
+const handleResetCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/reset") {
+    return handleChatCommand(harness, "/chat reset", options);
+  }
+
+  if (input.startsWith("/reset")) {
+    return "Usage: /reset";
+  }
+
+  return handleChatCommand(harness, "/chat reset", options);
+};
+
+const handleForkCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/fork") {
+    return handleChatCommand(harness, "/chat fork", options);
+  }
+
+  if (input.startsWith("/fork ")) {
+    return handleChatCommand(harness, `/chat fork ${input.slice("/fork ".length).trim()}`, options);
+  }
+
+  return handleChatCommand(harness, "/chat fork", options);
+};
+
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
+  new: handleNewCommand,
+  fork: handleForkCommand,
+  reset: handleResetCommand,
   inbox: handleInboxCommand,
   save: handleSaveCommand,
   usage: handleUsageCommand,
