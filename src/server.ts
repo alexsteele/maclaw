@@ -250,6 +250,22 @@ export class MaclawServer {
     });
   }
 
+  private async sendPortalChats(
+    response: ServerResponse,
+    projectName: string,
+  ): Promise<void> {
+    const harness = this.getPortalHarness(response, projectName);
+    if (!harness) {
+      return;
+    }
+
+    const chats = await harness.listChats();
+    json(response, 200, {
+      chats,
+      project: projectName,
+    });
+  }
+
   private subscribePortalEvents(
     response: ServerResponse,
     projectName: string,
@@ -341,6 +357,20 @@ export class MaclawServer {
         response,
         decodeURIComponent(chatMatch[1] ?? ""),
         decodeURIComponent(chatMatch[2] ?? ""),
+      );
+      return;
+    }
+
+    const chatsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/chats$/u);
+    if (chatsMatch) {
+      if (request.method !== "GET") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      await this.sendPortalChats(
+        response,
+        decodeURIComponent(chatsMatch[1] ?? ""),
       );
       return;
     }

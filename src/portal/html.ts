@@ -40,7 +40,6 @@ export const renderPortalHtml = ({
     <title>maclaw portal</title>
     <style>
       :root {
-        color-scheme: light dark;
         --bg: #f5f7fb;
         --bg-soft: #eef2f8;
         --panel: #ffffff;
@@ -57,18 +56,32 @@ export const renderPortalHtml = ({
         --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
       }
 
+      body[data-theme="dark"] {
+        --bg: #16181d;
+        --bg-soft: #1b1e24;
+        --panel: #20242b;
+        --panel-2: #262b33;
+        --border: #353c47;
+        --border-strong: #454e5c;
+        --text: #e7ebf2;
+        --muted: #a1a9b7;
+        --accent: #7aa2f7;
+        --accent-soft: rgba(122, 162, 247, 0.14);
+        --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+      }
+
       @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0b1220;
-          --bg-soft: #111a2b;
-          --panel: #0f172a;
-          --panel-2: #131d33;
-          --border: #243046;
-          --border-strong: #33425d;
-          --text: #e5edf8;
-          --muted: #9ba9be;
-          --accent: #60a5fa;
-          --accent-soft: rgba(96, 165, 250, 0.14);
+        body:not([data-theme="light"]) {
+          --bg: #16181d;
+          --bg-soft: #1b1e24;
+          --panel: #20242b;
+          --panel-2: #262b33;
+          --border: #353c47;
+          --border-strong: #454e5c;
+          --text: #e7ebf2;
+          --muted: #a1a9b7;
+          --accent: #7aa2f7;
+          --accent-soft: rgba(122, 162, 247, 0.14);
           --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
         }
       }
@@ -156,11 +169,30 @@ export const renderPortalHtml = ({
         gap: 8px;
       }
 
-      .nav-item {
+      .nav-item,
+      .chat-link,
+      .tab-button,
+      .theme-button {
         padding: 10px 12px;
         border: 1px solid var(--border);
         border-radius: 12px;
         background: var(--panel-2);
+      }
+
+      .chat-link,
+      .tab-button,
+      .theme-button {
+        width: 100%;
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .chat-link.is-active,
+      .tab-button.is-active,
+      .theme-button.is-active {
+        border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+        background: var(--accent-soft);
       }
 
       .nav-item strong {
@@ -172,6 +204,42 @@ export const renderPortalHtml = ({
       .nav-item span {
         color: var(--muted);
         font-size: 12px;
+      }
+
+      .chat-list,
+      .tab-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .chat-link strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 13px;
+      }
+
+      .chat-link span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .sidebar-panel {
+        display: none;
+      }
+
+      .sidebar-panel.is-active {
+        display: grid;
+        gap: 10px;
+      }
+
+      .empty-mini {
+        color: var(--muted);
+        font-size: 12px;
+        border: 1px dashed var(--border-strong);
+        border-radius: 12px;
+        padding: 12px;
+        background: var(--panel-2);
       }
 
       .chat-app {
@@ -318,6 +386,8 @@ export const renderPortalHtml = ({
         padding: 18px 16px;
         background: color-mix(in srgb, var(--panel) 92%, transparent);
         overflow: auto;
+        display: flex;
+        flex-direction: column;
       }
 
       .inspector h2 {
@@ -342,23 +412,28 @@ export const renderPortalHtml = ({
         font-size: 12px;
       }
 
-      .event-log {
-        display: grid;
-        gap: 8px;
-      }
-
-      .event-item {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--panel-2);
-        padding: 10px 12px;
-        font-size: 13px;
-        white-space: pre-wrap;
-      }
-
       .code {
         font-family: var(--font-mono);
         font-size: 12px;
+      }
+
+      .theme-spacer {
+        flex: 1 1 auto;
+      }
+
+      .theme-toggle {
+        width: auto;
+        min-width: 0;
+        margin-top: 0;
+        background: var(--panel-2);
+        color: var(--text);
+        border-color: var(--border);
+      }
+
+      .theme-footer {
+        margin-top: auto;
+        display: flex;
+        justify-content: flex-end;
       }
 
       @media (max-width: 900px) {
@@ -396,19 +471,45 @@ export const renderPortalHtml = ({
             </select>
           </section>
           <section class="card">
-            <p class="sidebar-section-title">Chat-first layout</p>
-            <div class="nav-list">
-              <div class="nav-item">
-                <strong>Main chat</strong>
-                <span>The primary interaction surface.</span>
+            <p class="sidebar-section-title">Sidebar tabs</p>
+            <div class="tab-list">
+              <button type="button" class="tab-button is-active" data-tab="agents">Agents</button>
+              <button type="button" class="tab-button" data-tab="tasks">Tasks</button>
+              <button type="button" class="tab-button" data-tab="inbox">Inbox</button>
+            </div>
+          </section>
+          <section class="card">
+            <p class="sidebar-section-title">Recent chats</p>
+            <div class="chat-list" id="chat-list">
+              <div class="empty-mini">Loading chats…</div>
+            </div>
+          </section>
+          <section class="card">
+            <div class="sidebar-panel is-active" id="panel-agents">
+              <p class="sidebar-section-title">Agents</p>
+              <div class="nav-list">
+                <div class="nav-item">
+                  <strong>Pause, resume, steer</strong>
+                  <span>Keep active agents close to the chat.</span>
+                </div>
               </div>
-              <div class="nav-item">
-                <strong>Agents</strong>
-                <span>Visible, but secondary.</span>
+            </div>
+            <div class="sidebar-panel" id="panel-tasks">
+              <p class="sidebar-section-title">Tasks</p>
+              <div class="nav-list">
+                <div class="nav-item">
+                  <strong>Scheduled work</strong>
+                  <span>Quick access to one-off and recurring tasks.</span>
+                </div>
               </div>
-              <div class="nav-item">
-                <strong>Tasks</strong>
-                <span>Kept close without crowding the chat.</span>
+            </div>
+            <div class="sidebar-panel" id="panel-inbox">
+              <p class="sidebar-section-title">Inbox</p>
+              <div class="nav-list">
+                <div class="nav-item">
+                  <strong>Notifications</strong>
+                  <span>Recent agent and task events land here.</span>
+                </div>
               </div>
             </div>
           </section>
@@ -419,7 +520,7 @@ export const renderPortalHtml = ({
           <header class="chat-header">
             <div>
               <h2>Chat</h2>
-              <div class="chat-subtitle">Front and center, with agent and task context nearby.</div>
+              <div class="chat-subtitle">Front and center, with lightweight project navigation on the left.</div>
               <div class="chat-status" id="chat-status">Loading chat…</div>
             </div>
             <span class="pill">web channel</span>
@@ -433,35 +534,19 @@ export const renderPortalHtml = ({
         </section>
       </main>
       <aside class="inspector">
-        <h2>Context</h2>
+        <h2>Appearance</h2>
         <div class="stack">
           <section class="card">
-            <h3>Agents</h3>
+            <h3>Portal</h3>
             <div class="stat">
-              <strong>Monitor and steer</strong>
-              <span>List, create, pause, resume, stop, and steer agents from this side panel.</span>
+              <strong>Minimal and focused</strong>
+              <span>The browser UI keeps chat central and tucks navigation into the side rails.</span>
             </div>
           </section>
-          <section class="card">
-            <h3>Tasks</h3>
-            <div class="stat">
-              <strong>Scheduled work</strong>
-              <span>Create and manage recurring or one-off tasks without leaving the chat.</span>
-            </div>
-          </section>
-          <section class="card">
-            <h3>Notifications</h3>
-            <div class="stat">
-              <strong>Live events</strong>
-              <span>Agent and task lifecycle events will stream here in real time.</span>
-            </div>
-            <div class="event-log" id="notification-log"></div>
-          </section>
-          <section class="card">
-            <h3>Theme</h3>
-            <p class="meta">Default to a clean white IDE-style look. Dark mode follows system preference.</p>
-            <p class="code">prefers-color-scheme</p>
-          </section>
+        </div>
+        <div class="theme-spacer"></div>
+        <div class="theme-footer">
+          <button type="button" class="theme-toggle" id="theme-toggle">Dark mode</button>
         </div>
       </aside>
     </div>
@@ -477,10 +562,18 @@ export const renderPortalHtml = ({
       const status = document.getElementById("chat-status");
       const messageInput = document.getElementById("message");
       const sendButton = document.getElementById("send-button");
-      const notificationLog = document.getElementById("notification-log");
+      const chatList = document.getElementById("chat-list");
+      const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+      const sidebarPanels = {
+        agents: document.getElementById('panel-agents'),
+        tasks: document.getElementById('panel-tasks'),
+        inbox: document.getElementById('panel-inbox'),
+      };
+      const themeToggle = document.getElementById("theme-toggle");
       let displayMessages = [];
       let persistedMessageCount = 0;
       let eventSource;
+      let currentChatId = portalState.chatId;
 
       const escapeHtml = (value) =>
         value
@@ -507,11 +600,35 @@ export const renderPortalHtml = ({
         transcript.scrollTop = transcript.scrollHeight;
       };
 
+      const renderChatList = (chats) => {
+        if (!chatList) {
+          return;
+        }
+
+        if (!chats.length) {
+          chatList.innerHTML = '<div class="empty-mini">No chats yet.</div>';
+          return;
+        }
+
+        chatList.innerHTML = chats.map((chat) => {
+          const activeClass = chat.id === currentChatId ? ' is-active' : '';
+          return [
+            '<button type="button" class="chat-link' + activeClass + '" data-chat-id="' + escapeHtml(chat.id) + '">',
+            '<strong>' + escapeHtml(chat.id) + '</strong>',
+            '<span>' + String(chat.messageCount) + ' messages</span>',
+            '</button>',
+          ].join('');
+        }).join('');
+
+        for (const element of chatList.querySelectorAll('.chat-link')) {
+          element.addEventListener('click', () => {
+            currentChatId = element.getAttribute('data-chat-id') || portalState.chatId;
+            void loadChat();
+          });
+        }
+      };
+
       const appendNotification = (text) => {
-        const item = document.createElement('div');
-        item.className = 'event-item';
-        item.textContent = text;
-        notificationLog.prepend(item);
         displayMessages = [
           ...displayMessages,
           { role: 'assistant', content: text },
@@ -520,6 +637,36 @@ export const renderPortalHtml = ({
       };
 
       const currentProject = () => projectSelect.value || portalState.currentProject || "";
+
+      const applyTheme = (theme) => {
+        document.body.setAttribute('data-theme', theme);
+        if (themeToggle) {
+          themeToggle.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+        }
+        window.localStorage.setItem('maclaw-theme', theme);
+      };
+
+      const setActiveTab = (tabName) => {
+        for (const button of tabButtons) {
+          button.classList.toggle('is-active', button.getAttribute('data-tab') === tabName);
+        }
+
+        for (const [name, panel] of Object.entries(sidebarPanels)) {
+          panel?.classList.toggle('is-active', name === tabName);
+        }
+      };
+
+      const loadChats = async () => {
+        const project = currentProject();
+        if (!project) {
+          renderChatList([]);
+          return;
+        }
+
+        const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats');
+        const data = await response.json();
+        renderChatList(data.chats || []);
+      };
 
       const connectEvents = () => {
         if (eventSource) {
@@ -532,7 +679,7 @@ export const renderPortalHtml = ({
         }
 
         eventSource = new EventSource(
-          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId) + '/events',
+          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(currentChatId) + '/events',
         );
         eventSource.addEventListener('notification', (event) => {
           const data = JSON.parse(event.data || '{}');
@@ -546,18 +693,19 @@ export const renderPortalHtml = ({
         const project = currentProject();
         if (!project) {
           status.textContent = "No project selected.";
-          renderMessages([]);
+          displayMessages = [];
+          renderMessages();
           return;
         }
 
         status.textContent = "Loading chat…";
-        notificationLog.innerHTML = "";
-        const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId));
+        const response = await fetch('/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(currentChatId));
         const data = await response.json();
         displayMessages = data.chat?.messages || [];
         persistedMessageCount = displayMessages.length;
         renderMessages();
-        status.textContent = project + ' / ' + portalState.chatId;
+        status.textContent = project + ' / ' + currentChatId;
+        await loadChats();
         connectEvents();
       };
 
@@ -579,7 +727,7 @@ export const renderPortalHtml = ({
         messageInput.value = "";
 
         const response = await fetch(
-          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(portalState.chatId) + '/messages',
+          '/api/projects/' + encodeURIComponent(project) + '/chats/' + encodeURIComponent(currentChatId) + '/messages',
           {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -606,7 +754,8 @@ export const renderPortalHtml = ({
           persistedMessageCount = nextMessages.length;
         }
         renderMessages();
-        status.textContent = project + ' / ' + portalState.chatId;
+        status.textContent = project + ' / ' + currentChatId;
+        await loadChats();
         sendButton.disabled = false;
         messageInput.focus();
       };
@@ -626,6 +775,19 @@ export const renderPortalHtml = ({
         }
       });
 
+      for (const button of tabButtons) {
+        button.addEventListener('click', () => {
+          setActiveTab(button.getAttribute('data-tab') || 'agents');
+        });
+      }
+
+      themeToggle?.addEventListener('click', () => {
+        const currentTheme = document.body.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+      });
+
+      applyTheme(window.localStorage.getItem('maclaw-theme') || 'light');
+      setActiveTab('agents');
       void loadChat();
     </script>
   </body>
