@@ -15,6 +15,7 @@ import {
 import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
+  maclawHomeDir,
   type ServerConfig,
   type ServerSecrets,
 } from "../server-config.js";
@@ -249,7 +250,7 @@ const runProjectSetup = async (
   projectConfig: Partial<ProjectConfig>,
   serverConfig: ServerConfigData,
 ): Promise<ProjectConfig | undefined> => {
-  const defaultProjectLocation = "~/.maclaw/projects/default";
+  const defaultProjectLocation = path.join(maclawHomeDir(homeDir), "projects", "default");
   const projectChoice = await prompt.askChoice(
     `Create a default project in ${defaultProjectLocation}?`,
     ["yes", "no", "other location"],
@@ -397,12 +398,13 @@ const runSetupFlow = async (
   prompt.print("`maclaw server`.");
   prompt.print();
 
+  const globalHome = maclawHomeDir(homeDir);
   const saveGlobalConfig = await prompt.askYesNo(
-    "maclaw can save server config and API secrets in ~/.maclaw. Is that OK?",
+    `maclaw can save server config and API secrets in ${globalHome}. Is that OK?`,
     true,
   );
   if (!saveGlobalConfig) {
-    prompt.print("Global config will not be written. You can configure ~/.maclaw manually later.");
+    prompt.print(`Global config will not be written. You can configure ${globalHome} manually later.`);
     prompt.print();
   }
 

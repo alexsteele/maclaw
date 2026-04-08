@@ -53,11 +53,16 @@ export type ServerSecrets = {
   };
 };
 
+export const maclawHomeDir = (homeDir: string = os.homedir()): string =>
+  process.env.MACLAW_HOME
+    ? path.resolve(process.env.MACLAW_HOME)
+    : path.join(homeDir, ".maclaw");
+
 export const defaultServerConfigFile = (homeDir: string = os.homedir()): string =>
-  process.env.MACLAW_SERVER_CONFIG ?? path.join(homeDir, ".maclaw", "server.json");
+  process.env.MACLAW_SERVER_CONFIG ?? path.join(maclawHomeDir(homeDir), "server.json");
 
 export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string =>
-  process.env.MACLAW_SERVER_SECRETS ?? path.join(homeDir, ".maclaw", "secrets.json");
+  process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
 export const defaultWhatsAppConfig = (): WhatsAppConfig => ({
   enabled: false,
@@ -88,7 +93,7 @@ export const loadServerConfig = (
   const resolvedConfigFile = path.resolve(configFile);
   if (!existsSync(resolvedConfigFile)) {
     throw new Error(
-      `Server config not found: ${resolvedConfigFile}. Create ~/.maclaw/server.json to use 'maclaw server'.`,
+      `Server config not found: ${resolvedConfigFile}. Create ${defaultServerConfigFile()} to use 'maclaw server'.`,
     );
   }
 

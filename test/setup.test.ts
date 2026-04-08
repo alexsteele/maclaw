@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { runSetup } from "../src/cli/setup.js";
+import { maclawHomeDir } from "../src/server-config.js";
 
 class CaptureStream extends Writable {
   private readonly chunks: string[] = [];
@@ -47,9 +48,10 @@ test("runSetup writes project, server config, and secrets from a simple guided f
 
     await runSetup({ cwd, homeDir, input, output, answers });
 
-    const projectConfigPath = path.join(homeDir, ".maclaw", "projects", "default", ".maclaw", "maclaw.json");
-    const serverConfigPath = path.join(homeDir, ".maclaw", "server.json");
-    const secretsPath = path.join(homeDir, ".maclaw", "secrets.json");
+    const globalHome = maclawHomeDir(homeDir);
+    const projectConfigPath = path.join(globalHome, "projects", "default", ".maclaw", "maclaw.json");
+    const serverConfigPath = path.join(globalHome, "server.json");
+    const secretsPath = path.join(globalHome, "secrets.json");
 
     const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
       model: string;
@@ -102,10 +104,11 @@ test("runSetup merges existing server config and secrets instead of overwriting 
     const homeDir = path.join(rootDir, "home");
     const input = Readable.from([]);
     const output = new CaptureStream();
-    const serverConfigPath = path.join(homeDir, ".maclaw", "server.json");
-    const secretsPath = path.join(homeDir, ".maclaw", "secrets.json");
+    const globalHome = maclawHomeDir(homeDir);
+    const serverConfigPath = path.join(globalHome, "server.json");
+    const secretsPath = path.join(globalHome, "secrets.json");
 
-    await fs.mkdir(path.join(homeDir, ".maclaw"), { recursive: true });
+    await fs.mkdir(globalHome, { recursive: true });
     await fs.writeFile(
       serverConfigPath,
       `${JSON.stringify(

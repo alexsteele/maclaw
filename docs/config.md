@@ -98,6 +98,7 @@ Example `secrets.json`:
 
 ### Project
 
+- `MACLAW_HOME`: home dir for config and managed projects
 - `MACLAW_MODEL`: overrides the configured model
 - `OPENAI_API_KEY`: enables OpenAI models
 - `MACLAW_STORAGE`: overrides the configured storage backend
