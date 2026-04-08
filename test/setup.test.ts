@@ -212,3 +212,39 @@ test("runSetup merges existing server config and secrets instead of overwriting 
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("runSetup writes no channel config when server setup is skipped", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-sparse-channels-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+    const globalHome = maclawHomeDir(homeDir);
+    const serverConfigPath = path.join(globalHome, "server.json");
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      answers: [
+        "yes",
+        "3",
+        "2",
+        "2",
+      ],
+    });
+
+    const serverConfig = JSON.parse(await readFile(serverConfigPath, "utf8")) as {
+      channels?: unknown;
+      projects?: unknown[];
+    };
+
+    assert.equal(serverConfig.channels, undefined);
+    assert.equal(serverConfig.projects, undefined);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

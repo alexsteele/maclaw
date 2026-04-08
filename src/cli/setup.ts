@@ -36,9 +36,9 @@ type ServerConfigData = {
   defaultProject?: string;
   projects?: ServerConfig["projects"];
   channels?: {
-    discord?: Partial<ServerConfig["channels"]["discord"]>;
-    slack?: Partial<ServerConfig["channels"]["slack"]>;
-    whatsapp?: Partial<ServerConfig["channels"]["whatsapp"]>;
+    discord?: Partial<NonNullable<ServerConfig["channels"]>["discord"]>;
+    slack?: Partial<NonNullable<ServerConfig["channels"]>["slack"]>;
+    whatsapp?: Partial<NonNullable<ServerConfig["channels"]>["whatsapp"]>;
   };
 };
 type ServerSecretsData = Partial<Omit<ServerSecrets, "configFile">>;

@@ -504,21 +504,21 @@ export class MaclawServer {
 
     this.channels.set("web", this.webChannel);
 
-    if (this.config.channels.slack.enabled) {
+    if (this.config.channels?.slack?.enabled) {
       this.channels.set(
         "slack",
         new SlackChannel(this.config.channels.slack, this.secrets.slack),
       );
     }
 
-    if (this.config.channels.discord.enabled) {
+    if (this.config.channels?.discord?.enabled) {
       this.channels.set(
         "discord",
         new DiscordChannel(this.config.channels.discord, this.secrets.discord),
       );
     }
 
-    if (this.config.channels.whatsapp.enabled) {
+    if (this.config.channels?.whatsapp?.enabled) {
       this.channels.set(
         "whatsapp",
         new WhatsAppChannel(this.config.channels.whatsapp, this.secrets.whatsapp),

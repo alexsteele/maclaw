@@ -28,10 +28,10 @@ export type ServerConfig = {
   configFile: string;
   defaultProject?: string;
   projects: ServerProjectConfig[];
-  channels: {
-    discord: DiscordConfig;
-    slack: SlackConfig;
-    whatsapp: WhatsAppConfig;
+  channels?: {
+    discord?: DiscordConfig;
+    slack?: SlackConfig;
+    whatsapp?: WhatsAppConfig;
   };
 };
 
@@ -64,20 +64,15 @@ export const defaultServerConfigFile = (homeDir: string = os.homedir()): string 
 export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string =>
   process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
-export const defaultWhatsAppConfig = (): WhatsAppConfig => ({
-  enabled: false,
+export const defaultWhatsAppConfig = (): Omit<WhatsAppConfig, "enabled"> => ({
   graphApiVersion: "v23.0",
   port: 3000,
   webhookPath: "/whatsapp/webhook",
 });
 
-export const defaultSlackConfig = (): SlackConfig => ({
-  enabled: false,
-});
+export const defaultSlackConfig = (): Omit<SlackConfig, "enabled"> => ({});
 
-export const defaultDiscordConfig = (): DiscordConfig => ({
-  enabled: false,
-});
+export const defaultDiscordConfig = (): Omit<DiscordConfig, "enabled"> => ({});
 
 const toPositiveInt = (value: unknown, fallback: number): number => {
   if (typeof value !== "number") {
@@ -122,12 +117,46 @@ export const loadServerConfig = (
     names.add(project.name);
   }
 
-  const whatsapp = parsed.channels?.whatsapp ?? {};
-  const slack = parsed.channels?.slack ?? {};
-  const discord = parsed.channels?.discord ?? {};
+  const whatsapp = parsed.channels?.whatsapp;
+  const slack = parsed.channels?.slack;
+  const discord = parsed.channels?.discord;
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
   }
+
+  const channels = {
+    ...(discord
+      ? {
+          discord: {
+            ...defaultDiscordConfig(),
+            ...discord,
+            enabled: discord.enabled ?? false,
+          },
+        }
+      : {}),
+    ...(slack
+      ? {
+          slack: {
+            ...defaultSlackConfig(),
+            ...slack,
+            enabled: slack.enabled ?? false,
+            botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
+          },
+        }
+      : {}),
+    ...(whatsapp
+      ? {
+          whatsapp: {
+            ...defaultWhatsAppConfig(),
+            ...whatsapp,
+            enabled: whatsapp.enabled ?? false,
+            phoneNumberId:
+              process.env.MACLAW_WHATSAPP_PHONE_NUMBER_ID ?? whatsapp.phoneNumberId,
+            port: toPositiveInt(whatsapp.port, defaultWhatsAppConfig().port),
+          },
+        }
+      : {}),
+  };
 
   return {
     configFile: resolvedConfigFile,
@@ -136,25 +165,7 @@ export const loadServerConfig = (
       name: project.name,
       folder: path.resolve(project.folder),
     })),
-    channels: {
-      discord: {
-        ...defaultDiscordConfig(),
-        ...discord,
-      },
-      slack: {
-        ...defaultSlackConfig(),
-        ...slack,
-        botUserId: process.env.MACLAW_SLACK_BOT_USER_ID ?? slack.botUserId,
-      },
-      whatsapp: {
-        ...defaultWhatsAppConfig(),
-        ...whatsapp,
-        enabled: whatsapp.enabled ?? defaultWhatsAppConfig().enabled,
-        phoneNumberId:
-          process.env.MACLAW_WHATSAPP_PHONE_NUMBER_ID ?? whatsapp.phoneNumberId,
-        port: toPositiveInt(whatsapp.port, defaultWhatsAppConfig().port),
-      },
-    },
+    channels: Object.keys(channels).length > 0 ? channels : undefined,
   };
 };
 

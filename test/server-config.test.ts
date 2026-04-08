@@ -109,6 +109,33 @@ test("loadServerConfig lets env override WhatsApp phone number id", async () => 
   }
 });
 
+test("loadServerConfig keeps channels optional when none are configured", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-sparse-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadServerConfig(configPath);
+    assert.equal(config.channels, undefined);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("loadServerSecrets reads WhatsApp secrets and lets env override file values", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-secrets-"));
 
