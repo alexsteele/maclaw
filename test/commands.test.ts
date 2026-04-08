@@ -35,6 +35,20 @@ test("dispatchCommand handles history for an explicit chat id", async () => {
   }
 });
 
+test("dispatchCommand treats ? as an alias for help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-help-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "?");
+
+    assert.equal(reply, helpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand reports unsupported chat switching for scoped channels", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-switch-"));
 

@@ -1266,6 +1266,10 @@ export const dispatchCommand = async (
   input: string,
   options: DispatchOptions = {},
 ): Promise<string | null> => {
+  if (input === "?") {
+    return helpText;
+  }
+
   if (!input.startsWith("/")) {
     return null;
   }
