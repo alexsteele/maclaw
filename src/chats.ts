@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { parseConfiguredModel, type ProjectConfig } from "./config.js";
 import { makeId } from "./fs-utils.js";
 import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
@@ -63,6 +63,10 @@ const buildSystemPrompt = async (
     skills.length === 0
       ? "No local skills are available."
       : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+  const basePrompt =
+    config.basePromptFile && existsSync(config.basePromptFile)
+      ? readFileSync(config.basePromptFile, "utf8").trim()
+      : "";
 
   return [
     "You are maclaw, a small local LLM harness.",
@@ -81,6 +85,13 @@ const buildSystemPrompt = async (
     `Current time: ${now.toISOString()}`,
     `Current local time: ${formatLocalDateTime(now)}`,
     `Local timezone: ${getLocalTimeZone()}`,
+    ...(basePrompt
+      ? [
+          "",
+          "Base project prompt:",
+          basePrompt,
+        ]
+      : []),
   ].join("\n");
 };
 

@@ -219,6 +219,7 @@ test("loadConfig reads advanced project config fields", async () => {
           defaultTaskTime: "8:15 AM",
           contextMessages: 12,
           maxToolIterations: 5,
+          basePromptFile: "prompts/base.md",
           notifications: {
             allow: ["agent:*", "task:*"],
             deny: ["taskCompleted"],
@@ -235,6 +236,7 @@ test("loadConfig reads advanced project config fields", async () => {
     assert.equal(config.defaultTaskTime, "8:15 AM");
     assert.equal(config.contextMessages, 12);
     assert.equal(config.maxToolIterations, 5);
+    assert.equal(config.basePromptFile, path.join(rootDir, "prompts", "base.md"));
     assert.deepEqual(config.notifications, {
       allow: ["agent:*", "task:*"],
       deny: ["taskCompleted"],

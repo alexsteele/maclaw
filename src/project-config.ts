@@ -12,6 +12,7 @@ export const editableProjectConfigKeys = new Set([
   "maxToolIterations",
   "retentionDays",
   "skillsDir",
+  "basePromptFile",
   "compressionMode",
   "schedulerPollMs",
 ]);
@@ -30,6 +31,7 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `maxToolIterations: ${config.maxToolIterations}`,
     `retentionDays: ${config.retentionDays}`,
     `skillsDir: ${config.skillsDir}`,
+    `basePromptFile: ${config.basePromptFile ?? "(none)"}`,
     `compressionMode: ${config.compressionMode}`,
     `schedulerPollMs: ${config.schedulerPollMs}`,
     "note: env vars take precedence over file config when present",
@@ -100,6 +102,11 @@ export const parseProjectConfigValue = (
     }
 
     return key === "retentionDays" ? { retentionDays: parsed } : { schedulerPollMs: parsed };
+  }
+
+  if (key === "basePromptFile") {
+    const trimmed = value.trim();
+    return { basePromptFile: trimmed.length > 0 ? trimmed : undefined };
   }
 
   return { [key]: value } as Partial<ProjectConfig>;

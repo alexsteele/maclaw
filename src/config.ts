@@ -37,6 +37,7 @@ export type ProjectConfig = {
   maxToolIterations: number;
   retentionDays: number;
   skillsDir: string;
+  basePromptFile?: string;
   compressionMode: "none" | "planned";
   schedulerPollMs: number;
   projectFolder: string;
@@ -117,6 +118,7 @@ export const initProjectConfig = async (
     contextMessages: mergedConfig.contextMessages ?? 20,
     maxToolIterations: mergedConfig.maxToolIterations ?? 8,
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
+    basePromptFile: mergedConfig.basePromptFile,
     compressionMode: mergedConfig.compressionMode ?? "none",
     schedulerPollMs: mergedConfig.schedulerPollMs ?? 15_000,
   };
@@ -169,6 +171,10 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
       projectFileConfig.retentionDays ?? 30,
     ),
     skillsDir,
+    basePromptFile:
+      projectFileConfig.basePromptFile
+        ? path.resolve(projectFolder, projectFileConfig.basePromptFile)
+        : undefined,
     compressionMode: compressionModeValue === "planned" ? "planned" : "none",
     schedulerPollMs: toPositiveInt(
       process.env.MACLAW_SCHEDULER_POLL_MS,
