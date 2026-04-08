@@ -22,46 +22,41 @@ Alex, your dedicated human-in-the-loop
 
 ## Features
 
-- Chat with `maclaw` via a REPL or `maclaw server` connectors (slack etc)
-- Projects, chats, skills, tools, and schedulable tasks.
-- File-backed storage for chats, tasks, etc.
+- Chat with `maclaw` via a REPL, web portal, or connected apps (slack, whatsapp, discord).
+- Projects, chats, agents, skills, tools, and tasks.
 - Pluggable LLM models.
-
-## Concepts
-
-- **Project**: the folder maclaw runs in, including its local config, skills,
-  chats, tasks, and logs
-- **Chat**: a saved conversation thread with its own history and scheduled tasks
-- **Agent** autonomously completes tasks by running prompts/tools in a loop
-- **Channel**: communication channel for talking to maclaw (whatsapp, sms, etc)
-- **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
-- **Tool**: a callable capability the harness can use, such as editing files,
-  calling APIs, etc.
-- **Model**: the configured LLM target, such as `openai/gpt-5.4-mini` or `dummy/default`
-- **Task**: a scheduled job that re-enters the harness later, either once or on
-  a recurring schedule
-- **Notification**: Sent to the user over a channel by an agent, task, or other event.
+- Local storage for chats, tasks, etc. sqlite and `jsonl` files.
 
 ## Setup
 
 1. Install Node.js 20+.
-2. Install dependencies with `npm install`.
-3. Run `npm link` to install the local `maclaw` command.
-4. Run `maclaw setup` for a guided first-run setup.
-5. Or set `OPENAI_API_KEY` manually if you want live model responses.
-6. Start the REPL with `maclaw`.
+2. `npm install`.
+3. `npm link` to install the `maclaw` command.
+4. `maclaw setup` for a guided setup.
+5. `maclaw` starts the repl.
+6. `maclaw server` starts the server and web portal
 
-## Message Flow
+## Example
 
-- Install and run `maclaw setup` to configure a model, project, and channels
-- Run `maclaw server` or `maclaw repl`
-- You message maclaw via a channel.
-- Maclaw's `Channel` code receives, normalizes, and forwards the message to `MaclawServer`
-- `MaclawServer` checks for `/commands` and forwards messages to the
-  `Harness` for the right project and chat
-- The harness constructs and sends the prompt to the AI model.
-- The harness logs the messages and the channel sends the response back to you
-- Agents you start run in a loop in their project `Harness` until completion or cancellation.
+```shell
+$ maclaw repl
+maclaw REPL
+project: default
+folder: /Users/alex/.maclaw/projects/default
+chat: default
+type /help for commands
+
+> 5 popular jazz songs
+Here are 5 popular and classic jazz songs:
+
+1. "Take Five" – Dave Brubeck Quartet
+2. "So What" – Miles Davis
+3. "Summertime" – Ella Fitzgerald & Louis Armstrong
+4. "My Favorite Things" – John Coltrane
+5. "All of Me" – Billie Holiday
+
+> /new trip-planning
+```
 
 ## REPL
 
@@ -69,65 +64,111 @@ Alex, your dedicated human-in-the-loop
 
 ```text
 Commands:
+  ?                  Alias for /help
   /help              Show this help
+  /new [id]          Create and switch to a new chat
+  /fork [id]         Fork the current chat
+  /reset             Clear the current chat
   /project           Project information commands
   /chat              Chat management commands
   /history           Show the current chat transcript
+  /save              Save the current chat transcript to a file
+  /usage             Show token usage for the current chat
+  /tools             Show the current tools
   /skills            List local skills
   /agent             Agent management commands
   /task              Task scheduling commands
+  /switch X          Switch the REPL to project folder X
+  /verbose <on|off>  Toggle verbose reply metadata
   /quit              Exit the REPL
 ```
 
-## Server
+These are also available via the portal and connectors.
 
-maclaw can also run as a long-lived server. The server provides a portal webapp to control maclaw. It also sends notifications.
+## Server+Portal
 
-- `maclaw server`
+maclaw can also run as a server. The server provides a portal webapp to control
+maclaw. It supports WhatsApp, Slack, and Discord channels and notifications.
 
-Server mode currently supports WhatsApp, Slack, and Discord channels, and loads global server settings from:
-
-- `~/.maclaw/server.json`
-- `~/.maclaw/secrets.json`
+```shell
+$ maclaw server
+Web portal listening on http://localhost:4000/
+```
 
 See [docs/config.md](docs/config.md) for the full server config and secrets shape.
 
 ## Projects
 
-maclaw organizes work into projects. Projects encompass settings, chats, and tasks.
+Projects are the main unit of organization in maclaw. A project owns its model
+config, chats, agents, tasks, skills, and local state.
 
-When you start the repl, maclaw runs in "headless" mode without a project by default.
+Run `/project init` to initialize the current folder, or use `maclaw setup` to
+create a managed default project.
 
-Run `/project init` to set up a project in the current folder.
-
-By default, project data goes in the `.maclaw/` folder.
+Project data lives in `.maclaw/`:
 
 ```text
-my-project/
+project/
   .maclaw/
-    maclaw.json
-    skills/
-      daily_summary.md
+    maclaw.db
     chats/
-      default.json
       default.jsonl
-    tasks.json
-    task-runs.jsonl
 ```
 
-`maclaw.json` contains the config.
+`maclaw.json` contains the project config. See [docs/config.md](docs/config.md)
+for the full shape.
 
-See [docs/config.md](docs/config.md) for the full project config shape, environment variables, model configuration, and notification policy.
+## Chats
 
-## Configuration
+Chats are saved conversation threads inside a project. Each chat keeps its own
+history, can be switched to directly, and can have tasks scheduled against it.
 
-See [docs/config.md](docs/config.md).
+Useful commands:
 
-## Connectors
+- `/chat list`
+- `/chat show`
+- `/chat switch <id>`
+- `/new [id]`
+- `/fork [id]`
+- `/reset`
 
-Connectors are how you talk to maclaw. maclaw server currently supports:
+## Agents
+
+Agents are long-running background workers that loop over prompts and tools
+until they finish, fail, or are stopped.
+
+Useful commands:
+
+- `/agent list`
+- `/agent create <name> | <prompt>`
+- `/agent pause <name>`
+- `/agent resume <name>`
+- `/agent steer <name> | <prompt>`
+- `/agent stop <name>`
+
+Agents run in a chat, can be paused and resumed, and can notify you when they
+finish or fail.
+
+## Tasks
+
+Tasks are scheduled jobs. They run once later or on a recurring schedule and
+re-enter the harness through a chat.
+
+Useful commands:
+
+- `/task list`
+- `/task schedule <date> | <title> | <prompt> [| <json options>]`
+- `/task cancel <task id>`
+
+Run `/help task schedule` for the supported scheduling forms such as `today`,
+`tomorrow`, `now`, daily, and weekly schedules.
+
+## Channels
+
+Channels are how you talk to maclaw. maclaw supports:
 
 - REPL (no server needed)
+- Portal webapp
 - slack via Socket Mode websocket
   - setup: create a Slack app and enable Socket Mode first.
 - discord via gateway websocket
@@ -138,13 +179,32 @@ Connectors are how you talk to maclaw. maclaw server currently supports:
 
 ## Notifications
 
-maclaw can send notifications to the user over channels.
+maclaw server can send notifications to the user over channels.
 
-Current notification triggers:
+Current notifications:
 
-- agent/task completion
+- `agentCompleted`
+- `agentFailed`
+- `taskCompleted`
+- `taskFailed`
 
 By default, notifications go back to the originating channel when available,
 such as your slack channel or REPL session.
 
-See [docs/config.md](docs/config.md) for notification policy and override examples.
+You can control notifications with a policy (ex: `notifications: "none"`).
+
+See [docs/config.md](docs/config.md) for policy and override examples.
+
+## Concepts
+
+- **Project**: the folder maclaw runs in, including its local config, skills,
+  chats, tasks, and logs
+- **Model**: the configured LLM target, such as `openai/gpt-5.4-mini` or `dummy/default`
+- **Chat**: a conversation thread
+- **Agent** autonomously completes tasks by running prompts/tools in a loop
+- **Task**: a scheduled prompt
+- **Channel**: communication channel for talking to maclaw (whatsapp, sms, etc)
+- **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
+- **Tool**: a callable capability the harness can use, such as editing files,
+  calling APIs, etc.
+- **Notification**: Sent to the user over a channel by an agent, task, or other event.
