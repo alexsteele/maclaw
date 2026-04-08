@@ -1,9 +1,15 @@
 import os from "node:os";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
 import { Harness, type HarnessNotification } from "../harness.js";
+import {
+  defaultServerConfigFile,
+  loadServerConfig,
+  maclawHomeDir,
+} from "../server-config.js";
 import type { Origin, ProviderResult } from "../types.js";
 
 const replHelpText = [
@@ -34,6 +40,34 @@ const expandHome = (value: string): string => {
 const replOrigin: Origin = {
   channel: "repl",
   userId: "local",
+};
+
+export const loadReplHarness = (cwd: string = process.cwd()): Harness => {
+  const harness = Harness.load(cwd);
+  if (harness.isProjectInitialized()) {
+    return harness;
+  }
+
+  const serverConfigFile = defaultServerConfigFile();
+  if (existsSync(serverConfigFile)) {
+    const serverConfig = loadServerConfig(serverConfigFile);
+    if (serverConfig.defaultProject) {
+      const defaultProject = serverConfig.projects.find(
+        (project) => project.name === serverConfig.defaultProject,
+      );
+      if (defaultProject) {
+        return Harness.load(defaultProject.folder);
+      }
+    }
+  }
+
+  const defaultProjectFolder = path.join(maclawHomeDir(), "projects", "default");
+  const defaultProjectConfigFile = path.join(defaultProjectFolder, ".maclaw", "maclaw.json");
+  if (!existsSync(defaultProjectConfigFile)) {
+    return harness;
+  }
+
+  return Harness.load(defaultProjectFolder);
 };
 
 class Repl {

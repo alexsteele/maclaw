@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import { runConfigCommand } from "./cli/config.js";
-import { runRepl } from "./cli/repl.js";
+import { loadReplHarness, runRepl } from "./cli/repl.js";
 import { runSetup } from "./cli/setup.js";
-import { Harness } from "./harness.js";
 import { MaclawServer } from "./server.js";
 
 const cliHelpText = [
@@ -18,7 +17,7 @@ const cliHelpText = [
 ].join("\n");
 
 const runReplCommand = async (): Promise<void> => {
-  const harness = Harness.load();
+  const harness = loadReplHarness();
   await runRepl(harness);
 };
 
