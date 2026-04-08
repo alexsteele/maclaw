@@ -174,12 +174,15 @@ test("dispatchCommand shows current and named chat info", async () => {
 
     const currentReply = await dispatchCommand(harness, "/chat show");
     const namedReply = await dispatchCommand(harness, "/chat show branch-a");
+    const modelPattern = new RegExp(`^model: ${harness.config.model.replace("/", "\\/")}$`, "mu");
 
     assert.match(currentReply ?? "", /^id: default$/mu);
+    assert.match(currentReply ?? "", modelPattern);
     assert.match(currentReply ?? "", /^messageCount: 2$/mu);
     assert.match(currentReply ?? "", /^contextMessageCount: 2$/mu);
     assert.match(currentReply ?? "", /^contextBytes: \d+$/mu);
     assert.match(namedReply ?? "", /^id: branch-a$/mu);
+    assert.match(namedReply ?? "", modelPattern);
     assert.match(namedReply ?? "", /^messageCount: 2$/mu);
     assert.match(namedReply ?? "", /^contextMessageCount: 2$/mu);
     assert.match(namedReply ?? "", /^contextBytes: \d+$/mu);

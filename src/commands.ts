@@ -426,6 +426,7 @@ const renderChatList = (
 
 const renderChatInfo = (
   chat: Awaited<ReturnType<Harness["loadChat"]>>,
+  model: string,
   contextMessages: number,
 ): string => {
   const contextSlice = chat.messages.slice(-contextMessages);
@@ -440,6 +441,7 @@ const renderChatInfo = (
   );
 
   return [
+    `model: ${model}`,
     `id: ${chat.id}`,
     `createdAt: ${chat.createdAt}`,
     `updatedAt: ${chat.updatedAt}`,
@@ -841,6 +843,7 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/chat show") {
     return renderChatInfo(
       await harness.loadChat(getScopedChatId(harness, options)),
+      harness.config.model,
       harness.config.contextMessages,
     );
   }
@@ -857,6 +860,7 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
 
     return renderChatInfo(
       await harness.loadChat(requestedId),
+      harness.config.model,
       harness.config.contextMessages,
     );
   }
