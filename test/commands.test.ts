@@ -576,8 +576,10 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
     const harness = Harness.load(projectDir);
 
     const showReply = await dispatchCommand(harness, "/config");
+    const showAliasReply = await dispatchCommand(harness, "/config show");
     assert.match(showReply ?? "", /name: config-project/u);
     assert.match(showReply ?? "", /contextMessages: 20/u);
+    assert.equal(showAliasReply, showReply);
 
     const getReply = await dispatchCommand(harness, "/config get model");
     assert.equal(getReply, "dummy/test-model");

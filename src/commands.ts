@@ -54,6 +54,7 @@ export const projectHelpText = [
 export const configHelpText = [
   "Command: /config",
   "  /config                Show the current project config",
+  "  /config show           Show the current project config",
   "  /config get <key>      Show one config value",
   "  /config set <key> <v>  Update a config value",
   "",
@@ -808,7 +809,7 @@ const handleConfigCommand: CommandHandler = async (harness, input) => {
     return configHelpText;
   }
 
-  if (input === "/config") {
+  if (input === "/config" || input === "/config show") {
     return renderProjectConfig(readCurrentProjectConfig(harness));
   }
 
