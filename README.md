@@ -6,8 +6,8 @@ maclaw is a small LLM harness built with OpenAI codex.
 
 The goal of this project is to understand and test the limits of this
 technology. I make no strong claims about the reliablity, security, or
-robustness, though I do guide, review, and curate all AI code.
-No AI slop hits `origin/main` without human eyes in the loop.
+robustness, though I do guide, review, and curate all AI code. No AI slop hits
+`origin/main` without human eyes in the loop.
 
 Happy hacking friends. May your claws forever be ma'd and your way paved with
 gold 🦞❤️
@@ -22,7 +22,8 @@ Alex, your dedicated human-in-the-loop
 
 ## Features
 
-- Chat with `maclaw` via a REPL, web portal, or connected apps (slack, whatsapp, discord).
+- Chat with `maclaw` via a REPL, web portal, or connected apps (slack, whatsapp,
+  discord).
 - Projects, chats, agents, skills, tools, and tasks.
 - Pluggable LLM models.
 - Local storage for chats, tasks, etc. sqlite and `jsonl` files.
@@ -95,7 +96,8 @@ $ maclaw server
 Web portal listening on http://localhost:4000/
 ```
 
-See [docs/config.md](docs/config.md) for the full server config and secrets shape.
+See [docs/config.md](docs/config.md) for the full server config and secrets
+shape.
 
 ## Projects
 
@@ -175,7 +177,8 @@ Current tools are mostly read-only and cover things like:
 - agents
 - tasks
 
-Tool access is controlled by the project `tools` setting. The current permission levels are:
+Tool access is controlled by the project `tools` setting. The current permission
+levels are:
 
 - `read`
 - `act`
@@ -195,7 +198,8 @@ Channels are how you talk to maclaw. maclaw supports:
   - setup: register a Discord bot in the Discord Developer Portal first.
 - whatsapp via webhooks
   - setup: configure a WhatsApp Cloud API app and webhook first.
-  - warning: this exposes a public webhook, so be careful about how and where you run it.
+  - warning: this exposes a public webhook, so be careful about how and where
+    you run it.
 
 ## Notifications
 
@@ -219,12 +223,15 @@ See [docs/config.md](docs/config.md) for policy and override examples.
 
 - **Project**: the folder maclaw runs in, including its local config, skills,
   chats, tasks, and logs
-- **Model**: the configured LLM target, such as `openai/gpt-5.4-mini` or `dummy/default`
+- **Model**: the configured LLM target, such as `openai/gpt-5.4-mini` or
+  `dummy/default`
 - **Chat**: a conversation thread
 - **Agent** autonomously completes tasks by running prompts/tools in a loop
 - **Task**: a scheduled prompt
 - **Channel**: communication channel for talking to maclaw (whatsapp, sms, etc)
-- **Skill**: a file in `skills/` that describes a reusable task, workflow, or prompt
+- **Skill**: a file in `skills/` that describes a reusable task, workflow, or
+  prompt
 - **Tool**: a callable capability the harness can use, such as editing files,
   calling APIs, etc.
-- **Notification**: Sent to the user over a channel by an agent, task, or other event.
+- **Notification**: Sent to the user over a channel by an agent, task, or other
+  event.

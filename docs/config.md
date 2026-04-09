@@ -40,7 +40,8 @@ Notes:
 - `skillsDir` is optional. If omitted, maclaw uses `.maclaw/skills`.
 - `model` uses `<provider>/<model>` form.
 - `storage` currently supports `json`, `sqlite`, and `none`.
-- `tools` controls which tool permission levels are exposed to the model. Current levels are `read`, `act`, and `dangerous`.
+- `tools` controls which tool permission levels are exposed to the model.
+  Current levels are `read`, `act`, and `dangerous`.
 
 ## Server Config
 
@@ -49,9 +50,11 @@ maclaw server loads global config from:
 - `~/.maclaw/server.json`
 - `~/.maclaw/secrets.json`
 
-`server.json` is for non-secret settings such as projects, ports, webhook paths, and channel options.
+`server.json` is for non-secret settings such as projects, ports, webhook paths,
+and channel options.
 
-`secrets.json` is for private credentials such as OpenAI keys, WhatsApp tokens, Slack app/bot tokens, and Discord bot tokens.
+`secrets.json` is for private credentials such as OpenAI keys, WhatsApp tokens,
+Slack app/bot tokens, and Discord bot tokens.
 
 Example `server.json`:
 
@@ -115,8 +118,10 @@ Example `secrets.json`:
 
 Project config stores models as `<provider>/<model>`.
 
-- `openai/gpt-5.4-mini`: uses the OpenAI Responses API and requires `OPENAI_API_KEY`
-- `dummy/default`: uses the built-in stand-in provider for local testing without live model calls
+- `openai/gpt-5.4-mini`: uses the OpenAI Responses API and requires
+  `OPENAI_API_KEY`
+- `dummy/default`: uses the built-in stand-in provider for local testing without
+  live model calls
 
 ## Notifications
 
@@ -136,7 +141,8 @@ Policies:
 - `{ "allow": ["agent:*", "task:*"], "deny": ["taskCompleted"] }`: notify for
   everything except successful tasks
 
-Agents and scheduled tasks can override project notifications with JSON options `notify` and `notifyTarget`.
+Agents and scheduled tasks can override project notifications with JSON options
+`notify` and `notifyTarget`.
 
 - `/agent create planner | Do the work | {"notify":["errors"]}`
 
@@ -144,7 +150,8 @@ Agents and scheduled tasks can override project notifications with JSON options 
 
 - Project names must be unique.
 - `defaultProject`, if set, must match a configured project name.
-- Slack, Discord, and WhatsApp channel config is deny-by-default unless explicitly enabled.
+- Slack, Discord, and WhatsApp channel config is deny-by-default unless
+  explicitly enabled.
 - WhatsApp defaults currently include:
   - `graphApiVersion: "v23.0"`
   - `port: 3000`

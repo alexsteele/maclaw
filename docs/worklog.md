@@ -24,8 +24,8 @@ Derived from local git history.
 - `/project wipeout`
 - Got ChatGPT models working.
 - Added notifications. Agents, tasks, and policy selectors.
-- alex: Frustrated with the setup code iteration. Tons of complex merge
-  code. Many rounds of feedback to improve.
+- alex: Frustrated with the setup code iteration. Tons of complex merge code.
+  Many rounds of feedback to improve.
 
 ## 2026-04-06 Notes
 
