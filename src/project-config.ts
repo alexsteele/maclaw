@@ -1,11 +1,17 @@
 // Shared project config helpers used by CLI and slash commands.
-import { normalizeConfiguredModel, parseConfiguredModel, type ProjectConfig } from "./config.js";
+import {
+  normalizeConfiguredModel,
+  normalizeToolPermissions,
+  parseConfiguredModel,
+  type ProjectConfig,
+} from "./config.js";
 import { parseTimeOfDay } from "./task.js";
 
 export const editableProjectConfigKeys = new Set([
   "name",
   "model",
   "storage",
+  "tools",
   "notifications",
   "defaultTaskTime",
   "contextMessages",
@@ -25,6 +31,7 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `model: ${config.model}`,
     `modelProvider: ${parseConfiguredModel(config.model).provider}`,
     `storage: ${config.storage}`,
+    `tools: ${JSON.stringify(config.tools)}`,
     `notifications: ${JSON.stringify(config.notifications)}`,
     `defaultTaskTime: ${config.defaultTaskTime}`,
     `contextMessages: ${config.contextMessages}`,
@@ -34,7 +41,7 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `basePromptFile: ${config.basePromptFile ?? "(none)"}`,
     `compressionMode: ${config.compressionMode}`,
     `schedulerPollMs: ${config.schedulerPollMs}`,
-    "note: env vars take precedence over file config when present",
+    "note: secrets and global paths can still come from env vars",
   ].join("\n");
 
 export const parseProjectConfigValue = (
@@ -70,6 +77,29 @@ export const parseProjectConfigValue = (
       return { notifications: JSON.parse(value) };
     } catch {
       return "notifications must be 'all', 'none', or valid JSON";
+    }
+  }
+
+  if (key === "tools") {
+    if (value === "read" || value === "act" || value === "dangerous") {
+      return { tools: normalizeToolPermissions(value) };
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length === 0 ||
+        parsed.some(
+          (entry) => entry !== "read" && entry !== "act" && entry !== "dangerous",
+        )
+      ) {
+        return "tools must be 'read', 'act', 'dangerous', or a JSON array of those values";
+      }
+
+      return { tools: normalizeToolPermissions(parsed) };
+    } catch {
+      return "tools must be 'read', 'act', 'dangerous', or a JSON array of those values";
     }
   }
 

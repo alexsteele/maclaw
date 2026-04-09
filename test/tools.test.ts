@@ -46,6 +46,9 @@ test("starter tools parse their own input", async () => {
     assert.ok(listSkills);
     assert.ok(readSkill);
     assert.ok(getTime);
+    assert.equal(listSkills.permission, "read");
+    assert.equal(readSkill.permission, "read");
+    assert.equal(getTime.permission, "read");
 
     const skills = await listSkills.execute({});
     assert.match(skills, /daily_summary/u);
@@ -123,6 +126,9 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.ok(showAgent);
     assert.ok(listTasks);
     assert.ok(showTask);
+    assert.equal(listChats.permission, "read");
+    assert.equal(showAgent.permission, "read");
+    assert.equal(showTask.permission, "read");
 
     assert.match(await listChats.execute({}), /default/u);
     assert.match(await listChats.execute({}), /branch-a/u);

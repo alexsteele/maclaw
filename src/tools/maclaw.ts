@@ -84,6 +84,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_chats",
       description: "List saved chats in the current project.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {},
@@ -102,6 +103,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_chat",
       description: "Show metadata for a saved chat. Defaults to the current chat.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -118,6 +120,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_agents",
       description: "List agents in the current project.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {},
@@ -136,6 +139,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_agent",
       description: "Show details for an agent by name or id.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -157,6 +161,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_tasks",
       description: "List scheduled tasks for the current chat or a specific chat.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -177,6 +182,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_task",
       description: "Show details for a task by id.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {

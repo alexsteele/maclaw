@@ -59,6 +59,7 @@ import type {
   Message,
   ScheduledTask,
   Skill,
+  ToolPermission,
   ToolDefinition,
   UsageSummary,
 } from "./types.js";
@@ -177,6 +178,14 @@ const createInboxStore = (config: ProjectConfig): InboxStore => {
     : new MemoryInboxStore();
 };
 
+const filterTools = (
+  tools: ToolDefinition[],
+  allowedPermissions: ToolPermission[],
+): ToolDefinition[] => {
+  const allowed = new Set(allowedPermissions);
+  return tools.filter((tool) => allowed.has(tool.permission));
+};
+
 const createToolContext = (harness: Harness): MaclawToolContext => ({
   getCurrentChatId: () => harness.getCurrentChatId(),
   listChats: () => harness.listChats(),
@@ -237,7 +246,7 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(config.notifications);
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
-    this._tools = createTools(config, createToolContext(this));
+    this._tools = filterTools(createTools(config, createToolContext(this)), config.tools);
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = createAgentStore(config);
     this._inboxStore = createInboxStore(config);
@@ -292,7 +301,7 @@ export class Harness {
     };
     const nextChatStore = createChatStore(nextConfig);
     const nextScheduler = createScheduler(nextConfig);
-    const nextTools = createTools(nextConfig, createToolContext(this));
+    const nextTools = filterTools(createTools(nextConfig, createToolContext(this)), nextConfig.tools);
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = createAgentStore(nextConfig);
 
@@ -344,7 +353,7 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._scheduler = createScheduler(nextConfig);
     this._chatStore = createChatStore(nextConfig);
-    this._tools = createTools(nextConfig, createToolContext(this));
+    this._tools = filterTools(createTools(nextConfig, createToolContext(this)), nextConfig.tools);
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = createAgentStore(nextConfig);
     this._inboxStore = createInboxStore(nextConfig);

@@ -16,6 +16,7 @@ export const createSkillTools = (config: ProjectConfig): ToolDefinition[] => {
     {
       name: "list_skills",
       description: "List available local skill files and their short descriptions.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {},
@@ -36,6 +37,7 @@ export const createSkillTools = (config: ProjectConfig): ToolDefinition[] => {
     {
       name: "read_skill",
       description: "Read the full contents of a local skill file by name.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {

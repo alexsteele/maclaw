@@ -25,6 +25,7 @@ Example `maclaw.json`:
   "name": "my-project",
   "model": "openai/gpt-4.1-mini",
   "storage": "json",
+  "tools": ["read"],
   "notifications": "all",
   "defaultTaskTime": "9:00 AM",
   "contextMessages": 20,
@@ -39,6 +40,7 @@ Notes:
 - `skillsDir` is optional. If omitted, maclaw uses `.maclaw/skills`.
 - `model` uses `<provider>/<model>` form.
 - `storage` currently supports `json`, `sqlite`, and `none`.
+- `tools` controls which tool permission levels are exposed to the model. Current levels are `read`, `act`, and `dangerous`.
 
 ## Server Config
 

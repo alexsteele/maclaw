@@ -357,6 +357,7 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `model: ${projectConfig.model}`,
     `modelProvider: ${parseConfiguredModel(projectConfig.model).provider}`,
     `storage: ${projectConfig.storage}`,
+    `tools: ${JSON.stringify(projectConfig.tools)}`,
     `notifications: ${JSON.stringify(projectConfig.notifications)}`,
     `defaultTaskTime: ${projectConfig.defaultTaskTime}`,
     `contextMessages: ${projectConfig.contextMessages}`,

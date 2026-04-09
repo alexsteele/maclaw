@@ -163,6 +163,26 @@ Useful commands:
 Run `/help task schedule` for the supported scheduling forms such as `today`,
 `tomorrow`, `now`, daily, and weekly schedules.
 
+## Tools
+
+Tools are callable capabilities the model can use.
+
+Current tools are mostly read-only and cover things like:
+
+- list/read skills
+- current time
+- chats
+- agents
+- tasks
+
+Tool access is controlled by the project `tools` setting. The current permission levels are:
+
+- `read`
+- `act`
+- `dangerous`
+
+See [docs/config.md](docs/config.md) for the full config shape.
+
 ## Channels
 
 Channels are how you talk to maclaw. maclaw supports:

@@ -7,6 +7,7 @@ export const createTimeTools = (): ToolDefinition[] => {
     {
       name: "get_time",
       description: "Return the current local time as an ISO timestamp.",
+      permission: "read",
       inputSchema: {
         type: "object",
         properties: {},

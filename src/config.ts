@@ -4,7 +4,7 @@ import { ensureDir, writeJsonFile } from "./fs-utils.js";
 import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
 import { normalizeDefaultTaskTime } from "./task.js";
-import type { NotificationPolicy } from "./types.js";
+import type { NotificationPolicy, ToolPermission } from "./types.js";
 
 export const defaultProjectDataDir = (projectFolder: string): string =>
   path.join(projectFolder, ".maclaw");
@@ -31,6 +31,7 @@ export type ProjectConfig = {
   createdAt?: string;
   model: string;
   storage: "json" | "sqlite" | "none";
+  tools: ToolPermission[];
   notifications: NotificationPolicy;
   defaultTaskTime: string;
   contextMessages: number;
@@ -48,6 +49,23 @@ export type ProjectConfig = {
 };
 
 const DEFAULT_MODEL = "openai/gpt-4.1-mini";
+const defaultTools: ToolPermission[] = ["read"];
+
+export const normalizeToolPermissions = (value: unknown): ToolPermission[] => {
+  const parsed =
+    typeof value === "string"
+      ? [value]
+      : Array.isArray(value)
+        ? value
+        : [];
+
+  const allowed = parsed.filter(
+    (entry): entry is ToolPermission =>
+      entry === "read" || entry === "act" || entry === "dangerous",
+  );
+
+  return allowed.length > 0 ? Array.from(new Set(allowed)) : [...defaultTools];
+};
 
 export const normalizeConfiguredModel = (
   value: string | undefined,
@@ -105,6 +123,7 @@ export const initProjectConfig = async (
     retentionDays: mergedConfig.retentionDays ?? 30,
     model: normalizeConfiguredModel(mergedConfig.model),
     storage: mergedConfig.storage ?? "json",
+    tools: normalizeToolPermissions(mergedConfig.tools),
     notifications: normalizeNotifications(mergedConfig.notifications),
     defaultTaskTime: normalizeDefaultTaskTime(mergedConfig.defaultTaskTime),
     contextMessages: mergedConfig.contextMessages ?? 20,
@@ -146,6 +165,7 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
         : hasProjectConfig
           ? "json"
           : "none",
+    tools: normalizeToolPermissions(projectFileConfig.tools),
     notifications: normalizeNotifications(projectFileConfig.notifications),
     defaultTaskTime: normalizeDefaultTaskTime(projectFileConfig.defaultTaskTime),
     contextMessages: projectFileConfig.contextMessages ?? 20,
