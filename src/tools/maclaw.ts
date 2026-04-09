@@ -1,14 +1,28 @@
-// Maclaw tools expose safe read-only access to chats, agents, and tasks.
+// Maclaw tools expose project-specific read and act capabilities.
 import type { AgentRecord, ChatRecord, ChatSummary, ScheduledTask, ToolDefinition } from "../types.js";
+import { parseTaskSchedule } from "../task.js";
 import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 
 export type MaclawToolContext = {
+  defaultTaskTime: string;
   getCurrentChatId(): string;
   listChats(): Promise<ChatSummary[]>;
   loadChat(chatId: string): Promise<ChatRecord>;
   listAgents(): AgentRecord[];
   findAgent(agentRef: string): AgentRecord | undefined;
   listTasks(chatId?: string): Promise<ScheduledTask[]>;
+  createAgent(input: {
+    name: string;
+    prompt: string;
+    maxSteps?: number;
+    timeoutMs?: number;
+    stepIntervalMs?: number;
+  }): Promise<{ agent?: AgentRecord; error?: string }>;
+  createTask(input: {
+    title: string;
+    prompt: string;
+    schedule: ScheduledTask["schedule"];
+  }): Promise<ScheduledTask>;
 };
 
 const parseOptionalChatInput = (input: unknown): { chatId?: string } => {
@@ -36,6 +50,44 @@ const parseShowTaskInput = (input: unknown): { taskId: string; chatId?: string }
   return {
     taskId,
     ...(chatId === undefined ? {} : { chatId: requiredString(object, "chatId") }),
+  };
+};
+
+const parseCreateAgentInput = (
+  input: unknown,
+): {
+  name: string;
+  prompt: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  stepIntervalMs?: number;
+} => {
+  const object = parseObjectInput(input);
+  const maxSteps = object.maxSteps;
+  const timeoutMs = object.timeoutMs;
+  const stepIntervalMs = object.stepIntervalMs;
+
+  return {
+    name: requiredString(object, "name"),
+    prompt: requiredString(object, "prompt"),
+    ...(typeof maxSteps === "number" ? { maxSteps } : {}),
+    ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
+    ...(typeof stepIntervalMs === "number" ? { stepIntervalMs } : {}),
+  };
+};
+
+const parseCreateTaskInput = (
+  input: unknown,
+): {
+  title: string;
+  prompt: string;
+  when: string;
+} => {
+  const object = parseObjectInput(input);
+  return {
+    title: requiredString(object, "title"),
+    prompt: requiredString(object, "prompt"),
+    when: requiredString(object, "when"),
   };
 };
 
@@ -201,6 +253,64 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
         }
 
         return formatTask(task);
+      },
+    },
+    {
+      name: "create_agent",
+      description: "Start a new agent.",
+      permission: "act",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          prompt: { type: "string" },
+          maxSteps: { type: "number" },
+          timeoutMs: { type: "number" },
+          stepIntervalMs: { type: "number" },
+        },
+        required: ["name", "prompt"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const agentInput = parseCreateAgentInput(input);
+        const result = await context.createAgent(agentInput);
+        if (!result.agent) {
+          throw new Error(result.error ?? `Could not create agent "${agentInput.name}".`);
+        }
+
+        return `started agent: ${result.agent.name} (${result.agent.id})`;
+      },
+    },
+    {
+      name: "create_task",
+      description: "Schedule a task using a natural schedule string.",
+      permission: "act",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          prompt: { type: "string" },
+          when: { type: "string" },
+        },
+        required: ["title", "prompt", "when"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { title, prompt, when } = parseCreateTaskInput(input);
+        const parsed = parseTaskSchedule(
+          `${when} | ${title} | ${prompt}`,
+          context.defaultTaskTime,
+        );
+        if (!parsed) {
+          throw new Error(`Could not parse task schedule "${when}".`);
+        }
+
+        const task = await context.createTask({
+          title: parsed.title,
+          prompt: parsed.prompt,
+          schedule: parsed.schedule,
+        });
+        return `scheduled task: ${task.id}`;
       },
     },
   ];

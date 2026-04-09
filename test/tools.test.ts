@@ -12,6 +12,7 @@ const createConfig = (projectDir: string): ProjectConfig => ({
   createdAt: undefined,
   model: "dummy/test-model",
   storage: "none",
+  tools: ["read"],
   notifications: "all",
   defaultTaskTime: "9:00 AM",
   contextMessages: 20,
@@ -137,6 +138,57 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.match(await listTasks.execute({}), /Daily Brief/u);
     assert.match(await showTask.execute({ taskId: task.id }), new RegExp(`^id: ${task.id}$`, "mu"));
   } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness-backed act tools can create agents and tasks when enabled", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-tools-act-"));
+  let harness: Harness | undefined;
+
+  try {
+    harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read", "act"],
+    });
+
+    const tools = harness.listTools();
+    const createAgent = tools.find((tool) => tool.name === "create_agent");
+    const createTask = tools.find((tool) => tool.name === "create_task");
+
+    assert.ok(createAgent);
+    assert.ok(createTask);
+    assert.equal(createAgent.permission, "act");
+    assert.equal(createTask.permission, "act");
+
+    const agentReply = await createAgent.execute({
+      name: "planner",
+      prompt: "Plan the work",
+      maxSteps: 3,
+    });
+    const taskReply = await createTask.execute({
+      title: "Daily Brief",
+      prompt: "Send the brief",
+      when: "once tomorrow",
+    });
+
+    assert.match(agentReply, /^started agent: planner \(agent_/u);
+    assert.match(taskReply, /^scheduled task: task_/u);
+
+    const agent = harness.findAgent("planner");
+    assert.ok(agent);
+    assert.equal(agent.maxSteps, 3);
+    assert.notEqual(agent.chatId, harness.getCurrentChatId());
+    assert.equal(agent.chatId, agent.id);
+
+    const tasks = await harness.listCurrentChatTasks();
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0]?.title, "Daily Brief");
+  } finally {
+    harness?.cancelAgent("planner");
+    harness?.teardown();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await rm(projectDir, { recursive: true, force: true });
   }
 });

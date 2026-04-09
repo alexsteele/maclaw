@@ -187,12 +187,19 @@ const filterTools = (
 };
 
 const createToolContext = (harness: Harness): MaclawToolContext => ({
+  defaultTaskTime: harness.config.defaultTaskTime,
   getCurrentChatId: () => harness.getCurrentChatId(),
   listChats: () => harness.listChats(),
   loadChat: (chatId) => harness.loadChat(chatId),
   listAgents: () => harness.listAgents(),
   findAgent: (agentRef) => harness.findAgent(agentRef),
   listTasks: (chatId) => harness.listTasks(chatId),
+  createAgent: (input) => harness.createAgent(input),
+  createTask: (input) =>
+    harness.createTask({
+      ...input,
+      chatId: harness.getCurrentChatId(),
+    }),
 });
 
 const AGENT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
