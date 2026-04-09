@@ -151,6 +151,8 @@ test("harness stores and cancels agents through the agent store", async () => {
 
     const loaded = harness.getAgent(created.agent.id);
     assert.equal(loaded?.name, "queued-agent");
+    assert.equal(loaded?.sourceChatId, "default");
+    assert.equal(loaded?.createdBy, "user");
 
     const cancelled = harness.cancelAgent("queued-agent");
     assert.equal(cancelled?.status, "cancelled");
@@ -175,6 +177,24 @@ test("harness can queue a steer prompt for an agent", async () => {
 
     assert.equal(steered?.id, created.agent.id);
     assert.ok(steered);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness stores task provenance", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-provenance-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const task = await harness.createTask({
+      title: "Follow up",
+      prompt: "Check back later",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    assert.equal(task.sourceChatId, "default");
+    assert.equal(task.createdBy, "user");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

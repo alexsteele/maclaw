@@ -92,6 +92,8 @@ export type AgentCreateOptions = {
   timeoutMs?: number;
   stepIntervalMs?: number;
   chatId?: string;
+  sourceChatId?: string;
+  createdBy?: AgentRecord["createdBy"];
   origin?: AgentRecord["origin"];
 } & NotificationOverride;
 
@@ -194,11 +196,18 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
   listAgents: () => harness.listAgents(),
   findAgent: (agentRef) => harness.findAgent(agentRef),
   listTasks: (chatId) => harness.listTasks(chatId),
-  createAgent: (input) => harness.createAgent(input),
+  createAgent: (input) =>
+    harness.createAgent({
+      ...input,
+      sourceChatId: harness.getCurrentChatId(),
+      createdBy: "tool",
+    }),
   createTask: (input) =>
     harness.createTask({
       ...input,
       chatId: harness.getCurrentChatId(),
+      sourceChatId: harness.getCurrentChatId(),
+      createdBy: "tool",
     }),
 });
 
@@ -547,6 +556,8 @@ export class Harness {
 
   async createTask(input: {
     chatId?: string;
+    sourceChatId?: ScheduledTask["sourceChatId"];
+    createdBy?: ScheduledTask["createdBy"];
     origin?: ScheduledTask["origin"];
     notify?: NotificationPolicy;
     notifyTarget?: NotificationTarget;
@@ -559,6 +570,8 @@ export class Harness {
     return this._scheduler.createTask({
       ...input,
       chatId: input.chatId ?? this.getCurrentChatId(),
+      sourceChatId: input.sourceChatId ?? input.chatId ?? this.getCurrentChatId(),
+      createdBy: input.createdBy ?? "user",
       prompt,
     });
   }
@@ -827,6 +840,8 @@ export class Harness {
       name: input.name,
       prompt,
       chatId: input.chatId ?? id,
+      sourceChatId: input.sourceChatId ?? this.getCurrentChatId(),
+      createdBy: input.createdBy ?? "user",
       origin: input.origin,
       notify: input.notify,
       notifyTarget: input.notifyTarget,

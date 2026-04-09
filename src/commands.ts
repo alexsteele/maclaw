@@ -1037,6 +1037,8 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
 
     const task = await harness.createTask({
       chatId: getScopedChatId(harness, options),
+      sourceChatId: getScopedChatId(harness, options),
+      createdBy: "user",
       origin: options.origin,
       ...taskOptions,
       title: parsed.title,
@@ -1103,6 +1105,8 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
       name,
       prompt,
       chatId: getScopedChatId(harness, options),
+      sourceChatId: getScopedChatId(harness, options),
+      createdBy: "user",
       origin: options.origin,
       ...agentOptions,
     });

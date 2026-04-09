@@ -181,10 +181,14 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(agent.maxSteps, 3);
     assert.notEqual(agent.chatId, harness.getCurrentChatId());
     assert.equal(agent.chatId, agent.id);
+    assert.equal(agent.sourceChatId, "default");
+    assert.equal(agent.createdBy, "tool");
 
     const tasks = await harness.listCurrentChatTasks();
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0]?.title, "Daily Brief");
+    assert.equal(tasks[0]?.sourceChatId, "default");
+    assert.equal(tasks[0]?.createdBy, "tool");
   } finally {
     harness?.cancelAgent("planner");
     harness?.teardown();

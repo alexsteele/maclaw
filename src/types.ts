@@ -91,11 +91,15 @@ export type AgentStatus =
   | "stopped"
   | "failed";
 
+export type CreatedBy = "user" | "tool";
+
 export type AgentRecord = {
   id: string;
   name: string;
   prompt: string;
   chatId: string;
+  sourceChatId?: string;
+  createdBy?: CreatedBy;
   origin?: Origin;
   notify?: NotificationPolicy;
   notifyTarget?: NotificationTarget;
@@ -144,6 +148,8 @@ export type TaskSchedule =
 export type ScheduledTask = {
   id: string;
   chatId: string;
+  sourceChatId?: string;
+  createdBy?: CreatedBy;
   origin?: Origin;
   notify?: NotificationPolicy;
   notifyTarget?: NotificationTarget;

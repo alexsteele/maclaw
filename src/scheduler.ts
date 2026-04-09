@@ -164,6 +164,8 @@ export class TaskScheduler {
 
   async createTask(input: {
     chatId: string;
+    sourceChatId?: ScheduledTask["sourceChatId"];
+    createdBy?: ScheduledTask["createdBy"];
     origin?: ScheduledTask["origin"];
     notify?: ScheduledTask["notify"];
     notifyTarget?: ScheduledTask["notifyTarget"];
@@ -195,6 +197,8 @@ export class TaskScheduler {
     const task: ScheduledTask = {
       id: createTaskId(tasks),
       chatId: input.chatId,
+      sourceChatId: input.sourceChatId,
+      createdBy: input.createdBy,
       origin: input.origin,
       notify: input.notify,
       notifyTarget: input.notifyTarget,
