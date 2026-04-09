@@ -102,6 +102,7 @@ export type AgentRecord = {
   chatId: string;
   sourceChatId?: string;
   createdBy?: CreatedBy;
+  createdByAgentId?: string;
   origin?: Origin;
   notify?: NotificationPolicy;
   notifyTarget?: NotificationTarget;
@@ -152,6 +153,7 @@ export type ScheduledTask = {
   chatId: string;
   sourceChatId?: string;
   createdBy?: CreatedBy;
+  createdByAgentId?: string;
   origin?: Origin;
   notify?: NotificationPolicy;
   notifyTarget?: NotificationTarget;

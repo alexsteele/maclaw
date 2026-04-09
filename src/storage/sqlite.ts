@@ -41,6 +41,7 @@ const SQLITE_SCHEMA = `
     chat_id text not null,
     source_chat_id text,
     created_by text,
+    created_by_agent_id text,
     origin_json text,
     notify_json text,
     notify_target_json text,
@@ -74,6 +75,7 @@ const SQLITE_SCHEMA = `
     chat_id text not null,
     source_chat_id text,
     created_by text,
+    created_by_agent_id text,
     origin_json text,
     notify_json text,
     notify_target_json text,
@@ -130,6 +132,8 @@ const rowToAgentRecord = (row: Record<string, unknown>): AgentRecord => ({
   chatId: String(row.chat_id),
   sourceChatId: row.source_chat_id === null ? undefined : String(row.source_chat_id),
   createdBy: row.created_by === null ? undefined : (String(row.created_by) as AgentRecord["createdBy"]),
+  createdByAgentId:
+    row.created_by_agent_id === null ? undefined : String(row.created_by_agent_id),
   origin: parseJsonField<Origin>(row.origin_json),
   notify: parseJsonField<NotificationPolicy>(row.notify_json),
   notifyTarget: parseJsonField<NotificationTarget>(row.notify_target_json),
@@ -163,6 +167,8 @@ const rowToScheduledTask = (row: Record<string, unknown>): ScheduledTask => ({
   chatId: String(row.chat_id),
   sourceChatId: row.source_chat_id === null ? undefined : String(row.source_chat_id),
   createdBy: row.created_by === null ? undefined : (String(row.created_by) as ScheduledTask["createdBy"]),
+  createdByAgentId:
+    row.created_by_agent_id === null ? undefined : String(row.created_by_agent_id),
   origin: parseJsonField<Origin>(row.origin_json),
   notify: parseJsonField<NotificationPolicy>(row.notify_json),
   notifyTarget: parseJsonField<NotificationTarget>(row.notify_target_json),
@@ -237,16 +243,17 @@ export class SqliteAgentStore implements AgentStore {
     this.database
       .prepare(`
         insert into agents (
-          id, name, prompt, chat_id, source_chat_id, created_by, origin_json, notify_json, notify_target_json,
+          id, name, prompt, chat_id, source_chat_id, created_by, created_by_agent_id, origin_json, notify_json, notify_target_json,
           status, max_steps, timeout_ms, step_interval_ms, step_count, created_at,
           started_at, finished_at, last_message, last_error
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(id) do update set
           name = excluded.name,
           prompt = excluded.prompt,
           chat_id = excluded.chat_id,
           source_chat_id = excluded.source_chat_id,
           created_by = excluded.created_by,
+          created_by_agent_id = excluded.created_by_agent_id,
           origin_json = excluded.origin_json,
           notify_json = excluded.notify_json,
           notify_target_json = excluded.notify_target_json,
@@ -268,6 +275,7 @@ export class SqliteAgentStore implements AgentStore {
         record.chatId,
         record.sourceChatId ?? null,
         record.createdBy ?? null,
+        record.createdByAgentId ?? null,
         stringifyJsonField(record.origin),
         stringifyJsonField(record.notify),
         stringifyJsonField(record.notifyTarget),
@@ -349,10 +357,10 @@ export class SqliteTaskStore implements TaskStore {
       this.database.prepare("delete from tasks").run();
       const insertTask = this.database.prepare(`
         insert into tasks (
-          id, chat_id, source_chat_id, created_by, origin_json, notify_json, notify_target_json,
+          id, chat_id, source_chat_id, created_by, created_by_agent_id, origin_json, notify_json, notify_target_json,
           title, prompt, schedule_json, next_run_at, status,
           created_at, updated_at, last_run_at, last_error
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const task of tasks) {
@@ -361,6 +369,7 @@ export class SqliteTaskStore implements TaskStore {
           task.chatId,
           task.sourceChatId ?? null,
           task.createdBy ?? null,
+          task.createdByAgentId ?? null,
           stringifyJsonField(task.origin),
           stringifyJsonField(task.notify),
           stringifyJsonField(task.notifyTarget),

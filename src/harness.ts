@@ -94,6 +94,7 @@ export type AgentCreateOptions = {
   chatId?: string;
   sourceChatId?: string;
   createdBy?: AgentRecord["createdBy"];
+  createdByAgentId?: AgentRecord["createdByAgentId"];
   origin?: AgentRecord["origin"];
 } & NotificationOverride;
 
@@ -191,6 +192,11 @@ const filterTools = (
   return tools.filter((tool) => allowed.has(tool.permission));
 };
 
+const findAgentByChatId = (
+  agents: AgentRecord[],
+  chatId: string,
+): AgentRecord | undefined => agents.find((agent) => agent.chatId === chatId);
+
 const createToolContext = (harness: Harness): MaclawToolContext => ({
   defaultTaskTime: harness.config.defaultTaskTime,
   getCurrentChatId: () => harness.getCurrentChatId(),
@@ -205,6 +211,10 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
       ...input,
       sourceChatId: harness.getCurrentChatId(),
       createdBy: "tool",
+      createdByAgentId: findAgentByChatId(
+        harness.listAgents(),
+        harness.getCurrentChatId(),
+      )?.id,
     }),
   createTask: (input) =>
     harness.createTask({
@@ -212,6 +222,10 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
       chatId: harness.getCurrentChatId(),
       sourceChatId: harness.getCurrentChatId(),
       createdBy: "tool",
+      createdByAgentId: findAgentByChatId(
+        harness.listAgents(),
+        harness.getCurrentChatId(),
+      )?.id,
     }),
 });
 
@@ -586,6 +600,7 @@ export class Harness {
     chatId?: string;
     sourceChatId?: ScheduledTask["sourceChatId"];
     createdBy?: ScheduledTask["createdBy"];
+    createdByAgentId?: ScheduledTask["createdByAgentId"];
     origin?: ScheduledTask["origin"];
     notify?: NotificationPolicy;
     notifyTarget?: NotificationTarget;
@@ -600,6 +615,7 @@ export class Harness {
       chatId: input.chatId ?? this.getCurrentChatId(),
       sourceChatId: input.sourceChatId ?? input.chatId ?? this.getCurrentChatId(),
       createdBy: input.createdBy ?? "user",
+      createdByAgentId: input.createdByAgentId,
       prompt,
     });
   }
@@ -870,6 +886,7 @@ export class Harness {
       chatId: input.chatId ?? id,
       sourceChatId: input.sourceChatId ?? this.getCurrentChatId(),
       createdBy: input.createdBy ?? "user",
+      createdByAgentId: input.createdByAgentId,
       origin: input.origin,
       notify: input.notify,
       notifyTarget: input.notifyTarget,

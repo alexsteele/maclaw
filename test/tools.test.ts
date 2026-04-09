@@ -198,8 +198,38 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(tasks[0]?.title, "Daily Brief");
     assert.equal(tasks[0]?.sourceChatId, "default");
     assert.equal(tasks[0]?.createdBy, "tool");
+    assert.equal(tasks[0]?.createdByAgentId, undefined);
+
+    await harness.switchChat(agent.chatId);
+
+    const childAgentReply = await createAgent.execute({
+      name: "child-planner",
+      prompt: "Plan a child task",
+    });
+    const childTaskReply = await createTask.execute({
+      title: "Child Brief",
+      prompt: "Send the child brief",
+      when: "once tomorrow",
+    });
+
+    assert.match(childAgentReply, /^started agent: child-planner \(agent_/u);
+    assert.match(childTaskReply, /^scheduled task: task_/u);
+
+    const childAgent = harness.findAgent("child-planner");
+    assert.ok(childAgent);
+    assert.equal(childAgent.sourceChatId, agent.chatId);
+    assert.equal(childAgent.createdBy, "tool");
+    assert.equal(childAgent.createdByAgentId, agent.id);
+
+    const childTasks = await harness.listCurrentChatTasks();
+    assert.equal(childTasks.length, 1);
+    assert.equal(childTasks[0]?.title, "Child Brief");
+    assert.equal(childTasks[0]?.sourceChatId, agent.chatId);
+    assert.equal(childTasks[0]?.createdBy, "tool");
+    assert.equal(childTasks[0]?.createdByAgentId, agent.id);
   } finally {
     harness?.cancelAgent("planner");
+    harness?.cancelAgent("child-planner");
     harness?.teardown();
     await new Promise((resolve) => setTimeout(resolve, 10));
     await rm(projectDir, { recursive: true, force: true });

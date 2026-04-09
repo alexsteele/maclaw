@@ -166,6 +166,7 @@ export class TaskScheduler {
     chatId: string;
     sourceChatId?: ScheduledTask["sourceChatId"];
     createdBy?: ScheduledTask["createdBy"];
+    createdByAgentId?: ScheduledTask["createdByAgentId"];
     origin?: ScheduledTask["origin"];
     notify?: ScheduledTask["notify"];
     notifyTarget?: ScheduledTask["notifyTarget"];
@@ -199,6 +200,7 @@ export class TaskScheduler {
       chatId: input.chatId,
       sourceChatId: input.sourceChatId,
       createdBy: input.createdBy,
+      createdByAgentId: input.createdByAgentId,
       origin: input.origin,
       notify: input.notify,
       notifyTarget: input.notifyTarget,
