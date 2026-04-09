@@ -4,10 +4,13 @@ Derived from local git history.
 
 | Date       | # Commits | Hours (First to Last Commit) | Line Changes    |
 | ---------- | --------: | ---------------------------: | --------------- |
-| 2026-04-04 |        22 |                         6.53 | +8,904 / -2,417 |
-| 2026-04-05 |        30 |                         4.30 | +3,555 / -504   |
-| 2026-04-06 |        41 |                         3.64 | +5,451 / -1,079 |
-| 2026-04-08 |         8 |                         0.78 | +658 / -181     |
+| 2026-04-04 |        22 |                          6.5 | +8,904 / -2,417 |
+| 2026-04-05 |        30 |                          4.3 | +3,555 / -504   |
+| 2026-04-06 |        41 |                          3.6 | +5,451 / -1,079 |
+| 2026-04-08 |        19 |                          1.7 | +1,755 / -94    |
+
+<!-- codex: Include sessions near midnight with the prior day. -->
+<!-- codex: Commits hours apart are separate sessions. -->
 
 ## 2026-04-04 Notes
 
@@ -46,3 +49,11 @@ Derived from local git history.
 - Added `MACLAW_HOME` as the global root.
 - REPL uses `MACLAW_HOME` default project.
 - Removed most env vars. Paths and secrets only.
+- `/compress`
+- `/model list`
+- Tools, permissions, and tool transcripts.
+- Added `/send` for test notifications and inbox delivery.
+- Added inbox management commands: `/inbox rm` and `/inbox clear`.
+- Added response telemetry for latency and tool iterations.
+- Refined tool and provenance plumbing for agent/task creation.
+- Agents can spawn agents!
