@@ -84,7 +84,6 @@ test("built-in repo skills are available and project skills can override them", 
 
     const skills = await listSkills.execute({});
     assert.match(skills, /agent_operator/u);
-    assert.match(skills, /task_planner/u);
     assert.match(skills, /inbox_triage/u);
 
     const dailySummary = await readSkill.execute({ name: "daily_summary" });

@@ -182,11 +182,17 @@ export type ToolDefinition = {
   execute: (input: unknown) => Promise<string>;
 };
 
+export type ToolCallLogEntry = {
+  name: string;
+  input: unknown;
+};
+
 export type ProviderRequest = {
   chat: ChatRecord;
   userInput: string;
   systemPrompt: string;
   tools: ToolDefinition[];
+  onToolCall?: (entry: ToolCallLogEntry) => void | Promise<void>;
 };
 
 export type ProviderUsage = {

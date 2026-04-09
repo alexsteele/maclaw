@@ -74,15 +74,17 @@ const buildToolSpec = (tool: ToolDefinition): Record<string, unknown> => ({
 });
 
 const conversationInput = (chat: ChatRecord): Array<Record<string, unknown>> => {
-  return chat.messages.map((message) => ({
-    role: message.role,
-    content: [
-      {
-        type: message.role === "assistant" ? "output_text" : "input_text",
-        text: message.content,
-      },
-    ],
-  }));
+  return chat.messages
+    .filter((message) => message.role !== "tool")
+    .map((message) => ({
+      role: message.role,
+      content: [
+        {
+          type: message.role === "assistant" ? "output_text" : "input_text",
+          text: message.content,
+        },
+      ],
+    }));
 };
 
 export interface Provider {
@@ -154,6 +156,10 @@ export class OpenAIResponsesProvider implements Provider {
           const parsedArguments = toolCall.arguments
             ? JSON.parse(toolCall.arguments)
             : {};
+          await request.onToolCall?.({
+            name: tool.name,
+            input: parsedArguments,
+          });
           outputText = await tool.execute(parsedArguments);
         } catch (error) {
           outputText = `Tool execution failed: ${

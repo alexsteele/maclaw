@@ -183,3 +183,74 @@ test("ChatRuntime includes the compressed chat summary in the system prompt", as
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("ChatRuntime logs tool calls in the chat transcript without storing tool output", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-tools-"));
+  const originalFetch = globalThis.fetch;
+
+  try {
+    let callCount = 0;
+    globalThis.fetch = (async () => {
+      callCount += 1;
+
+      if (callCount === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            output: [
+              {
+                type: "function_call",
+                name: "get_time",
+                call_id: "call_123",
+                arguments: "{}",
+              },
+            ],
+          }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ output_text: "The current time is available." }),
+      } as Response;
+    }) as typeof fetch;
+
+    const config: ProjectConfig = {
+      name: path.basename(projectDir),
+      createdAt: undefined,
+      model: "openai/gpt-4.1-mini",
+      storage: "json",
+      notifications: "all",
+      defaultTaskTime: "9:00 AM",
+      contextMessages: 20,
+      maxToolIterations: 8,
+      retentionDays: 30,
+      skillsDir: path.join(projectDir, ".maclaw", "skills"),
+      compressionMode: "none",
+      schedulerPollMs: 1_000,
+      projectFolder: projectDir,
+      projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+      chatId: "default",
+      chatsDir: path.join(projectDir, ".maclaw", "chats"),
+      openAiApiKey: "test-key",
+      tools: ["read"],
+    };
+
+    const chatStore = new JsonFileChatStore(config.chatsDir);
+    const runtime = new ChatRuntime(config, chatStore, createTools(config));
+
+    await runtime.prompt("what time is it?");
+
+    const chat = await runtime.loadActiveChat();
+    assert.equal(chat.messages.length, 3);
+    assert.equal(chat.messages[0]?.role, "user");
+    assert.equal(chat.messages[1]?.role, "tool");
+    assert.equal(chat.messages[1]?.name, "get_time");
+    assert.equal(chat.messages[1]?.content, "{}");
+    assert.equal(chat.messages[2]?.role, "assistant");
+    assert.equal(chat.messages[2]?.content, "The current time is available.");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

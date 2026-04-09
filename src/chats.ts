@@ -9,6 +9,7 @@ import type {
   Message,
   MessageContext,
   ProviderResult,
+  ToolCallLogEntry,
   ProviderUsage,
   ToolDefinition,
 } from "./types.js";
@@ -149,6 +150,10 @@ const buildCompressionChat = (chat: ChatRecord, messages: Message[]): ChatRecord
     ...chat,
     messages,
   };
+};
+
+const formatToolCall = (entry: ToolCallLogEntry): string => {
+  return JSON.stringify(entry.input ?? {});
 };
 
 const createEmptyChat = (
@@ -432,6 +437,10 @@ export class ChatRuntime {
         userInput,
         systemPrompt,
         tools: this.tools,
+        onToolCall: async (entry) => {
+          appendMessage(chat, "tool", formatToolCall(entry), entry.name);
+          await this.chatStore.saveChat(chat);
+        },
       });
 
       assistantMessage = appendMessage(chat, "assistant", providerResult.outputText, undefined, {
@@ -474,6 +483,10 @@ export class ChatRuntime {
         userInput: prompt,
         systemPrompt,
         tools: this.tools,
+        onToolCall: async (entry) => {
+          appendMessage(chat, "tool", formatToolCall(entry), entry.name);
+          await this.chatStore.saveChat(chat);
+        },
       });
 
       assistantMessage = appendMessage(
