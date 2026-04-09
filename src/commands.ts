@@ -28,6 +28,7 @@ export const helpText = [
   "  /new               Create and switch to a new chat",
   "  /fork              Fork the current chat",
   "  /reset             Clear the current chat",
+  "  /compress          Compress the current chat",
   "  /save              Save the current chat transcript to a file",
   "  /usage             Show token usage for the current chat",
   "  /config            Project config commands",
@@ -70,6 +71,7 @@ export const chatHelpText = [
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
   "  /chat reset        Clear the current chat",
+  "  /chat compress     Compress the current chat",
   "  /chat rm X         Delete chat X",
 ].join("\n");
 
@@ -131,6 +133,11 @@ export const saveHelpText = [
   "Command: /save",
   "  /save              Save the current chat transcript to .maclaw/exports/<chat>.md",
   "  /save <path>       Save the current chat transcript to a file",
+].join("\n");
+
+export const compressHelpText = [
+  "Command: /compress",
+  "  /compress          Compress the current chat",
 ].join("\n");
 
 export const inboxHelpText = [
@@ -628,6 +635,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
     return saveHelpText;
   }
 
+  if (input === "/help compress") {
+    return compressHelpText;
+  }
+
   if (input === "/help usage") {
     return usageHelpText;
   }
@@ -740,6 +751,18 @@ const handleSaveCommand: CommandHandler = async (harness, input, options) => {
   }
 
   return saveHelpText;
+};
+
+const handleCompressCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/compress") {
+    return handleChatCommand(harness, "/chat compress", options);
+  }
+
+  if (input === "/compress help" || input.startsWith("/compress ")) {
+    return compressHelpText;
+  }
+
+  return compressHelpText;
 };
 
 const handleInboxCommand: CommandHandler = async (harness, input) => {
@@ -929,6 +952,27 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/chat reset") {
     const chat = await harness.resetChat(getScopedChatId(harness, options));
     return `reset chat: ${chat.id}`;
+  }
+
+  if (input === "/chat compress") {
+    let result;
+    try {
+      result = await harness.compressChat(getScopedChatId(harness, options));
+    } catch (error) {
+      return `failed to compress chat: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+    }
+
+    if (result.removedMessages === 0) {
+      return `nothing to compress in chat: ${result.chat.id}`;
+    }
+
+    return [
+      `compressed chat: ${result.chat.id}`,
+      `removedMessages: ${result.removedMessages}`,
+      `keptMessages: ${result.keptMessages}`,
+    ].join("\n");
   }
 
   if (input.startsWith("/chat rm ")) {
@@ -1253,6 +1297,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   reset: handleResetCommand,
   inbox: handleInboxCommand,
   save: handleSaveCommand,
+  compress: handleCompressCommand,
   usage: handleUsageCommand,
   project: handleProjectCommand,
   config: handleConfigCommand,

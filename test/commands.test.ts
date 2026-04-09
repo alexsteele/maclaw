@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  compressHelpText,
   dispatchCommand,
   helpText,
   inboxHelpText,
@@ -124,6 +125,33 @@ test("dispatchCommand clears the current chat with /reset", async () => {
     assert.equal(reply, "reset chat: default");
     assert.equal(chat.id, "default");
     assert.equal(chat.messages.length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand compresses the current chat with /compress", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-compress-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "compress-project",
+      model: "dummy/test-model",
+      contextMessages: 2,
+    });
+    const harness = Harness.load(projectDir);
+    await harness.prompt("first message");
+    await harness.prompt("second message");
+    await harness.prompt("third message");
+
+    const reply = await dispatchCommand(harness, "/compress");
+    const chat = await harness.loadCurrentChat();
+
+    assert.match(reply ?? "", /^compressed chat: default$/mu);
+    assert.match(reply ?? "", /^removedMessages: 4$/mu);
+    assert.match(reply ?? "", /^keptMessages: 2$/mu);
+    assert.equal(chat.messages.length, 2);
+    assert.match(chat.summary ?? "", /Summarize this chat history\./u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -874,6 +902,7 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
     assert.equal(await dispatchCommand(harness, "/task schedule help"), await dispatchCommand(harness, "/help task schedule"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
+    assert.equal(await dispatchCommand(harness, "/compress help"), compressHelpText);
     assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
     assert.equal(await dispatchCommand(harness, "/usage help"), usageHelpText);
   } finally {

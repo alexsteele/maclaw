@@ -67,6 +67,13 @@ type ForkChatResult =
   | { chat: ChatRecord; error?: undefined }
   | { chat?: undefined; error: string };
 
+export type ChatCompressionResult = {
+  chat: ChatRecord;
+  keptMessages: number;
+  removedMessages: number;
+  summary: string;
+};
+
 export type HarnessNotification = {
   kind: NotificationKind;
   origin: Origin;
@@ -667,6 +674,10 @@ export class Harness {
 
   async resetChat(chatId?: string): Promise<ChatRecord> {
     return this._chatRuntime.resetChat(chatId ?? this.getCurrentChatId());
+  }
+
+  async compressChat(chatId?: string): Promise<ChatCompressionResult> {
+    return this._chatRuntime.compressChat(chatId ?? this.getCurrentChatId());
   }
 
   async prompt(userInput: string, context?: MessageContext): Promise<Message> {

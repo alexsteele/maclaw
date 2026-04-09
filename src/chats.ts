@@ -35,6 +35,13 @@ type ChatCreateResult =
   | { chat: ChatRecord; error?: undefined }
   | { chat?: undefined; error: string };
 
+type ChatCompressionResult = {
+  chat: ChatRecord;
+  keptMessages: number;
+  removedMessages: number;
+  summary: string;
+};
+
 const formatLocalDateTime = (date: Date): string => {
   const formatter = new Intl.DateTimeFormat("en-US", {
     year: "numeric",
@@ -95,6 +102,21 @@ const buildSystemPrompt = async (
   ].join("\n");
 };
 
+const buildCompressionPrompt = (existingSummary?: string): string =>
+  [
+    "You are compressing an older chat transcript for maclaw.",
+    "Write a concise plain-text summary of the conversation so far.",
+    "Preserve goals, decisions, constraints, important files, pending work, and unresolved questions.",
+    "Do not mention that this is a summary.",
+    ...(existingSummary
+      ? [
+          "",
+          "Existing summary to preserve and refine:",
+          existingSummary,
+        ]
+      : []),
+  ].join("\n");
+
 const createProvider = (config: ProjectConfig): Provider => {
   const configuredModel = parseConfiguredModel(config.model);
   if (configuredModel.provider === "openai" && config.openAiApiKey) {
@@ -112,6 +134,13 @@ const buildPromptChat = (chat: ChatRecord, contextMessages: number): ChatRecord 
   return {
     ...chat,
     messages: chat.messages.slice(-contextMessages),
+  };
+};
+
+const buildCompressionChat = (chat: ChatRecord, messages: Message[]): ChatRecord => {
+  return {
+    ...chat,
+    messages,
   };
 };
 
@@ -286,6 +315,50 @@ export class ChatRuntime {
     }
 
     return chat;
+  }
+
+  async compressChat(chatId: string): Promise<ChatCompressionResult> {
+    const chat =
+      chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
+    const keepMessages = Math.max(this.config.contextMessages, 1);
+    const recentMessages = chat.messages.slice(-keepMessages);
+    const olderMessages = chat.messages.slice(0, Math.max(chat.messages.length - keepMessages, 0));
+
+    if (olderMessages.length === 0) {
+      return {
+        chat,
+        keptMessages: recentMessages.length,
+        removedMessages: 0,
+        summary: chat.summary ?? "",
+      };
+    }
+
+    const result = await this.provider.generate({
+      chat: buildCompressionChat(chat, olderMessages),
+      userInput: "Summarize this chat history.",
+      systemPrompt: buildCompressionPrompt(chat.summary),
+      tools: [],
+    });
+    const summary = result.outputText.trim();
+    if (summary.length === 0) {
+      throw new Error("The model returned an empty compression summary.");
+    }
+
+    chat.summary = summary;
+    chat.messages = recentMessages;
+    chat.updatedAt = new Date().toISOString();
+    await this.chatStore.saveChat(chat);
+
+    if (chatId === this.activeChatId) {
+      this.activeChat = chat;
+    }
+
+    return {
+      chat,
+      keptMessages: recentMessages.length,
+      removedMessages: olderMessages.length,
+      summary,
+    };
   }
 
   async forkChat(newChatId: string): Promise<ChatRecord> {
