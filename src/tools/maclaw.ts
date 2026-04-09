@@ -275,7 +275,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     },
     {
       name: "create_agent",
-      description: "Start a new agent.",
+      description: "Start a new agent with its own dedicated chat.",
       permission: "act",
       inputSchema: {
         type: "object",
@@ -301,7 +301,8 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     },
     {
       name: "create_task",
-      description: "Schedule a task using a natural schedule string.",
+      description:
+        "Schedule a task using a when string like 'once now', 'once today', 'once tomorrow', 'once 4/9/2026', 'once 4/9/2026 2:30 PM', 'daily 9:00 AM', or 'weekly monday 10:00 AM'. If a one-time date omits a time, maclaw uses the project's default task time.",
       permission: "act",
       inputSchema: {
         type: "object",
