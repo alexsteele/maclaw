@@ -113,6 +113,7 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     });
 
     const tools = harness.listTools();
+    const listTools = tools.find((tool) => tool.name === "list_tools");
     const listChats = tools.find((tool) => tool.name === "list_chats");
     const showChat = tools.find((tool) => tool.name === "show_chat");
     const listAgents = tools.find((tool) => tool.name === "list_agents");
@@ -120,16 +121,20 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     const listTasks = tools.find((tool) => tool.name === "list_tasks");
     const showTask = tools.find((tool) => tool.name === "show_task");
 
+    assert.ok(listTools);
     assert.ok(listChats);
     assert.ok(showChat);
     assert.ok(listAgents);
     assert.ok(showAgent);
     assert.ok(listTasks);
     assert.ok(showTask);
+    assert.equal(listTools.permission, "read");
     assert.equal(listChats.permission, "read");
     assert.equal(showAgent.permission, "read");
     assert.equal(showTask.permission, "read");
 
+    assert.match(await listTools.execute({}), /list_chats \[read\]/u);
+    assert.match(await listTools.execute({}), /show_agent \[read\]/u);
     assert.match(await listChats.execute({}), /default/u);
     assert.match(await listChats.execute({}), /branch-a/u);
     assert.match(await showChat.execute({ chatId: "branch-a" }), /^id: branch-a$/mu);
@@ -154,13 +159,17 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     });
 
     const tools = harness.listTools();
+    const listTools = tools.find((tool) => tool.name === "list_tools");
     const createAgent = tools.find((tool) => tool.name === "create_agent");
     const createTask = tools.find((tool) => tool.name === "create_task");
 
+    assert.ok(listTools);
     assert.ok(createAgent);
     assert.ok(createTask);
     assert.equal(createAgent.permission, "act");
     assert.equal(createTask.permission, "act");
+    assert.match(await listTools.execute({}), /create_agent \[act\]/u);
+    assert.match(await listTools.execute({}), /create_task \[act\]/u);
 
     const agentReply = await createAgent.execute({
       name: "planner",

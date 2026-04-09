@@ -191,6 +191,7 @@ const filterTools = (
 const createToolContext = (harness: Harness): MaclawToolContext => ({
   defaultTaskTime: harness.config.defaultTaskTime,
   getCurrentChatId: () => harness.getCurrentChatId(),
+  listTools: () => harness.listTools(),
   listChats: () => harness.listChats(),
   loadChat: (chatId) => harness.loadChat(chatId),
   listAgents: () => harness.listAgents(),

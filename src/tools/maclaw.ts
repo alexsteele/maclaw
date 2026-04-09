@@ -6,6 +6,7 @@ import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 export type MaclawToolContext = {
   defaultTaskTime: string;
   getCurrentChatId(): string;
+  listTools(): ToolDefinition[];
   listChats(): Promise<ChatSummary[]>;
   loadChat(chatId: string): Promise<ChatRecord>;
   listAgents(): AgentRecord[];
@@ -131,8 +132,25 @@ const formatTask = (task: ScheduledTask): string =>
     `lastError: ${task.lastError ?? "(none)"}`,
   ].join("\n");
 
+const formatTool = (tool: ToolDefinition): string =>
+  `- ${tool.name} [${tool.permission}]: ${tool.description}`;
+
 export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] => {
   return [
+    {
+      name: "list_tools",
+      description: "List the currently enabled tools, including their permission level.",
+      permission: "read",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        parseEmptyInput(input);
+        return context.listTools().map(formatTool).join("\n");
+      },
+    },
     {
       name: "list_chats",
       description: "List saved chats in the current project.",
