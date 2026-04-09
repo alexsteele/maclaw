@@ -614,6 +614,25 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
   }
 });
 
+test("dispatchCommand refreshes the live tool list after /config set tools", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-config-tools-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const beforeReply = await dispatchCommand(harness, "/tools");
+    const setReply = await dispatchCommand(harness, '/config set tools ["read","act"]');
+    const afterReply = await dispatchCommand(harness, "/tools");
+
+    assert.doesNotMatch(beforeReply ?? "", /create_agent/u);
+    assert.equal(setReply, 'tools = read,act');
+    assert.match(afterReply ?? "", /create_agent/u);
+    assert.match(afterReply ?? "", /create_task/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand config help lists editable keys", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-config-help-"));
 

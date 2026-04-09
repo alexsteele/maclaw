@@ -873,7 +873,8 @@ const handleConfigCommand: CommandHandler = async (harness, input) => {
       return parsedValue;
     }
 
-    const config = await initProjectConfig(harness.config.projectFolder, parsedValue);
+    await initProjectConfig(harness.config.projectFolder, parsedValue);
+    const config = await harness.reloadConfig();
     return `${key} = ${String(config[key as keyof typeof config])}`;
   }
 

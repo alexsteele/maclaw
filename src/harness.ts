@@ -180,6 +180,9 @@ const createInboxStore = (config: ProjectConfig): InboxStore => {
     : new MemoryInboxStore();
 };
 
+const createFilteredTools = (config: ProjectConfig, harness: Harness): ToolDefinition[] =>
+  filterTools(createTools(config, createToolContext(harness)), config.tools);
+
 const filterTools = (
   tools: ToolDefinition[],
   allowedPermissions: ToolPermission[],
@@ -263,7 +266,7 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(config.notifications);
     this._scheduler = createScheduler(config);
     this._chatStore = createChatStore(config);
-    this._tools = filterTools(createTools(config, createToolContext(this)), config.tools);
+    this._tools = createFilteredTools(config, this);
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = createAgentStore(config);
     this._inboxStore = createInboxStore(config);
@@ -318,7 +321,7 @@ export class Harness {
     };
     const nextChatStore = createChatStore(nextConfig);
     const nextScheduler = createScheduler(nextConfig);
-    const nextTools = filterTools(createTools(nextConfig, createToolContext(this)), nextConfig.tools);
+    const nextTools = createFilteredTools(nextConfig, this);
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = createAgentStore(nextConfig);
 
@@ -370,7 +373,7 @@ export class Harness {
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._scheduler = createScheduler(nextConfig);
     this._chatStore = createChatStore(nextConfig);
-    this._tools = filterTools(createTools(nextConfig, createToolContext(this)), nextConfig.tools);
+    this._tools = createFilteredTools(nextConfig, this);
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = createAgentStore(nextConfig);
     this._inboxStore = createInboxStore(nextConfig);
@@ -380,6 +383,30 @@ export class Harness {
     }
 
     return true;
+  }
+
+  async reloadConfig(): Promise<ProjectConfig> {
+    const nextConfig: ProjectConfig = {
+      ...loadConfig(this._config.projectFolder),
+      chatId: this.getCurrentChatId(),
+    };
+
+    this._scheduler.stop();
+
+    this._config = nextConfig;
+    this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
+    this._scheduler = createScheduler(nextConfig);
+    this._chatStore = createChatStore(nextConfig);
+    this._tools = createFilteredTools(nextConfig, this);
+    this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
+    this._agentStore = createAgentStore(nextConfig);
+    this._inboxStore = createInboxStore(nextConfig);
+
+    if (this._taskListener) {
+      await this.start(this._taskListener, this._notificationListener);
+    }
+
+    return this._config;
   }
 
   getCurrentChatId(): string {
