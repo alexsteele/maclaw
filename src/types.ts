@@ -8,6 +8,8 @@ export type Message = {
   name?: string;
   model?: string;
   usage?: ProviderUsage;
+  latencyMs?: number;
+  toolIterations?: number;
 };
 
 export type ChatRecord = {
@@ -222,4 +224,6 @@ export type ProviderResult = {
   outputText: string;
   model?: string;
   usage?: ProviderUsage;
+  latencyMs?: number;
+  toolIterations?: number;
 };

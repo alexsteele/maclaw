@@ -249,6 +249,9 @@ test("ChatRuntime logs tool calls in the chat transcript without storing tool ou
     assert.equal(chat.messages[1]?.content, "{}");
     assert.equal(chat.messages[2]?.role, "assistant");
     assert.equal(chat.messages[2]?.content, "The current time is available.");
+    assert.equal(chat.messages[2]?.toolIterations, 1);
+    assert.equal(typeof chat.messages[2]?.latencyMs, "number");
+    assert.equal((chat.messages[2]?.latencyMs ?? 0) >= 0, true);
   } finally {
     globalThis.fetch = originalFetch;
     await rm(projectDir, { recursive: true, force: true });

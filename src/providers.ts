@@ -95,6 +95,7 @@ export class DummyProvider implements Provider {
   async generate(request: ProviderRequest): Promise<ProviderResult> {
     return {
       model: "dummy",
+      toolIterations: 0,
       outputText: [
         "No model provider configured.",
         "",
@@ -136,6 +137,7 @@ export class OpenAIResponsesProvider implements Provider {
           model: this.model,
           outputText: extractOutputText(response),
           usage: extractUsage(response),
+          toolIterations: iteration,
         };
       }
 
@@ -177,6 +179,7 @@ export class OpenAIResponsesProvider implements Provider {
 
     return {
       model: this.model,
+      toolIterations: this.maxToolIterations,
       outputText: "Stopped after too many tool-calling iterations.",
     };
   }

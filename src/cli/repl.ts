@@ -189,6 +189,8 @@ class Repl {
       result.usage?.inputTokens !== undefined ? `input=${result.usage.inputTokens}` : null,
       result.usage?.outputTokens !== undefined ? `output=${result.usage.outputTokens}` : null,
       result.usage?.totalTokens !== undefined ? `total=${result.usage.totalTokens}` : null,
+      result.latencyMs !== undefined ? `latency=${result.latencyMs}ms` : null,
+      result.toolIterations !== undefined ? `iterations=${result.toolIterations}` : null,
       result.usage?.cachedInputTokens !== undefined
         ? `cached=${result.usage.cachedInputTokens}`
         : null,

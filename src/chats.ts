@@ -43,6 +43,11 @@ type ChatCompressionResult = {
   summary: string;
 };
 
+type ResponseTelemetry = {
+  latencyMs: number;
+  toolIterations?: number;
+};
+
 const formatLocalDateTime = (date: Date): string => {
   const formatter = new Intl.DateTimeFormat("en-US", {
     year: "numeric",
@@ -154,6 +159,21 @@ const buildCompressionChat = (chat: ChatRecord, messages: Message[]): ChatRecord
 
 const formatToolCall = (entry: ToolCallLogEntry): string => {
   return JSON.stringify(entry.input ?? {});
+};
+
+const measureProviderCall = async (
+  run: () => Promise<ProviderResult>,
+): Promise<{ result: ProviderResult; telemetry: ResponseTelemetry }> => {
+  const startedAt = performance.now();
+  const result = await run();
+
+  return {
+    result,
+    telemetry: {
+      latencyMs: Math.round(performance.now() - startedAt),
+      toolIterations: result.toolIterations,
+    },
+  };
 };
 
 const createEmptyChat = (
@@ -432,20 +452,28 @@ export class ChatRuntime {
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
-      providerResult = await this.provider.generate({
-        chat: promptChat,
-        userInput,
-        systemPrompt,
-        tools: this.tools,
-        onToolCall: async (entry) => {
-          appendMessage(chat, "tool", formatToolCall(entry), entry.name);
-          await this.chatStore.saveChat(chat);
-        },
-      });
+      const measured = await measureProviderCall(() =>
+        this.provider.generate({
+          chat: promptChat,
+          userInput,
+          systemPrompt,
+          tools: this.tools,
+          onToolCall: async (entry) => {
+            appendMessage(chat, "tool", formatToolCall(entry), entry.name);
+            await this.chatStore.saveChat(chat);
+          },
+        }),
+      );
+      providerResult = {
+        ...measured.result,
+        latencyMs: measured.telemetry.latencyMs,
+      };
 
       assistantMessage = appendMessage(chat, "assistant", providerResult.outputText, undefined, {
         model: providerResult.model,
         usage: providerResult.usage,
+        latencyMs: measured.telemetry.latencyMs,
+        toolIterations: measured.telemetry.toolIterations,
       });
     } catch (error) {
       const content = `Request failed: ${
@@ -478,27 +506,26 @@ export class ChatRuntime {
     try {
       const systemPrompt = await buildSystemPrompt(this.config, chat);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
-      const result = await this.provider.generate({
-        chat: promptChat,
-        userInput: prompt,
-        systemPrompt,
-        tools: this.tools,
-        onToolCall: async (entry) => {
-          appendMessage(chat, "tool", formatToolCall(entry), entry.name);
-          await this.chatStore.saveChat(chat);
-        },
-      });
-
-      assistantMessage = appendMessage(
-        chat,
-        "assistant",
-        result.outputText,
-        "scheduler",
-        {
-          model: result.model,
-          usage: result.usage,
-        },
+      const measured = await measureProviderCall(() =>
+        this.provider.generate({
+          chat: promptChat,
+          userInput: prompt,
+          systemPrompt,
+          tools: this.tools,
+          onToolCall: async (entry) => {
+            appendMessage(chat, "tool", formatToolCall(entry), entry.name);
+            await this.chatStore.saveChat(chat);
+          },
+        }),
       );
+      const result = measured.result;
+
+      assistantMessage = appendMessage(chat, "assistant", result.outputText, "scheduler", {
+        model: result.model,
+        usage: result.usage,
+        latencyMs: measured.telemetry.latencyMs,
+        toolIterations: measured.telemetry.toolIterations,
+      });
     } catch (error) {
       const content = `Scheduled task failed: ${
         error instanceof Error ? error.message : String(error)
@@ -527,6 +554,8 @@ export const appendMessage = (
   metadata?: {
     model?: string;
     usage?: ProviderUsage;
+    latencyMs?: number;
+    toolIterations?: number;
   },
 ): Message => {
   const message: Message = {
@@ -537,6 +566,8 @@ export const appendMessage = (
     name,
     model: metadata?.model,
     usage: metadata?.usage,
+    latencyMs: metadata?.latencyMs,
+    toolIterations: metadata?.toolIterations,
   };
 
   chat.messages.push(message);
