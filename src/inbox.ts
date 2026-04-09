@@ -28,6 +28,8 @@ export const createInboxEntry = (input: {
 export interface InboxStore {
   loadEntries(): Promise<InboxEntry[]>;
   saveEntry(entry: InboxEntry): Promise<void>;
+  deleteEntry(entryId: string): Promise<boolean>;
+  clearEntries(): Promise<number>;
 }
 
 export class MemoryInboxStore implements InboxStore {
@@ -39,5 +41,18 @@ export class MemoryInboxStore implements InboxStore {
 
   async saveEntry(entry: InboxEntry): Promise<void> {
     this.entries.push(structuredClone(entry));
+  }
+
+  async deleteEntry(entryId: string): Promise<boolean> {
+    const nextEntries = this.entries.filter((entry) => entry.id !== entryId);
+    const deleted = nextEntries.length !== this.entries.length;
+    this.entries = nextEntries;
+    return deleted;
+  }
+
+  async clearEntries(): Promise<number> {
+    const count = this.entries.length;
+    this.entries = [];
+    return count;
   }
 }

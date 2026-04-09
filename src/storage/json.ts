@@ -101,6 +101,23 @@ export class JsonFileInboxStore implements InboxStore {
   saveEntry(entry: InboxEntry): Promise<void> {
     return appendJsonLine(this.filePath, entry);
   }
+
+  async deleteEntry(entryId: string): Promise<boolean> {
+    const entries = await this.loadEntries();
+    const nextEntries = entries.filter((entry) => entry.id !== entryId);
+    if (nextEntries.length === entries.length) {
+      return false;
+    }
+
+    await writeJsonFile(this.filePath, nextEntries);
+    return true;
+  }
+
+  async clearEntries(): Promise<number> {
+    const entries = await this.loadEntries();
+    await writeJsonFile(this.filePath, []);
+    return entries.length;
+  }
 }
 
 type ChatMetadata = Omit<ChatRecord, "messages"> & {

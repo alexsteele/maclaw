@@ -153,6 +153,8 @@ export const compressHelpText = [
 export const inboxHelpText = [
   "Command: /inbox",
   "  /inbox             Show saved notifications",
+  "  /inbox rm <id>     Delete one notification",
+  "  /inbox clear       Clear all notifications",
 ].join("\n");
 
 export const sendHelpText = [
@@ -490,6 +492,7 @@ const renderInbox = (entries: InboxEntry[]): string => {
     .map(
       (entry) =>
         [
+          `id: ${entry.id}`,
           `${entry.kind} ${formatTaskTimestamp(entry.createdAt)}`,
           `to: ${entry.origin.channel}/${entry.origin.userId}`,
           entry.text,
@@ -791,6 +794,22 @@ const handleCompressCommand: CommandHandler = async (harness, input, options) =>
 const handleInboxCommand: CommandHandler = async (harness, input) => {
   if (input === "/inbox") {
     return renderInbox(await harness.listInbox());
+  }
+
+  if (input === "/inbox clear") {
+    const cleared = await harness.clearInbox();
+    return `cleared inbox: ${cleared}`;
+  }
+
+  if (input.startsWith("/inbox rm ")) {
+    const entryId = input.slice("/inbox rm ".length).trim();
+    if (entryId.length === 0) {
+      return "Usage: /inbox rm <id>";
+    }
+
+    return (await harness.deleteInboxEntry(entryId))
+      ? `deleted inbox entry: ${entryId}`
+      : `inbox entry not found: ${entryId}`;
   }
 
   if (input === "/inbox help" || input.startsWith("/inbox ")) {

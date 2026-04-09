@@ -370,6 +370,31 @@ test("dispatchCommand shows inbox help", async () => {
   }
 });
 
+test("dispatchCommand can delete and clear inbox entries", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-inbox-manage-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    await dispatchCommand(harness, "/send first");
+    await dispatchCommand(harness, "/send second");
+    const inbox = await harness.listInbox();
+    assert.equal(inbox.length, 2);
+
+    const deleteReply = await dispatchCommand(harness, `/inbox rm ${inbox[0]!.id}`);
+    const afterDelete = await harness.listInbox();
+    const clearReply = await dispatchCommand(harness, "/inbox clear");
+    const afterClear = await harness.listInbox();
+
+    assert.equal(deleteReply, `deleted inbox entry: ${inbox[0]!.id}`);
+    assert.equal(afterDelete.length, 1);
+    assert.equal(clearReply, "cleared inbox: 1");
+    assert.equal(afterClear.length, 0);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows chat and project usage from persisted assistant messages", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-"));
   const originalFetch = globalThis.fetch;

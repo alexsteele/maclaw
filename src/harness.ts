@@ -921,6 +921,14 @@ export class Harness {
     return this._inboxStore.loadEntries();
   }
 
+  async deleteInboxEntry(entryId: string): Promise<boolean> {
+    return this._inboxStore.deleteEntry(entryId);
+  }
+
+  async clearInbox(): Promise<number> {
+    return this._inboxStore.clearEntries();
+  }
+
   async sendManualNotification(input: {
     text: string;
     origin?: Origin;

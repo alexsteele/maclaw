@@ -335,6 +335,21 @@ export class SqliteInboxStore implements InboxStore {
         entry.readAt ?? null,
       );
   }
+
+  async deleteEntry(entryId: string): Promise<boolean> {
+    const result = this.database
+      .prepare("delete from inbox where id = ?")
+      .run(entryId);
+    return result.changes > 0;
+  }
+
+  async clearEntries(): Promise<number> {
+    const countRow = this.database
+      .prepare("select count(*) as count from inbox")
+      .get() as { count: number };
+    this.database.prepare("delete from inbox").run();
+    return Number(countRow.count);
+  }
 }
 
 export class SqliteTaskStore implements TaskStore {
