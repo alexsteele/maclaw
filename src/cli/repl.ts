@@ -17,12 +17,14 @@ const replHelpText = [
   "  /switch X         Switch the REPL to project folder X",
   "  /quit             Exit the REPL",
   "  /verbose <on|off>  Toggle verbose reply metadata",
+  "  /wrap [off|N]     Set REPL output wrap width",
 ].join("\n");
 
 const replProjectHelpText = [
   projectHelpText,
   "  /switch X         Switch the REPL to project folder X",
   "  /verbose <on|off>  Toggle verbose reply metadata",
+  "  /wrap [off|N]     Set REPL output wrap width",
 ].join("\n");
 
 const expandHome = (value: string): string => {
@@ -40,6 +42,36 @@ const expandHome = (value: string): string => {
 const replOrigin: Origin = {
   channel: "repl",
   userId: "local",
+};
+
+export const wrapReplLine = (line: string, width: number): string => {
+  if (line.length <= width || line.trim().length === 0) {
+    return line;
+  }
+
+  const indentMatch = line.match(/^(\s*)/u);
+  const indent = indentMatch?.[1] ?? "";
+  const content = line.trim();
+  const words = content.split(/\s+/u);
+  const wrapped: string[] = [];
+  let current = indent;
+
+  for (const word of words) {
+    const next = current.trim().length === 0 ? `${indent}${word}` : `${current} ${word}`;
+    if (current.length > indent.length && next.length > width) {
+      wrapped.push(current);
+      current = `${indent}${word}`;
+      continue;
+    }
+
+    current = next;
+  }
+
+  if (current.length > 0) {
+    wrapped.push(current);
+  }
+
+  return wrapped.join("\n");
 };
 
 export const loadReplHarness = (cwd: string = process.cwd()): Harness => {
@@ -74,13 +106,16 @@ class Repl {
   private readonly rl = readline.createInterface({ input, output });
   private harness: Harness;
   private verbose = false;
+  private wrapWidth = 100;
   private readonly onTaskMessage = async (task: Parameters<Parameters<Harness["start"]>[0]>[0], message: Parameters<Parameters<Harness["start"]>[0]>[1]): Promise<void> => {
-    output.write(`\n[scheduled:${task.title}] ${message.content}\n\n> `);
+    output.write(`\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n> `);
   };
   private readonly onNotification = async (
     notification: HarnessNotification,
   ): Promise<void> => {
-    output.write(`\n[notification:${notification.kind}] ${notification.text}\n\n> `);
+    output.write(
+      `\n${this.formatForDisplay(`[notification:${notification.kind}] ${notification.text}`)}\n\n> `,
+    );
   };
 
   constructor(harness: Harness) {
@@ -130,7 +165,18 @@ class Repl {
   }
 
   private writeLine(text: string): void {
-    output.write(`${text}\n\n`);
+    output.write(`${this.formatForDisplay(text)}\n\n`);
+  }
+
+  private formatForDisplay(text: string): string {
+    if (this.wrapWidth <= 0) {
+      return text;
+    }
+
+    return text
+      .split("\n")
+      .map((line) => wrapReplLine(line, this.wrapWidth))
+      .join("\n");
   }
 
   private formatVerboseFooter(result?: ProviderResult): string | null {
@@ -216,6 +262,29 @@ class Repl {
 
     if (line.startsWith("/verbose")) {
       this.writeLine("Usage: /verbose <on|off>");
+      return false;
+    }
+
+    if (line === "/wrap") {
+      this.writeLine(`wrap: ${this.wrapWidth > 0 ? this.wrapWidth : "off"}`);
+      return false;
+    }
+
+    if (line === "/wrap off") {
+      this.wrapWidth = 0;
+      this.writeLine("wrap: off");
+      return false;
+    }
+
+    if (line.startsWith("/wrap ")) {
+      const value = Number.parseInt(line.slice("/wrap ".length).trim(), 10);
+      if (!Number.isFinite(value) || value <= 0) {
+        this.writeLine("Usage: /wrap [off|N]");
+        return false;
+      }
+
+      this.wrapWidth = value;
+      this.writeLine(`wrap: ${this.wrapWidth}`);
       return false;
     }
 

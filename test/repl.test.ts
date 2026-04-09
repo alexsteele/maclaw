@@ -4,7 +4,13 @@ import path from "node:path";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
-import { loadReplHarness } from "../src/cli/repl.js";
+import { loadReplHarness, wrapReplLine } from "../src/cli/repl.js";
+
+test("wrapReplLine wraps long lines and preserves indentation", () => {
+  const wrapped = wrapReplLine("  alpha beta gamma delta", 12);
+
+  assert.equal(wrapped, "  alpha beta\n  gamma\n  delta");
+});
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-repl-"));
