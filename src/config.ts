@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";
+import { DEFAULT_MODEL } from "./models.js";
 import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
 import { normalizeDefaultTaskTime } from "./task.js";
@@ -48,7 +49,6 @@ export type ProjectConfig = {
   chatsDir: string;
 };
 
-const DEFAULT_MODEL = "openai/gpt-4.1-mini";
 const defaultTools: ToolPermission[] = ["read"];
 
 export const normalizeToolPermissions = (value: unknown): ToolPermission[] => {

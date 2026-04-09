@@ -12,6 +12,7 @@ import {
   normalizeConfiguredModel,
   type ProjectConfig,
 } from "../config.js";
+import { renderModelSuggestions } from "../models.js";
 import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
@@ -224,6 +225,8 @@ const runProviderSetup = async (
     prompt.print();
     prompt.print("OpenAI API setup:");
     prompt.print(`  ${OPENAI_SETUP_URL}`);
+    prompt.print("Suggested models:");
+    prompt.print(renderModelSuggestions("openai"));
 
     projectConfig.model = normalizeConfiguredModel(
       await prompt.askLine("Model?", "gpt-5.4-mini"),
@@ -237,6 +240,9 @@ const runProviderSetup = async (
   }
 
   if (providerChoice === "dummy") {
+    prompt.print();
+    prompt.print("Suggested models:");
+    prompt.print(renderModelSuggestions("dummy"));
     projectConfig.model = normalizeConfiguredModel(
       await prompt.askLine("Model?", "default"),
       "dummy",

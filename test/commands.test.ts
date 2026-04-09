@@ -8,6 +8,7 @@ import {
   dispatchCommand,
   helpText,
   inboxHelpText,
+  modelHelpText,
   projectHelpText,
   saveHelpText,
   taskScheduleHelpText,
@@ -565,6 +566,25 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
   }
 });
 
+test("dispatchCommand shows suggested models", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-models-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/model list");
+    const helpReply = await dispatchCommand(harness, "/model help");
+
+    assert.match(reply ?? "", /openai\/gpt-5\.4-nano/u);
+    assert.match(reply ?? "", /openai\/gpt-5\.4-mini/u);
+    assert.match(reply ?? "", /dummy\/default/u);
+    assert.match(reply ?? "", /OpenAI model docs:/u);
+    assert.equal(helpReply, modelHelpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows, gets, and sets project config", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-config-"));
 
@@ -910,6 +930,7 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
     assert.equal(await dispatchCommand(harness, "/task schedule help"), await dispatchCommand(harness, "/help task schedule"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
+    assert.equal(await dispatchCommand(harness, "/model help"), await dispatchCommand(harness, "/help model"));
     assert.equal(await dispatchCommand(harness, "/compress help"), compressHelpText);
     assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
     assert.equal(await dispatchCommand(harness, "/usage help"), usageHelpText);

@@ -5,6 +5,7 @@ import {
   parseProjectConfigValue,
   renderProjectConfig,
 } from "./project-config.js";
+import { renderModelSuggestions } from "./models.js";
 import { parseTaskSchedule } from "./task.js";
 import type {
   AgentRecord,
@@ -31,6 +32,7 @@ export const helpText = [
   "  /compress          Compress the current chat",
   "  /save              Save the current chat transcript to a file",
   "  /usage             Show token usage for the current chat",
+  "  /model             Show suggested models",
   "  /config            Project config commands",
   "  /project           Project information commands",
   "  /chat              Chat management commands",
@@ -74,6 +76,12 @@ export const chatHelpText = [
   "  /chat reset        Clear the current chat",
   "  /chat compress     Compress the current chat",
   "  /chat rm X         Delete chat X",
+].join("\n");
+
+export const modelHelpText = [
+  "Command: /model",
+  "  /model              Show suggested models",
+  "  /model list         Show suggested models",
 ].join("\n");
 
 export const taskHelpText = [
@@ -637,6 +645,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
     return saveHelpText;
   }
 
+  if (input === "/help model") {
+    return modelHelpText;
+  }
+
   if (input === "/help compress") {
     return compressHelpText;
   }
@@ -802,6 +814,18 @@ const handleUsageCommand: CommandHandler = async (harness, input, options) => {
   }
 
   return usageHelpText;
+};
+
+const handleModelCommand: CommandHandler = async (_harness, input) => {
+  if (input === "/model" || input === "/model list") {
+    return renderModelSuggestions();
+  }
+
+  if (input === "/model help" || input.startsWith("/model ")) {
+    return modelHelpText;
+  }
+
+  return modelHelpText;
 };
 
 const handleConfigCommand: CommandHandler = async (harness, input) => {
@@ -1305,6 +1329,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   save: handleSaveCommand,
   compress: handleCompressCommand,
   usage: handleUsageCommand,
+  model: handleModelCommand,
   project: handleProjectCommand,
   config: handleConfigCommand,
   chat: handleChatCommand,
