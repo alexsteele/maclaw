@@ -83,7 +83,7 @@ const buildSystemPrompt = async (
     "Local skills are available as user-authored task descriptions. Read them when useful.",
     `Project initialized: ${existsSync(config.projectConfigFile) ? "yes" : "no"}.`,
     `Chat retention: ${config.retentionDays} days.`,
-    `Compression mode: ${config.compressionMode}. If set to planned, compression is not implemented yet.`,
+    `Compression mode: ${config.compressionMode}.`,
     "",
     "Available skills:",
     skillsBlock,
@@ -92,6 +92,13 @@ const buildSystemPrompt = async (
     `Current time: ${now.toISOString()}`,
     `Current local time: ${formatLocalDateTime(now)}`,
     `Local timezone: ${getLocalTimeZone()}`,
+    ...(chat.summary
+      ? [
+          "",
+          "Compressed chat summary:",
+          chat.summary,
+        ]
+      : []),
     ...(basePrompt
       ? [
           "",

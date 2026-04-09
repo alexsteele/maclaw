@@ -129,3 +129,57 @@ test("ChatRuntime only sends the most recent contextMessages to the provider", a
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("ChatRuntime includes the compressed chat summary in the system prompt", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-summary-"));
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
+
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as { input?: Array<Record<string, unknown>> });
+      return {
+        ok: true,
+        json: async () => ({ output_text: "ok" }),
+      } as Response;
+    }) as typeof fetch;
+
+    const config: ProjectConfig = {
+      name: path.basename(projectDir),
+      createdAt: undefined,
+      model: "openai/gpt-4.1-mini",
+      storage: "json",
+      notifications: "all",
+      defaultTaskTime: "9:00 AM",
+      contextMessages: 2,
+      maxToolIterations: 8,
+      retentionDays: 30,
+      skillsDir: path.join(projectDir, ".maclaw", "skills"),
+      compressionMode: "planned",
+      schedulerPollMs: 1_000,
+      projectFolder: projectDir,
+      projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+      chatId: "default",
+      chatsDir: path.join(projectDir, ".maclaw", "chats"),
+      openAiApiKey: "test-key",
+    };
+
+    const chatStore = new JsonFileChatStore(config.chatsDir);
+    const runtime = new ChatRuntime(config, chatStore, createTools(config));
+    const chat = await runtime.loadActiveChat();
+    chat.summary = "Earlier we decided to use sqlite for project state.";
+    await chatStore.saveChat(chat);
+
+    await runtime.prompt("what did we decide?");
+
+    const input = requestBodies[0]?.input ?? [];
+    const systemMessage = input[0] as { content?: Array<{ text?: string }> };
+    const systemPrompt = systemMessage.content?.[0]?.text ?? "";
+
+    assert.match(systemPrompt, /Compressed chat summary:/u);
+    assert.match(systemPrompt, /Earlier we decided to use sqlite for project state\./u);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
