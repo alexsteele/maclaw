@@ -550,6 +550,12 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     const helpReply = await dispatchCommand(harness, "/tools help");
     const sharedHelpReply = await dispatchCommand(harness, "/help tools");
 
+    assert.match(reply ?? "", /list_chats/u);
+    assert.match(reply ?? "", /show_chat/u);
+    assert.match(reply ?? "", /list_agents/u);
+    assert.match(reply ?? "", /show_agent/u);
+    assert.match(reply ?? "", /list_tasks/u);
+    assert.match(reply ?? "", /show_task/u);
     assert.match(reply ?? "", /list_skills/u);
     assert.match(reply ?? "", /read_skill/u);
     assert.match(reply ?? "", /get_time/u);
