@@ -11,6 +11,7 @@ import {
   modelHelpText,
   projectHelpText,
   saveHelpText,
+  sendHelpText,
   taskScheduleHelpText,
   usageHelpText,
 } from "../src/commands.js";
@@ -304,6 +305,56 @@ test("dispatchCommand shows saved inbox notifications", async () => {
   }
 });
 
+test("dispatchCommand saves a manual notification to the inbox", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-send-inbox-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/send hello from send");
+    const inbox = await harness.listInbox();
+
+    assert.equal(reply, "saved notification to inbox");
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.kind, "manual");
+    assert.equal(inbox[0]?.sourceType, "user");
+    assert.equal(inbox[0]?.text, "hello from send");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can send a manual notification to the current origin", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-send-origin-"));
+  const delivered: string[] = [];
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.start(
+      async () => {},
+      async (notification) => {
+        delivered.push(`${notification.origin.channel}/${notification.origin.userId}:${notification.text}`);
+      },
+    );
+
+    const reply = await dispatchCommand(harness, "/send origin | ping", {
+      origin: {
+        channel: "web",
+        userId: "default",
+        conversationId: "portal:test",
+      },
+    });
+    const inbox = await harness.listInbox();
+
+    assert.equal(reply, "sent notification to web/default");
+    assert.deepEqual(delivered, ["web/default:ping"]);
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.sourceType, "user");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows inbox help", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-inbox-help-"));
 
@@ -313,6 +364,7 @@ test("dispatchCommand shows inbox help", async () => {
     const reply = await dispatchCommand(harness, "/inbox help");
 
     assert.equal(reply, inboxHelpText);
+    assert.equal(await dispatchCommand(harness, "/send help"), sendHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

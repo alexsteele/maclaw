@@ -115,6 +115,11 @@ const createUsageSummary = (): UsageSummary => ({
   reasoningTokens: 0,
 });
 
+const localInboxOrigin: Origin = {
+  channel: "local",
+  userId: "local",
+};
+
 const addUsage = (summary: UsageSummary, chat: ChatRecord): UsageSummary => {
   for (const message of chat.messages) {
     if (!message.usage) {
@@ -914,6 +919,53 @@ export class Harness {
 
   async listInbox(): Promise<InboxEntry[]> {
     return this._inboxStore.loadEntries();
+  }
+
+  async sendManualNotification(input: {
+    text: string;
+    origin?: Origin;
+    deliver?: boolean;
+    saveToInbox?: boolean;
+  }): Promise<{ delivered: boolean; saved: boolean }> {
+    const text = input.text.trim();
+    if (text.length === 0) {
+      return { delivered: false, saved: false };
+    }
+
+    const origin = input.origin ?? localInboxOrigin;
+    const saveToInbox = input.saveToInbox ?? true;
+    const deliver = input.deliver ?? Boolean(input.origin);
+
+    if (saveToInbox) {
+      await this._inboxStore.saveEntry(
+        createInboxEntry({
+          kind: "manual",
+          text,
+          origin,
+          sourceType: "user",
+          sourceId: origin.userId,
+          sourceName: "user",
+        }),
+      );
+    }
+
+    if (deliver && input.origin) {
+      await Promise.resolve(
+        this._notificationListener?.({
+          kind: "manual",
+          origin: input.origin,
+          text,
+          sourceType: "user",
+          sourceId: input.origin.userId,
+          sourceName: "user",
+        }),
+      );
+    }
+
+    return {
+      delivered: deliver && input.origin !== undefined,
+      saved: saveToInbox,
+    };
   }
 
   getAgent(agentId: string): AgentRecord | undefined {

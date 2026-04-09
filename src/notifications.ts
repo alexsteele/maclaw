@@ -7,6 +7,7 @@ export const ALL_NOTIFICATION_KINDS: NotificationKind[] = [
   "agentFailed",
   "taskCompleted",
   "taskFailed",
+  "manual",
 ];
 
 const NOTIFICATION_SELECTORS = new Set<NotificationSelector>([

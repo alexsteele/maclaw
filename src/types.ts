@@ -44,7 +44,8 @@ export type NotificationKind =
   | "agentCompleted"
   | "agentFailed"
   | "taskCompleted"
-  | "taskFailed";
+  | "taskFailed"
+  | "manual";
 
 export type NotificationSelector =
   | NotificationKind
@@ -76,7 +77,7 @@ export type InboxEntry = {
   kind: NotificationKind;
   text: string;
   origin: Origin;
-  sourceType: "agent" | "task";
+  sourceType: "agent" | "task" | "user";
   sourceId: string;
   sourceName?: string;
   createdAt: string;

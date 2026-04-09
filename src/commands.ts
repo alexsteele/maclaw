@@ -41,6 +41,7 @@ export const helpText = [
   "  /skills            List local skills",
   "  /agent             Agent management commands",
   "  /task              Task scheduling commands",
+  "  /send              Send a test notification",
   "  /inbox             Show saved notifications",
 ].join("\n");
 
@@ -152,6 +153,14 @@ export const compressHelpText = [
 export const inboxHelpText = [
   "Command: /inbox",
   "  /inbox             Show saved notifications",
+].join("\n");
+
+export const sendHelpText = [
+  "Command: /send",
+  "  /send <message>              Save a test notification to the inbox",
+  "  /send inbox | <message>      Save a test notification to the inbox",
+  "  /send origin | <message>     Send a test notification to the current origin",
+  "  /send <channel> | <message>  Send to the current origin when it matches the channel",
 ].join("\n");
 
 export const usageHelpText = [
@@ -791,6 +800,74 @@ const handleInboxCommand: CommandHandler = async (harness, input) => {
   return inboxHelpText;
 };
 
+const handleSendCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/send") {
+    return sendHelpText;
+  }
+
+  if (input === "/send help" || input.startsWith("/send ")) {
+    const body = input.slice("/send".length).trim();
+    if (body.length === 0 || body === "help") {
+      return sendHelpText;
+    }
+
+    const separator = body.indexOf("|");
+    if (separator < 0) {
+      await harness.sendManualNotification({
+        text: body,
+        origin: options.origin,
+        deliver: false,
+        saveToInbox: true,
+      });
+      return "saved notification to inbox";
+    }
+
+    const target = body.slice(0, separator).trim();
+    const text = body.slice(separator + 1).trim();
+    if (target.length === 0 || text.length === 0) {
+      return sendHelpText;
+    }
+
+    if (target === "inbox") {
+      await harness.sendManualNotification({
+        text,
+        origin: options.origin,
+        deliver: false,
+        saveToInbox: true,
+      });
+      return "saved notification to inbox";
+    }
+
+    if (target === "origin") {
+      if (!options.origin) {
+        return "No current origin available for /send origin.";
+      }
+
+      await harness.sendManualNotification({
+        text,
+        origin: options.origin,
+        deliver: true,
+        saveToInbox: true,
+      });
+      return `sent notification to ${options.origin.channel}/${options.origin.userId}`;
+    }
+
+    if (!options.origin || options.origin.channel !== target) {
+      return `Cannot route to channel: ${target}`;
+    }
+
+    await harness.sendManualNotification({
+      text,
+      origin: options.origin,
+      deliver: true,
+      saveToInbox: true,
+    });
+    return `sent notification to ${options.origin.channel}/${options.origin.userId}`;
+  }
+
+  return sendHelpText;
+};
+
 const handleUsageCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/usage") {
     return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
@@ -1326,6 +1403,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   new: handleNewCommand,
   fork: handleForkCommand,
   reset: handleResetCommand,
+  send: handleSendCommand,
   inbox: handleInboxCommand,
   save: handleSaveCommand,
   compress: handleCompressCommand,
