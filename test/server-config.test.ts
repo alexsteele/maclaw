@@ -19,6 +19,7 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
       configPath,
       `${JSON.stringify(
         {
+          port: 4100,
           projects: [
             { name: "home", folder: projectA },
             { name: "work", folder: projectB },
@@ -60,6 +61,7 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
       { name: "home", folder: projectA },
       { name: "work", folder: projectB },
     ]);
+    assert.equal(config.port, 4100);
     assert.equal(config.defaultProject, "home");
     assert.equal(config.channels.discord.enabled, true);
     assert.equal(config.channels.email.enabled, true);
@@ -144,6 +146,7 @@ test("loadServerConfig keeps channels optional when none are configured", async 
     );
 
     const config = loadServerConfig(configPath);
+    assert.equal(config.port, 4000);
     assert.equal(config.channels, undefined);
   } finally {
     await rm(rootDir, { recursive: true, force: true });

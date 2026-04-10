@@ -61,6 +61,7 @@ Example `server.json`:
 ```json
 {
   "defaultProject": "home",
+  "port": 4000,
   "projects": [{ "name": "home", "folder": "/path/to/home-project" }],
   "channels": {
     "discord": {

@@ -17,6 +17,7 @@ import {
 } from "../config.js";
 import { renderModelSuggestions } from "../models.js";
 import {
+  defaultServerPort,
   defaultServerConfigFile,
   defaultServerSecretsFile,
   maclawHomeDir,
@@ -60,6 +61,7 @@ export const normalizeSetupSection = (value: string | undefined): SetupSection |
 
 type ServerConfigData = {
   defaultProject?: string;
+  port?: number;
   projects?: ServerConfig["projects"];
   channels?: {
     discord?: Partial<NonNullable<ServerConfig["channels"]>["discord"]>;
@@ -206,12 +208,19 @@ class SetupPrompter {
     return (await this.waitForAnswer(prompt)).trim();
   }
 
-  async askLine(prompt: string, defaultValue?: string): Promise<string> {
+  async askLine(
+    prompt: string,
+    defaultValue?: string,
+    options: { preserveBlank?: boolean } = {},
+  ): Promise<string> {
     this.print(prompt);
     if (defaultValue) {
       this.printDefault(defaultValue);
     }
     const answer = await this.nextAnswer("> ");
+    if (options.preserveBlank && !answer) {
+      return "";
+    }
     return answer || defaultValue || "";
   }
 
@@ -433,16 +442,29 @@ const runProjectSetup = async (
 const runServerSetup = async (
   prompt: SetupPrompter,
   serverConfig: ServerConfigData,
+  confirmSetup = true,
 ): Promise<boolean> => {
-  const setupServer = await prompt.askChoice(
-    "Set up maclaw server?",
-    ["yes", "skip"],
-    "yes",
-  );
+  const askServerPort = async (): Promise<void> => {
+    const port = Number.parseInt(await prompt.askLine(
+      "Server port",
+      String(serverConfig.port ?? defaultServerPort()),
+    ), 10) || defaultServerPort();
+    serverConfig.port = port;
+  };
 
-  if (setupServer !== "yes") {
-    return false;
+  if (confirmSetup) {
+    const setupServer = await prompt.askChoice(
+      "Set up maclaw server?",
+      ["yes", "skip"],
+      "yes",
+    );
+
+    if (setupServer !== "yes") {
+      return false;
+    }
   }
+
+  await askServerPort();
 
   const registeredProjects = serverConfig.projects ?? [];
   if (registeredProjects.length === 0) {
@@ -470,13 +492,14 @@ const runServerSetup = async (
 
   prompt.print();
   const projectNames = registeredProjects.map((project) => project.name);
-  serverConfig.defaultProject = await prompt.askChoice(
+  const defaultProject = await prompt.askChoice(
     "Default server project?",
     projectNames,
     projectNames.includes(serverConfig.defaultProject ?? "")
       ? serverConfig.defaultProject as string
       : projectNames[0],
   );
+  serverConfig.defaultProject = defaultProject;
   return true;
 };
 
@@ -710,6 +733,7 @@ const runSetupFlow = async (
   }
 
   const globalHome = maclawHomeDir(homeDir);
+  const hasExistingServerConfig = existsSync(defaultServerConfigFile(homeDir));
   const hasExistingGlobalHome = existsSync(globalHome);
   const saveGlobalConfig = hasExistingGlobalHome
     ? true
@@ -753,7 +777,7 @@ const runSetupFlow = async (
 
   const configuredServer = saveGlobalConfig
     && (setupSection === "all" || setupSection === "server")
-    ? await runServerSetup(prompt, serverConfig)
+    ? await runServerSetup(prompt, serverConfig, setupSection !== "server")
     : false;
   const configuredChannels = saveGlobalConfig
     && (setupSection === "all" || setupSection === "channels")

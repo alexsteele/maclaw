@@ -42,6 +42,7 @@ export type EmailConfig = {
 export type ServerConfig = {
   configFile: string;
   defaultProject?: string;
+  port?: number;
   projects: ServerProjectConfig[];
   channels?: {
     discord?: DiscordConfig;
@@ -84,6 +85,8 @@ export const defaultServerConfigFile = (homeDir: string = os.homedir()): string 
 export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string =>
   process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
+export const defaultServerPort = (): number => 4000;
+
 export const defaultWhatsAppConfig = (): Omit<WhatsAppConfig, "enabled"> => ({
   graphApiVersion: "v23.0",
   port: 3000,
@@ -121,6 +124,7 @@ export const loadServerConfig = (
   const raw = readFileSync(resolvedConfigFile, "utf8");
   const parsed = JSON.parse(raw) as {
     defaultProject?: string;
+    port?: number;
     channels?: {
       discord?: Partial<DiscordConfig>;
       email?: Partial<EmailConfig>;
@@ -199,6 +203,7 @@ export const loadServerConfig = (
   return {
     configFile: resolvedConfigFile,
     defaultProject: parsed.defaultProject,
+    port: toPositiveInt(parsed.port, defaultServerPort()),
     projects: projects.map((project) => ({
       name: project.name,
       folder: path.resolve(project.folder),

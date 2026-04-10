@@ -41,6 +41,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       "sk-test-openai",
       "1",
       "1",
+      "",
       "1,2",
       "xapp-slack",
       "xoxb-slack",
@@ -305,6 +306,36 @@ test("runSetup can jump straight to channels with startSection", async () => {
     assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
     assert.doesNotMatch(output.toString(), /Set up channels\?/u);
     assert.match(output.toString(), /Enable channels\?/u);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("runSetup can jump straight to server with startSection", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-server-only-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      startSection: "server",
+      answers: [
+        "yes",
+        "4100",
+      ],
+    });
+
+    assert.doesNotMatch(output.toString(), /Welcome to maclaw setup!/u);
+    assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
+    assert.doesNotMatch(output.toString(), /Set up maclaw server\?/u);
+    assert.match(output.toString(), /Server port/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

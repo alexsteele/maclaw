@@ -11,6 +11,7 @@ import { dispatchCommand } from "./commands.js";
 import { Harness } from "./harness.js";
 import { ChannelRouter } from "./router.js";
 import {
+  defaultServerPort,
   loadServerConfig,
   loadServerSecrets,
   type ServerConfig,
@@ -506,7 +507,7 @@ export class MaclawServer {
 
     await new Promise<void>((resolve, reject) => {
       this.httpServer?.once("error", reject);
-      this.httpServer?.listen(this.options.port ?? 4000, resolve);
+      this.httpServer?.listen(this.options.port ?? this.config.port ?? defaultServerPort(), resolve);
     });
 
     const address = this.httpServer.address();
