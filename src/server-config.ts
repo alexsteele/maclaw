@@ -1,3 +1,9 @@
+/**
+ * Global server config and secrets loading for maclaw.
+ *
+ * This module defines the server-wide channel config, managed project list, and
+ * secret loading used by `MaclawServer` and the REPL. See `docs/config.md`.
+ */
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";

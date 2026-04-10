@@ -1,3 +1,11 @@
+/**
+ * Chat runtime and chat store interfaces for maclaw.
+ *
+ * This module builds prompt context, loads and saves chat history, and runs the
+ * provider loop for normal chat messages, scheduled tasks, and chat compression.
+ * See `README.md` for the runtime architecture and `docs/config.md` for chat
+ * configuration details.
+ */
 import { existsSync, readFileSync } from "node:fs";
 import { parseConfiguredModel, type ProjectConfig } from "./config.js";
 import { makeId } from "./fs-utils.js";

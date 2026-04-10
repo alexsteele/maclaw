@@ -1,4 +1,9 @@
-// Shared project config helpers used by CLI and slash commands.
+/**
+ * Shared project config helpers used by CLI and slash commands.
+ *
+ * This keeps config rendering and parsing consistent between `maclaw config`
+ * and the shared `/config` command surface. See `docs/config.md`.
+ */
 import {
   normalizeConfiguredModel,
   normalizeToolPermissions,

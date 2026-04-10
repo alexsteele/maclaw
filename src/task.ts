@@ -1,3 +1,15 @@
+/**
+ * Task schedule parsing helpers for maclaw.
+ *
+ * This module parses one-time and recurring task schedule strings such as:
+ * - `once today`
+ * - `once 4/5/2026 9:00 AM`
+ * - `daily 9:00 AM`
+ * - `weekly mon,wed,fri 5:30 PM`
+ *
+ * See `/help task schedule` and `docs/config.md` for the user-facing schedule
+ * and default task-time behavior.
+ */
 import type { TaskSchedule, Weekday } from "./types.js";
 
 const weekdayOrder: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];

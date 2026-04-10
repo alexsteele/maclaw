@@ -1,3 +1,9 @@
+/**
+ * Task scheduling runtime and task store interfaces for maclaw.
+ *
+ * This module stores scheduled tasks, finds due work, and records task runs.
+ * See `README.md` and `docs/design.md` for the higher-level runtime flow.
+ */
 import type { ScheduledTask, TaskRunLogEntry, TaskSchedule, Weekday } from "./types.js";
 
 const weekdayOrder: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];

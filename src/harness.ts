@@ -1,3 +1,10 @@
+/**
+ * Harness coordinates the main maclaw runtime for one project.
+ *
+ * It owns chats, agents, tasks, inbox entries, tools, and notification routing,
+ * and is the main entrypoint used by the REPL, server, and commands layer.
+ * See `README.md` and `docs/config.md` for the higher-level architecture.
+ */
 import os from "node:os";
 import path from "node:path";
 import { existsSync } from "node:fs";

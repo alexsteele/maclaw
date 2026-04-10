@@ -1,3 +1,9 @@
+/**
+ * Project configuration loading, defaults, and path helpers for maclaw.
+ *
+ * This module defines the main `ProjectConfig` shape used by the harness and
+ * runtime. See `docs/config.md` for the user-facing config documentation.
+ */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";

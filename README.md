@@ -236,3 +236,6 @@ See [docs/config.md](docs/config.md) for policy and override examples.
   calling APIs, etc.
 - **Notification**: Sent to the user over a channel by an agent, task, or other
   event.
+
+See [docs/design.md](docs/design.md) for runtime architecture, key modules, and
+an overview diagram.
