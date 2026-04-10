@@ -77,6 +77,7 @@ Enable channels?
   [x] Slack (Socket Mode websocket)
   [x] Discord (Gateway websocket)
   [ ] WhatsApp (webhook, public endpoint)
+  [ ] Email (outbound SMTP notifications)
 
 Slack setup:
   Create a Slack app and enable Socket Mode:
@@ -91,6 +92,11 @@ Discord setup:
   https://discord.com/developers/applications
   Discord bot token:
 > ...
+
+Email setup:
+  maclaw sends outbound email notifications over SMTP.
+  For Gmail, use smtp.gmail.com:587 with STARTTLS and a Google App Password:
+  https://myaccount.google.com/apppasswords
 
 Writing:
   .maclaw/maclaw.json

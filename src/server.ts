@@ -6,6 +6,7 @@ import type {
   ChannelMessage,
 } from "./channels/channel.js";
 import { DiscordChannel } from "./channels/discord.js";
+import { EmailChannel } from "./channels/email.js";
 import { dispatchCommand } from "./commands.js";
 import { Harness, type HarnessNotification } from "./harness.js";
 import {
@@ -515,6 +516,13 @@ export class MaclawServer {
       this.channels.set(
         "discord",
         new DiscordChannel(this.config.channels.discord, this.secrets.discord),
+      );
+    }
+
+    if (this.config.channels?.email?.enabled) {
+      this.channels.set(
+        "email",
+        new EmailChannel(this.config.channels.email, this.secrets.email),
       );
     }
 

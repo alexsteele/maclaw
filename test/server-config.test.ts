@@ -28,6 +28,14 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
             discord: {
               enabled: true,
             },
+            email: {
+              enabled: true,
+              from: "maclaw@example.com",
+              to: "alex@example.com",
+              host: "smtp.example.com",
+              port: 2525,
+              startTls: false,
+            },
             slack: {
               enabled: true,
               botUserId: "U123456",
@@ -54,6 +62,12 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
     ]);
     assert.equal(config.defaultProject, "home");
     assert.equal(config.channels.discord.enabled, true);
+    assert.equal(config.channels.email.enabled, true);
+    assert.equal(config.channels.email.from, "maclaw@example.com");
+    assert.equal(config.channels.email.to, "alex@example.com");
+    assert.equal(config.channels.email.host, "smtp.example.com");
+    assert.equal(config.channels.email.port, 2525);
+    assert.equal(config.channels.email.startTls, false);
     assert.equal(config.channels.slack.enabled, true);
     assert.equal(config.channels.slack.botUserId, "U123456");
     assert.equal(config.channels.whatsapp.enabled, true);
@@ -151,6 +165,10 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
           discord: {
             botToken: "file-discord-bot-token",
           },
+          email: {
+            smtpUser: "file-smtp-user",
+            smtpPassword: "file-smtp-password",
+          },
           slack: {
             appToken: "xapp-file-slack-app-token",
             botToken: "file-slack-bot-token",
@@ -169,6 +187,8 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
     const originalAccessToken = process.env.MACLAW_WHATSAPP_ACCESS_TOKEN;
     const originalVerifyToken = process.env.MACLAW_WHATSAPP_VERIFY_TOKEN;
     const originalDiscordBotToken = process.env.MACLAW_DISCORD_BOT_TOKEN;
+    const originalEmailSmtpUser = process.env.MACLAW_EMAIL_SMTP_USER;
+    const originalEmailSmtpPassword = process.env.MACLAW_EMAIL_SMTP_PASSWORD;
     const originalSlackAppToken = process.env.MACLAW_SLACK_APP_TOKEN;
     const originalSlackBotToken = process.env.MACLAW_SLACK_BOT_TOKEN;
     const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -177,6 +197,8 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
       process.env.MACLAW_WHATSAPP_ACCESS_TOKEN = "env-access-token";
       delete process.env.MACLAW_WHATSAPP_VERIFY_TOKEN;
       process.env.MACLAW_DISCORD_BOT_TOKEN = "env-discord-bot-token";
+      process.env.MACLAW_EMAIL_SMTP_USER = "env-smtp-user";
+      delete process.env.MACLAW_EMAIL_SMTP_PASSWORD;
       process.env.MACLAW_SLACK_APP_TOKEN = "env-slack-app-token";
       delete process.env.MACLAW_SLACK_BOT_TOKEN;
       process.env.OPENAI_API_KEY = "env-openai-api-key";
@@ -186,6 +208,8 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
       assert.equal(secrets.configFile, secretsPath);
       assert.equal(secrets.openai.apiKey, "env-openai-api-key");
       assert.equal(secrets.discord.botToken, "env-discord-bot-token");
+      assert.equal(secrets.email.smtpUser, "env-smtp-user");
+      assert.equal(secrets.email.smtpPassword, "file-smtp-password");
       assert.equal(secrets.slack.appToken, "env-slack-app-token");
       assert.equal(secrets.slack.botToken, "file-slack-bot-token");
       assert.equal(secrets.whatsapp.accessToken, "env-access-token");
@@ -207,6 +231,18 @@ test("loadServerSecrets reads WhatsApp secrets and lets env override file values
         delete process.env.MACLAW_DISCORD_BOT_TOKEN;
       } else {
         process.env.MACLAW_DISCORD_BOT_TOKEN = originalDiscordBotToken;
+      }
+
+      if (originalEmailSmtpUser === undefined) {
+        delete process.env.MACLAW_EMAIL_SMTP_USER;
+      } else {
+        process.env.MACLAW_EMAIL_SMTP_USER = originalEmailSmtpUser;
+      }
+
+      if (originalEmailSmtpPassword === undefined) {
+        delete process.env.MACLAW_EMAIL_SMTP_PASSWORD;
+      } else {
+        process.env.MACLAW_EMAIL_SMTP_PASSWORD = originalEmailSmtpPassword;
       }
 
       if (originalSlackAppToken === undefined) {

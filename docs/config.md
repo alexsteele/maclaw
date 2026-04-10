@@ -66,6 +66,14 @@ Example `server.json`:
     "discord": {
       "enabled": true
     },
+    "email": {
+      "enabled": true,
+      "from": "you@gmail.com",
+      "to": "you@gmail.com",
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "startTls": true
+    },
     "slack": {
       "enabled": true,
       "botUserId": "U12345678"
@@ -85,6 +93,10 @@ Example `secrets.json`:
 {
   "openai": {
     "apiKey": "your-openai-api-key"
+  },
+  "email": {
+    "smtpUser": "you@gmail.com",
+    "smtpPassword": "your-google-app-password"
   },
   "discord": {
     "botToken": "your-discord-bot-token"
@@ -106,6 +118,8 @@ Example `secrets.json`:
 - `MACLAW_SERVER_CONFIG`: overrides the path to `server.json`
 - `MACLAW_SERVER_SECRETS`: overrides the path to `secrets.json`
 - `OPENAI_API_KEY`: overrides `secrets.json` OpenAI API key
+- `MACLAW_EMAIL_SMTP_USER`: overrides email SMTP username
+- `MACLAW_EMAIL_SMTP_PASSWORD`: overrides email SMTP password
 - `MACLAW_DISCORD_BOT_TOKEN`: overrides Discord bot token
 - `MACLAW_SLACK_APP_TOKEN`: overrides Slack app token
 - `MACLAW_SLACK_BOT_TOKEN`: overrides Slack bot token
@@ -152,6 +166,9 @@ Agents and scheduled tasks can override project notifications with JSON options
 - `defaultProject`, if set, must match a configured project name.
 - Slack, Discord, and WhatsApp channel config is deny-by-default unless
   explicitly enabled.
+- Email channel config is outbound-only for now.
+- `channels.email.to` is optional. If omitted, email notifications default to
+  `channels.email.from`.
 - WhatsApp defaults currently include:
   - `graphApiVersion: "v23.0"`
   - `port: 3000`

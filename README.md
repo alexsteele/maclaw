@@ -192,14 +192,15 @@ Channels are how you talk to maclaw. maclaw supports:
 
 - REPL (no server needed)
 - Portal webapp
-- slack via Socket Mode websocket
+- **slack** via Socket Mode websocket
   - setup: create a Slack app and enable Socket Mode first.
-- discord via gateway websocket
+- **discord** via gateway websocket
   - setup: register a Discord bot in the Discord Developer Portal first.
-- whatsapp via webhooks
+- **whatsapp** via webhooks
   - setup: configure a WhatsApp Cloud API app and webhook first.
   - warning: this exposes a public webhook, so be careful about how and where
     you run it.
+- **email** send-only via smtp
 
 ## Notifications
 

@@ -61,6 +61,14 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       projects: Array<{ name: string; folder: string }>;
       channels?: {
         discord?: { enabled: boolean };
+        email?: {
+          enabled: boolean;
+          from: string;
+          host: string;
+          port: number;
+          startTls: boolean;
+          to?: string;
+        };
         slack?: { enabled: boolean };
         whatsapp?: {
           enabled: boolean;
@@ -73,6 +81,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
     };
     const secrets = JSON.parse(await readFile(secretsPath, "utf8")) as {
       openai: { apiKey?: string };
+      email: { smtpUser?: string; smtpPassword?: string };
       slack: { appToken?: string; botToken?: string };
       discord: { botToken?: string };
       whatsapp: { accessToken?: string; verifyToken?: string };
@@ -83,8 +92,10 @@ test("runSetup writes project, server config, and secrets from a simple guided f
     assert.equal(serverConfig.defaultProject, "default");
     assert.equal(serverConfig.channels?.slack?.enabled, true);
     assert.equal(serverConfig.channels?.discord?.enabled, true);
+    assert.equal(serverConfig.channels?.email, undefined);
     assert.equal(serverConfig.channels?.whatsapp, undefined);
     assert.equal(secrets.openai.apiKey, "sk-test-openai");
+    assert.equal(secrets.email, undefined);
     assert.equal(secrets.slack.appToken, "xapp-slack");
     assert.equal(secrets.slack.botToken, "xoxb-slack");
     assert.equal(secrets.discord.botToken, "discord-token");
@@ -173,6 +184,14 @@ test("runSetup merges existing server config and secrets instead of overwriting 
       projects: Array<{ name: string; folder: string }>;
       channels: {
         discord: { enabled: boolean };
+        email?: {
+          enabled: boolean;
+          from: string;
+          host: string;
+          port: number;
+          startTls: boolean;
+          to?: string;
+        };
         slack: { enabled: boolean; botUserId?: string };
         whatsapp: {
           enabled: boolean;
@@ -186,6 +205,7 @@ test("runSetup merges existing server config and secrets instead of overwriting 
     const secrets = JSON.parse(await readFile(secretsPath, "utf8")) as {
       openai: { apiKey?: string };
       discord: { botToken?: string };
+      email?: { smtpUser?: string; smtpPassword?: string };
       slack: { appToken?: string; botToken?: string };
       whatsapp: { accessToken?: string; verifyToken?: string };
     };
@@ -195,6 +215,7 @@ test("runSetup merges existing server config and secrets instead of overwriting 
       { name: "existing", folder: "/tmp/existing-project" },
     ]);
     assert.equal(serverConfig.channels.discord.enabled, true);
+    assert.equal(serverConfig.channels.email, undefined);
     assert.equal(serverConfig.channels.slack.enabled, false);
     assert.equal(serverConfig.channels.slack.botUserId, "U123");
     assert.equal(serverConfig.channels.whatsapp.enabled, true);
@@ -204,6 +225,7 @@ test("runSetup merges existing server config and secrets instead of overwriting 
     assert.equal(serverConfig.channels.whatsapp.webhookPath, "/existing-hook");
     assert.equal(secrets.openai.apiKey, "existing-openai-key");
     assert.equal(secrets.discord.botToken, "new-discord-token");
+    assert.equal(secrets.email, undefined);
     assert.equal(secrets.slack.appToken, "existing-slack-app-token");
     assert.equal(secrets.slack.botToken, "existing-slack-bot-token");
     assert.equal(secrets.whatsapp.accessToken, "existing-whatsapp-access-token");

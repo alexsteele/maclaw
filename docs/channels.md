@@ -87,6 +87,33 @@ The likely shape is:
 - server routes it to the right `channel/user` based on the context.
 - the `Channel` sends the notification
 
+## Email
+
+Email is a little different from chat-style channels, so the first useful shape
+is outbound-only notifications.
+
+maclaw acts as an SMTP client:
+
+- opens an SMTP connection to the configured mail server
+- optionally upgrades the connection with `STARTTLS`
+- authenticates with the configured SMTP username and password
+- sends a plain-text message from the configured `from` address to the target
+  recipient
+
+For Gmail, the common setup is:
+
+- server: `smtp.gmail.com`
+- port: `587`
+- `STARTTLS`: enabled
+- username: your Gmail address
+- password: a Google App Password, not your normal Gmail password
+
+Setup:
+
+- enable 2-Step Verification on your Google account
+- create a Google App Password
+- use your Gmail address as both the SMTP username and the email `from` address
+
 ## Config
 
 Channel configuration should be explicit and deny-by-default. No default remote access.

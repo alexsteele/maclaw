@@ -31,13 +31,14 @@ type SetupOptions = {
 };
 
 type ProviderChoice = "openai" | "dummy" | "skip";
-type ChannelChoice = "slack" | "discord" | "whatsapp";
+type ChannelChoice = "slack" | "discord" | "whatsapp" | "email";
 
 type ServerConfigData = {
   defaultProject?: string;
   projects?: ServerConfig["projects"];
   channels?: {
     discord?: Partial<NonNullable<ServerConfig["channels"]>["discord"]>;
+    email?: Partial<NonNullable<ServerConfig["channels"]>["email"]>;
     slack?: Partial<NonNullable<ServerConfig["channels"]>["slack"]>;
     whatsapp?: Partial<NonNullable<ServerConfig["channels"]>["whatsapp"]>;
   };
@@ -48,6 +49,7 @@ const OPENAI_SETUP_URL = "https://developers.openai.com/api/docs/quickstart";
 const SLACK_SETUP_URL = "https://api.slack.com/apps";
 const DISCORD_SETUP_URL = "https://discord.com/developers/applications";
 const WHATSAPP_SETUP_URL = "https://developers.facebook.com/docs/whatsapp/cloud-api";
+const GMAIL_APP_PASSWORDS_URL = "https://myaccount.google.com/apppasswords";
 
 const expandHome = (value: string, homeDir: string): string => {
   if (value === "~") {
@@ -307,6 +309,7 @@ const runServerSetup = async (
     "slack",
     "discord",
     "whatsapp",
+    "email",
   ]);
 
   if (selectedChannels.includes("slack")) {
@@ -364,6 +367,37 @@ const runServerSetup = async (
       serverSecrets.whatsapp = {
         ...(accessToken ? { accessToken } : {}),
         ...(verifyToken ? { verifyToken } : {}),
+      };
+    }
+  }
+
+  if (selectedChannels.includes("email")) {
+    prompt.print();
+    prompt.print("Email setup:");
+    prompt.print("  maclaw sends outbound email notifications over SMTP.");
+    prompt.print("  For Gmail, use smtp.gmail.com:587 with STARTTLS and a Google App Password:");
+    prompt.print(`  ${GMAIL_APP_PASSWORDS_URL}`);
+    const channels = (serverConfig.channels ??= {});
+    const from = await prompt.askLine("Email from address");
+    const to = await prompt.askLine("Default email to address (optional)");
+    const host = await prompt.askLine("SMTP host");
+    const portText = await prompt.askLine("SMTP port", "587");
+    const startTls = await prompt.askYesNo("Use STARTTLS?", true);
+    channels.email = {
+      ...(channels.email ?? {}),
+      enabled: true,
+      from,
+      ...(to ? { to } : {}),
+      host,
+      port: Number.parseInt(portText, 10) || 587,
+      startTls,
+    };
+    const smtpUser = await prompt.askLine("SMTP username");
+    const smtpPassword = await prompt.askLine("SMTP password");
+    if (smtpUser || smtpPassword) {
+      serverSecrets.email = {
+        ...(smtpUser ? { smtpUser } : {}),
+        ...(smtpPassword ? { smtpPassword } : {}),
       };
     }
   }

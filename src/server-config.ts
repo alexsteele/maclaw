@@ -24,12 +24,22 @@ export type DiscordConfig = {
   enabled: boolean;
 };
 
+export type EmailConfig = {
+  enabled: boolean;
+  from: string;
+  to?: string;  // default=from
+  host: string;
+  port: number;
+  startTls: boolean;
+};
+
 export type ServerConfig = {
   configFile: string;
   defaultProject?: string;
   projects: ServerProjectConfig[];
   channels?: {
     discord?: DiscordConfig;
+    email?: EmailConfig;
     slack?: SlackConfig;
     whatsapp?: WhatsAppConfig;
   };
@@ -42,6 +52,10 @@ export type ServerSecrets = {
   };
   discord: {
     botToken?: string;
+  };
+  email: {
+    smtpPassword?: string;
+    smtpUser?: string;
   };
   slack: {
     appToken?: string;
@@ -73,6 +87,12 @@ export const defaultWhatsAppConfig = (): Omit<WhatsAppConfig, "enabled"> => ({
 export const defaultSlackConfig = (): Omit<SlackConfig, "enabled"> => ({});
 
 export const defaultDiscordConfig = (): Omit<DiscordConfig, "enabled"> => ({});
+export const defaultEmailConfig = (): Omit<EmailConfig, "enabled"> => ({
+  from: "",
+  host: "",
+  port: 587,
+  startTls: true,
+});
 
 const toPositiveInt = (value: unknown, fallback: number): number => {
   if (typeof value !== "number") {
@@ -97,6 +117,7 @@ export const loadServerConfig = (
     defaultProject?: string;
     channels?: {
       discord?: Partial<DiscordConfig>;
+      email?: Partial<EmailConfig>;
       slack?: Partial<SlackConfig>;
       whatsapp?: Partial<WhatsAppConfig>;
     };
@@ -120,6 +141,7 @@ export const loadServerConfig = (
   const whatsapp = parsed.channels?.whatsapp;
   const slack = parsed.channels?.slack;
   const discord = parsed.channels?.discord;
+  const email = parsed.channels?.email;
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
   }
@@ -131,6 +153,16 @@ export const loadServerConfig = (
             ...defaultDiscordConfig(),
             ...discord,
             enabled: discord.enabled ?? false,
+          },
+        }
+      : {}),
+    ...(email
+      ? {
+          email: {
+            ...defaultEmailConfig(),
+            ...email,
+            enabled: email.enabled ?? false,
+            port: toPositiveInt(email.port, defaultEmailConfig().port),
           },
         }
       : {}),
@@ -177,6 +209,7 @@ export const loadServerSecrets = (
     ? (JSON.parse(readFileSync(resolvedSecretsFile, "utf8")) as {
         openai?: Partial<ServerSecrets["openai"]>;
         discord?: Partial<ServerSecrets["discord"]>;
+        email?: Partial<ServerSecrets["email"]>;
         slack?: Partial<ServerSecrets["slack"]>;
         whatsapp?: Partial<ServerSecrets["whatsapp"]>;
       })
@@ -193,6 +226,14 @@ export const loadServerSecrets = (
       botToken:
         process.env.MACLAW_DISCORD_BOT_TOKEN ??
         parsed.discord?.botToken,
+    },
+    email: {
+      smtpUser:
+        process.env.MACLAW_EMAIL_SMTP_USER ??
+        parsed.email?.smtpUser,
+      smtpPassword:
+        process.env.MACLAW_EMAIL_SMTP_PASSWORD ??
+        parsed.email?.smtpPassword,
     },
     slack: {
       appToken:
