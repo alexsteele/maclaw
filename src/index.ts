@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { runConfigCommand } from "./cli/config.js";
-import { loadReplHarness, runRepl } from "./cli/repl.js";
+import { runRepl } from "./cli/repl.js";
 import { runSetup } from "./cli/setup.js";
 import { MaclawServer } from "./server.js";
 
@@ -17,8 +17,7 @@ const cliHelpText = [
 ].join("\n");
 
 const runReplCommand = async (): Promise<void> => {
-  const harness = loadReplHarness();
-  await runRepl(harness);
+  await runRepl();
 };
 
 const parsePortFlag = (args: string[]): number | undefined => {

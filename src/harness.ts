@@ -20,6 +20,7 @@ import {
   MemoryInboxStore,
   type InboxStore,
 } from "./inbox.js";
+import { NoopRouter, type NotificationRouter } from "./router.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
@@ -69,6 +70,11 @@ type ForkChatResult =
   | { chat: ChatRecord; error?: undefined }
   | { chat?: undefined; error: string };
 
+type TaskMessageHandler = (
+  task: ScheduledTask,
+  message: Message,
+) => void | Promise<void>;
+
 export type ChatCompressionResult = {
   chat: ChatRecord;
   keptMessages: number;
@@ -83,6 +89,11 @@ export type HarnessNotification = {
   sourceType: InboxEntry["sourceType"];
   sourceId: string;
   sourceName?: string;
+};
+
+export type HarnessOptions = {
+  onTaskMessage?: TaskMessageHandler;
+  router?: NotificationRouter;
 };
 
 export type AgentCreateOptions = {
@@ -275,12 +286,10 @@ export class Harness {
   private _agentStore: AgentStore;
   private _inboxStore: InboxStore;
   private _runningAgents = new Map<string, Agent>();
-  private _taskListener?: (task: ScheduledTask, message: Message) => void | Promise<void>;
-  private _notificationListener?: (
-    notification: HarnessNotification,
-  ) => void | Promise<void>;
+  private _taskListener?: TaskMessageHandler;
+  private _router: NotificationRouter;
 
-  constructor(config: ProjectConfig) {
+  constructor(config: ProjectConfig, options: HarnessOptions = {}) {
     this._config = config;
     this._allowedNotifications = expandNotificationPolicy(config.notifications);
     this._scheduler = createScheduler(config);
@@ -289,10 +298,12 @@ export class Harness {
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = createAgentStore(config);
     this._inboxStore = createInboxStore(config);
+    this._taskListener = options.onTaskMessage;
+    this._router = options.router ?? new NoopRouter();
   }
 
-  static load(cwd?: string): Harness {
-    return new Harness(loadConfig(cwd));
+  static load(cwd?: string, options: HarnessOptions = {}): Harness {
+    return new Harness(loadConfig(cwd), options);
   }
 
   get config(): ProjectConfig {
@@ -303,12 +314,8 @@ export class Harness {
     return existsSync(this._config.projectConfigFile);
   }
 
-  start(
-    onTaskMessage: (task: ScheduledTask, message: Message) => void | Promise<void>,
-    onNotification?: (notification: HarnessNotification) => void | Promise<void>,
-  ): Promise<void> {
-    this._taskListener = onTaskMessage;
-    this._notificationListener = onNotification;
+  start(): Promise<void> {
+    const onTaskMessage = this._taskListener ?? (async () => {});
     return this.pruneExpiredChats().then(() => {
       this._scheduler.start(
         this._config.schedulerPollMs,
@@ -370,7 +377,7 @@ export class Harness {
     this._inboxStore = createInboxStore(nextConfig);
 
     if (this._taskListener) {
-      await this.start(this._taskListener);
+      await this.start();
     }
 
     return this;
@@ -398,7 +405,7 @@ export class Harness {
     this._inboxStore = createInboxStore(nextConfig);
 
     if (this._taskListener) {
-      await this.start(this._taskListener);
+      await this.start();
     }
 
     return true;
@@ -422,7 +429,7 @@ export class Harness {
     this._inboxStore = createInboxStore(nextConfig);
 
     if (this._taskListener) {
-      await this.start(this._taskListener, this._notificationListener);
+      await this.start();
     }
 
     return this._config;
@@ -663,8 +670,18 @@ export class Harness {
       return;
     }
 
-    await this.saveNotificationToInbox(notification);
-    await Promise.resolve(this._notificationListener?.(notification));
+    const result = await this._router.send({
+      target: notification.origin,
+      origin: notification.origin,
+      kind: notification.kind,
+      text: notification.text,
+    });
+    if (result.delivered && result.target) {
+      await this.saveNotificationToInbox({
+        ...notification,
+        origin: result.target,
+      });
+    }
   }
 
   private async saveNotificationToInbox(
@@ -688,6 +705,10 @@ export class Harness {
   ): Origin | undefined {
     if (!notifyTarget || notifyTarget === "origin") {
       return origin;
+    }
+
+    if (notifyTarget === "inbox") {
+      return localInboxOrigin;
     }
 
     if (isOriginTarget(notifyTarget)) {
@@ -929,50 +950,42 @@ export class Harness {
     return this._inboxStore.clearEntries();
   }
 
-  async sendManualNotification(input: {
+  async notify(input: {
+    destination: NotificationTarget;
     text: string;
     origin?: Origin;
-    deliver?: boolean;
     saveToInbox?: boolean;
-  }): Promise<{ delivered: boolean; saved: boolean }> {
+  }): Promise<{ delivered: boolean; saved: boolean; target?: Origin }> {
     const text = input.text.trim();
     if (text.length === 0) {
       return { delivered: false, saved: false };
     }
 
-    const origin = input.origin ?? localInboxOrigin;
-    const saveToInbox = input.saveToInbox ?? true;
-    const deliver = input.deliver ?? Boolean(input.origin);
+    const result = await this._router.send({
+      target: input.destination,
+      origin: input.origin,
+      kind: "manual",
+      text,
+    });
 
-    if (saveToInbox) {
+    const saveToInbox = input.saveToInbox ?? result.delivered;
+    if (saveToInbox && result.target) {
       await this._inboxStore.saveEntry(
         createInboxEntry({
           kind: "manual",
           text,
-          origin,
+          origin: result.target,
           sourceType: "user",
-          sourceId: origin.userId,
-          sourceName: "user",
-        }),
-      );
-    }
-
-    if (deliver && input.origin) {
-      await Promise.resolve(
-        this._notificationListener?.({
-          kind: "manual",
-          origin: input.origin,
-          text,
-          sourceType: "user",
-          sourceId: input.origin.userId,
+          sourceId: result.target.userId,
           sourceName: "user",
         }),
       );
     }
 
     return {
-      delivered: deliver && input.origin !== undefined,
+      delivered: result.delivered,
       saved: saveToInbox,
+      target: result.target,
     };
   }
 

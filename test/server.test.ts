@@ -244,6 +244,85 @@ test("server passes channel origin through to created agents", async () => {
   }
 });
 
+test("server supports /send email using configured email routing", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-send-email-"));
+  const homeDir = path.join(rootDir, "home");
+  const delivered: string[] = [];
+
+  try {
+    await initProjectConfig(homeDir, {
+      name: "home",
+      model: "dummy/test-model",
+    });
+
+    const server = MaclawServer.create(
+      {
+        configFile: path.join(rootDir, "server.json"),
+        projects: [{ name: "home", folder: homeDir }],
+        defaultProject: "home",
+        channels: {
+          discord: { enabled: false },
+          email: {
+            enabled: true,
+            from: "from@example.com",
+            to: "alex@example.com",
+            host: "smtp.example.com",
+            port: 587,
+            startTls: true,
+          },
+          slack: { enabled: false },
+          whatsapp: {
+            enabled: false,
+            graphApiVersion: "v23.0",
+            port: 3000,
+            webhookPath: "/whatsapp/webhook",
+          },
+        },
+      },
+      {
+        configFile: path.join(rootDir, "secrets.json"),
+        discord: {},
+        email: {
+          smtpPassword: "secret",
+          smtpUser: "from@example.com",
+        },
+        slack: {},
+        whatsapp: {},
+      },
+      {
+        port: 0,
+        servePortal: false,
+      },
+    );
+    await server.start();
+    (server as unknown as { channels: Map<string, { send: (origin: { channel: string; userId: string }, text: string) => Promise<void> }> })
+      .channels
+      .set("email", {
+        async send(origin, text) {
+          delivered.push(`${origin.channel}/${origin.userId}:${text}`);
+        },
+        async stop() {},
+      });
+
+    const reply = await server.handleMessage({
+      channel: "whatsapp",
+      userId: "whatsapp-15551234567",
+      text: "/send email | ping",
+    });
+    const inbox = await server.getHarness("home").listInbox();
+
+    assert.equal(reply, "sent notification to email/alex@example.com");
+    assert.deepEqual(delivered, ["email/alex@example.com:ping"]);
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.kind, "manual");
+    assert.equal(inbox[0]?.sourceType, "user");
+
+    await server.stop();
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("server renders the portal shell", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-portal-"));
   const homeDir = path.join(rootDir, "home");

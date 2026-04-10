@@ -261,16 +261,27 @@ test("dispatchCommand shows saved inbox notifications", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-inbox-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: async () => {},
+      router: {
+        async send() {
+          return {
+            delivered: true,
+            target: {
+              channel: "slack",
+              conversationId: "C123",
+              userId: "slack-T123-U123",
+            },
+          };
+        },
+      },
+    });
     await harness.initProject({
       name: "inbox-project",
       model: "dummy/test-model",
     });
 
-    await harness.start(
-      async () => {},
-      async () => {},
-    );
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -329,13 +340,21 @@ test("dispatchCommand can send a manual notification to the current origin", asy
   const delivered: string[] = [];
 
   try {
-    const harness = Harness.load(projectDir);
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        delivered.push(`${notification.origin.channel}/${notification.origin.userId}:${notification.text}`);
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: async () => {},
+      router: {
+        async send(notification) {
+          const target = notification.target === "origin" ? notification.origin : undefined;
+          if (!target) {
+            return { delivered: false };
+          }
+
+          delivered.push(`${target.channel}/${target.userId}:${notification.text}`);
+          return { delivered: true, target };
+        },
       },
-    );
+    });
+    await harness.start();
 
     const reply = await dispatchCommand(harness, "/send origin | ping", {
       origin: {
@@ -348,6 +367,86 @@ test("dispatchCommand can send a manual notification to the current origin", asy
 
     assert.equal(reply, "sent notification to web/default");
     assert.deepEqual(delivered, ["web/default:ping"]);
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.sourceType, "user");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can send a manual notification to email when configured", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-send-email-"));
+  const delivered: string[] = [];
+
+  try {
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: async () => {},
+      router: {
+        async send(notification) {
+          if (
+            notification.target === "origin" ||
+            notification.target === "inbox" ||
+            notification.target.channel !== "email"
+          ) {
+            return { delivered: false };
+          }
+
+          const target = {
+            channel: "email",
+            userId: "alex@example.com",
+          };
+          delivered.push(`${target.channel}/${target.userId}:${notification.text}`);
+          return { delivered: true, target };
+        },
+      },
+    });
+    await harness.start();
+
+    const reply = await dispatchCommand(harness, "/send email | ping");
+    const inbox = await harness.listInbox();
+
+    assert.equal(reply, "sent notification to email/alex@example.com");
+    assert.deepEqual(delivered, ["email/alex@example.com:ping"]);
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.sourceType, "user");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can send a manual notification to repl when configured", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-send-repl-"));
+  const delivered: string[] = [];
+
+  try {
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: async () => {},
+      router: {
+        async send(notification) {
+          if (
+            notification.target === "origin" ||
+            notification.target === "inbox" ||
+            notification.target.channel !== "repl"
+          ) {
+            return { delivered: false };
+          }
+
+          const target = {
+            channel: "repl",
+            userId: "local",
+          };
+          delivered.push(`${target.channel}/${target.userId}:${notification.text}`);
+          return { delivered: true, target };
+        },
+      },
+    });
+    await harness.start();
+
+    const reply = await dispatchCommand(harness, "/send repl | ping");
+    const inbox = await harness.listInbox();
+
+    assert.equal(reply, "sent notification to repl/local");
+    assert.deepEqual(delivered, ["repl/local:ping"]);
     assert.equal(inbox.length, 1);
     assert.equal(inbox[0]?.sourceType, "user");
   } finally {

@@ -4,7 +4,12 @@ import path from "node:path";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
-import { loadReplHarness, wrapReplLine } from "../src/cli/repl.js";
+import {
+  loadReplChannels,
+  loadReplServerConfig,
+  loadReplHarness,
+  wrapReplLine,
+} from "../src/cli/repl.js";
 
 test("wrapReplLine wraps long lines and preserves indentation", () => {
   const wrapped = wrapReplLine("  alpha beta gamma delta", 12);
@@ -86,6 +91,54 @@ test("loadReplHarness prefers the server config default project when cwd is head
     assert.equal(harness.isProjectInitialized(), true);
     assert.equal(harness.config.projectFolder, configuredDefaultProjectDir);
     assert.equal(harness.config.name, "configured-default");
+  } finally {
+    if (originalMaclawHome === undefined) {
+      delete process.env.MACLAW_HOME;
+    } else {
+      process.env.MACLAW_HOME = originalMaclawHome;
+    }
+
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadReplServerConfig loads the global server config for the repl", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-repl-email-origin-"));
+  const originalMaclawHome = process.env.MACLAW_HOME;
+
+  try {
+    const maclawHome = path.join(rootDir, "global-home");
+    await mkdir(maclawHome, { recursive: true });
+    await writeFile(
+      path.join(maclawHome, "server.json"),
+      `${JSON.stringify(
+        {
+          projects: [],
+          channels: {
+            email: {
+              enabled: true,
+              from: "from@example.com",
+              to: "alex@example.com",
+              host: "smtp.example.com",
+              port: 587,
+              startTls: true,
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    process.env.MACLAW_HOME = maclawHome;
+
+    const serverConfig = loadReplServerConfig();
+    const channels = loadReplChannels(serverConfig);
+
+    assert.equal(serverConfig?.channels?.email?.enabled, true);
+    assert.equal(serverConfig?.channels?.email?.to, "alex@example.com");
+    assert.equal(channels.has("email"), true);
   } finally {
     if (originalMaclawHome === undefined) {
       delete process.env.MACLAW_HOME;

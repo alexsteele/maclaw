@@ -8,7 +8,8 @@ import type {
 import { DiscordChannel } from "./channels/discord.js";
 import { EmailChannel } from "./channels/email.js";
 import { dispatchCommand } from "./commands.js";
-import { Harness, type HarnessNotification } from "./harness.js";
+import { Harness } from "./harness.js";
+import { ChannelRouter } from "./router.js";
 import {
   loadServerConfig,
   loadServerSecrets,
@@ -77,6 +78,7 @@ export class MaclawServer {
   private readonly projects = new Map<ProjectName, Harness>();
   private readonly channels = new Map<ChannelName, Channel>();
   private readonly webChannel = new WebChannel();
+  private readonly _router: ChannelRouter;
   private readonly activeProjects = new Map<ChannelUser, ProjectName>();
   private httpServer?: http.Server;
   private portalPort?: number;
@@ -86,6 +88,7 @@ export class MaclawServer {
     this.config = config;
     this.secrets = secrets;
     this.options = options;
+    this._router = new ChannelRouter(config, this.channels);
   }
 
   static load(options: ServerOptions = {}): MaclawServer {
@@ -177,15 +180,6 @@ export class MaclawServer {
 
     this.setActiveProjectName(message, projectName);
     return `Switched to project: ${projectName}`;
-  }
-
-  private async handleNotification(notification: HarnessNotification): Promise<void> {
-    const channel = this.channels.get(notification.origin.channel);
-    if (!channel) {
-      return;
-    }
-
-    await channel.send(notification.origin, notification.text);
   }
 
   private getPortalOrigin(projectName: string, chatId: string): Origin {
@@ -500,7 +494,14 @@ export class MaclawServer {
     }
 
     for (const project of this.config.projects) {
-      this.projects.set(project.name, Harness.load(project.folder));
+      this.projects.set(
+        project.name,
+        Harness.load(project.folder, {
+          onTaskMessage: async (task, message) =>
+            logScheduledTask(project.name, task, message),
+          router: this._router,
+        }),
+      );
     }
 
     this.channels.set("web", this.webChannel);
@@ -533,11 +534,8 @@ export class MaclawServer {
       );
     }
 
-    for (const [projectName, harness] of this.projects.entries()) {
-      await harness.start(async (task, message) =>
-        logScheduledTask(projectName, task, message),
-        this.handleNotification.bind(this),
-      );
+    for (const harness of this.projects.values()) {
+      await harness.start();
     }
 
     if (this.options.servePortal !== false) {
@@ -555,7 +553,6 @@ export class MaclawServer {
     for (const channel of [...this.channels.values()].reverse()) {
       await channel.stop();
     }
-
     if (this.httpServer) {
       const server = this.httpServer;
       this.httpServer = undefined;

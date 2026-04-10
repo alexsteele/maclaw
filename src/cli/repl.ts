@@ -3,14 +3,21 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import type { Channel } from "../channels/channel.js";
+import { EmailChannel } from "../channels/email.js";
 import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
-import { Harness, type HarnessNotification } from "../harness.js";
+import { Harness, type HarnessOptions } from "../harness.js";
+import { ChannelRouter } from "../router.js";
 import {
   defaultServerConfigFile,
+  defaultServerSecretsFile,
   loadServerConfig,
+  loadServerSecrets,
   maclawHomeDir,
+  type ServerConfig,
+  type ServerSecrets,
 } from "../server-config.js";
-import type { Origin, ProviderResult } from "../types.js";
+import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
 const replHelpText = [
   helpText,
@@ -74,22 +81,23 @@ export const wrapReplLine = (line: string, width: number): string => {
   return wrapped.join("\n");
 };
 
-export const loadReplHarness = (cwd: string = process.cwd()): Harness => {
-  const harness = Harness.load(cwd);
+export const loadReplHarness = (
+  cwd?: string,
+  options: HarnessOptions = {},
+): Harness => {
+  const resolvedCwd = cwd ?? process.cwd();
+  const harness = Harness.load(resolvedCwd, options);
   if (harness.isProjectInitialized()) {
     return harness;
   }
 
-  const serverConfigFile = defaultServerConfigFile();
-  if (existsSync(serverConfigFile)) {
-    const serverConfig = loadServerConfig(serverConfigFile);
-    if (serverConfig.defaultProject) {
-      const defaultProject = serverConfig.projects.find(
-        (project) => project.name === serverConfig.defaultProject,
-      );
-      if (defaultProject) {
-        return Harness.load(defaultProject.folder);
-      }
+  const serverConfig = loadReplServerConfig();
+  if (serverConfig?.defaultProject) {
+    const defaultProject = serverConfig.projects.find(
+      (project) => project.name === serverConfig.defaultProject,
+    );
+    if (defaultProject) {
+      return Harness.load(defaultProject.folder, options);
     }
   }
 
@@ -99,31 +107,88 @@ export const loadReplHarness = (cwd: string = process.cwd()): Harness => {
     return harness;
   }
 
-  return Harness.load(defaultProjectFolder);
+  return Harness.load(defaultProjectFolder, options);
 };
+
+export const loadReplServerConfig = (
+  serverConfigFile?: string,
+): ServerConfig | undefined => {
+  const resolvedServerConfigFile = serverConfigFile ?? defaultServerConfigFile();
+  if (!existsSync(resolvedServerConfigFile)) {
+    return undefined;
+  }
+
+  return loadServerConfig(resolvedServerConfigFile);
+};
+
+export const loadReplChannels = (
+  serverConfig?: ServerConfig,
+  serverSecrets?: ServerSecrets,
+): Map<string, Channel> => {
+  const resolvedServerConfig = serverConfig ?? loadReplServerConfig();
+  const resolvedServerSecrets =
+    serverSecrets ?? loadServerSecrets(defaultServerSecretsFile());
+  const channels = new Map<string, Channel>();
+  if (resolvedServerConfig?.channels?.email?.enabled) {
+    channels.set(
+      "email",
+      new EmailChannel(
+        resolvedServerConfig.channels.email,
+        resolvedServerSecrets.email,
+      ),
+    );
+  }
+
+  return channels;
+};
+
+class ReplChannel implements Channel {
+  readonly name = "repl";
+  private readonly formatForDisplay: (text: string) => string;
+
+  constructor(formatForDisplay: (text: string) => string) {
+    this.formatForDisplay = formatForDisplay;
+  }
+
+  async start(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async send(_origin: Origin, text: string): Promise<void> {
+    output.write(`\n${this.formatForDisplay(`[notification] ${text}`)}\n\n> `);
+  }
+
+  async stop(): Promise<void> {
+    return Promise.resolve();
+  }
+}
 
 class Repl {
   private readonly rl = readline.createInterface({ input, output });
+  private readonly channels = new Map<string, Channel>();
   private harness: Harness;
+  private _router?: ChannelRouter;
+  private serverConfig: ServerConfig | undefined;
+  private serverSecrets: ServerSecrets;
   private verbose = false;
   private wrapWidth = 100;
-  private readonly onTaskMessage = async (task: Parameters<Parameters<Harness["start"]>[0]>[0], message: Parameters<Parameters<Harness["start"]>[0]>[1]): Promise<void> => {
+  private readonly onTaskMessage = async (task: ScheduledTask, message: Message): Promise<void> => {
     output.write(`\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n> `);
   };
-  private readonly onNotification = async (
-    notification: HarnessNotification,
-  ): Promise<void> => {
-    output.write(
-      `\n${this.formatForDisplay(`[notification:${notification.kind}] ${notification.text}`)}\n\n> `,
-    );
-  };
 
-  constructor(harness: Harness) {
-    this.harness = harness;
+  constructor() {
+    this.serverConfig = loadReplServerConfig();
+    this.serverSecrets = loadServerSecrets(defaultServerSecretsFile());
+    this.refreshChannels();
+    this.harness = loadReplHarness(process.cwd(), {
+      onTaskMessage: this.onTaskMessage,
+      router: this._router,
+    });
   }
 
   async run(): Promise<void> {
-    await this.harness.start(this.onTaskMessage, this.onNotification);
+    await this.startChannels();
+    await this.harness.start();
     this.showStartup();
 
     while (true) {
@@ -133,6 +198,7 @@ class Repl {
       } catch {
         output.write("\n");
         this.harness.teardown();
+        await this.stopChannels();
         this.rl.close();
         break;
       }
@@ -144,6 +210,7 @@ class Repl {
       const shouldExit = await this.handleLine(line);
       if (shouldExit) {
         this.harness.teardown();
+        await this.stopChannels();
         this.rl.close();
         break;
       }
@@ -213,8 +280,16 @@ class Repl {
     );
 
     this.harness.teardown();
-    this.harness = Harness.load(nextFolder);
-    await this.harness.start(this.onTaskMessage, this.onNotification);
+    await this.stopChannels();
+    this.serverConfig = loadReplServerConfig();
+    this.serverSecrets = loadServerSecrets(defaultServerSecretsFile());
+    this.refreshChannels();
+    this.harness = Harness.load(nextFolder, {
+      onTaskMessage: this.onTaskMessage,
+      router: this._router,
+    });
+    await this.startChannels();
+    await this.harness.start();
 
     const lines = [
       `switched to project: ${this.harness.config.name}`,
@@ -310,9 +385,33 @@ class Repl {
     this.writeLine(verboseFooter ? `${reply.message.content}\n${verboseFooter}` : reply.message.content);
     return false;
   }
+
+  private refreshChannels(): void {
+    this.channels.clear();
+    this.channels.set("repl", new ReplChannel(this.formatForDisplay.bind(this)));
+    for (const [name, channel] of loadReplChannels(this.serverConfig, this.serverSecrets)) {
+      this.channels.set(name, channel);
+    }
+    this._router = this.serverConfig
+      ? new ChannelRouter(this.serverConfig, this.channels)
+      : undefined;
+  }
+
+  private async startChannels(): Promise<void> {
+    for (const channel of this.channels.values()) {
+      await channel.start();
+    }
+  }
+
+  private async stopChannels(): Promise<void> {
+    for (const channel of [...this.channels.values()].reverse()) {
+      await channel.stop();
+    }
+    this.channels.clear();
+  }
 }
 
-export const runRepl = async (harness: Harness): Promise<void> => {
-  const repl = new Repl(harness);
+export const runRepl = async (): Promise<void> => {
+  const repl = new Repl();
   await repl.run();
 };

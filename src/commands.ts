@@ -160,6 +160,7 @@ export const inboxHelpText = [
 export const sendHelpText = [
   "Command: /send",
   "  /send <message>              Save a test notification to the inbox",
+  "  /send email | <message>      Send a test email when email is configured",
   "  /send inbox | <message>      Save a test notification to the inbox",
   "  /send origin | <message>     Send a test notification to the current origin",
   "  /send <channel> | <message>  Send to the current origin when it matches the channel",
@@ -512,8 +513,8 @@ const readCurrentProjectConfig = (harness: Harness) =>
   loadConfig(harness.config.projectFolder);
 
 const parseNotifyTarget = (value: unknown): NotificationTarget | undefined => {
-  if (value === "origin") {
-    return "origin";
+  if (value === "inbox" || value === "origin") {
+    return value;
   }
 
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -570,7 +571,7 @@ const parseNotificationOverride = (value: unknown): NotificationOverride | strin
   if (object.notifyTarget !== undefined) {
     const notifyTarget = parseNotifyTarget(object.notifyTarget);
     if (!notifyTarget) {
-      return "notifyTarget must be 'origin', { channel }, or a full notification target object";
+      return "notifyTarget must be 'inbox', 'origin', { channel }, or a full notification target object";
     }
 
     override.notifyTarget = notifyTarget;
@@ -832,10 +833,10 @@ const handleSendCommand: CommandHandler = async (harness, input, options) => {
 
     const separator = body.indexOf("|");
     if (separator < 0) {
-      await harness.sendManualNotification({
+      await harness.notify({
+        destination: "inbox",
         text: body,
         origin: options.origin,
-        deliver: false,
         saveToInbox: true,
       });
       return "saved notification to inbox";
@@ -848,10 +849,10 @@ const handleSendCommand: CommandHandler = async (harness, input, options) => {
     }
 
     if (target === "inbox") {
-      await harness.sendManualNotification({
+      await harness.notify({
+        destination: "inbox",
         text,
         origin: options.origin,
-        deliver: false,
         saveToInbox: true,
       });
       return "saved notification to inbox";
@@ -862,26 +863,29 @@ const handleSendCommand: CommandHandler = async (harness, input, options) => {
         return "No current origin available for /send origin.";
       }
 
-      await harness.sendManualNotification({
+      const result = await harness.notify({
+        destination: "origin",
         text,
         origin: options.origin,
-        deliver: true,
         saveToInbox: true,
       });
-      return `sent notification to ${options.origin.channel}/${options.origin.userId}`;
+      if (!result.delivered || !result.target) {
+        return "No current origin available for /send origin.";
+      }
+      return `sent notification to ${result.target.channel}/${result.target.userId}`;
     }
 
-    if (!options.origin || options.origin.channel !== target) {
+    const result = await harness.notify({
+      destination: { channel: target },
+      text,
+      origin: options.origin,
+      saveToInbox: true,
+    });
+    if (!result.delivered || !result.target) {
       return `Cannot route to channel: ${target}`;
     }
 
-    await harness.sendManualNotification({
-      text,
-      origin: options.origin,
-      deliver: true,
-      saveToInbox: true,
-    });
-    return `sent notification to ${options.origin.channel}/${options.origin.userId}`;
+    return `sent notification to ${result.target.channel}/${result.target.userId}`;
   }
 
   return sendHelpText;

@@ -29,12 +29,15 @@ export type ChatSummary = {
   messageCount: number;
 };
 
-export type Origin = {
+// where a notification is sent/recvd
+export type ChannelTarget = {
   channel: string;
   userId: string;
   conversationId?: string;
   threadId?: string;
 };
+
+export type Origin = ChannelTarget;
 
 export type MessageContext = {
   origin?: Origin;
@@ -63,9 +66,10 @@ export type NotificationPolicy =
     };
 
 export type NotificationTarget =
+  | "inbox"
   | "origin"
   | { channel: string }
-  | Origin;
+  | ChannelTarget;
 
 export type NotificationOverride = {
   notify?: NotificationPolicy;

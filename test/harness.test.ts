@@ -12,6 +12,33 @@ import { useDummyProviderEnv } from "./provider-env.js";
 
 useDummyProviderEnv();
 
+const noopTaskMessage = async (): Promise<void> => {};
+
+const createRecordingRouter = <T>(
+  onSend: (notification: {
+    kind: string;
+    text: string;
+    originUserId?: string;
+  }) => T,
+) => ({
+  async send(notification: {
+    kind: string;
+    text: string;
+    target: unknown;
+    origin?: { userId?: string };
+  }) {
+    onSend({
+      kind: notification.kind,
+      text: notification.text,
+      originUserId: notification.origin?.userId,
+    });
+    return {
+      delivered: true,
+      target: notification.origin,
+    };
+  },
+});
+
 const waitForAgentToSettle = async (
   harness: Harness,
   agentId: string,
@@ -276,19 +303,14 @@ test("harness emits a notification when an origin-backed agent fails", async () 
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-notify-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: createRecordingRouter((notification) => {
+        notifications.push(notification);
+      }),
+    });
     const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({
-          kind: notification.kind,
-          text: notification.text,
-          originUserId: notification.origin.userId,
-        });
-      },
-    );
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -322,16 +344,19 @@ test("harness saves delivered notifications to the project inbox", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-inbox-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          return { delivered: true, target: notification.origin };
+        },
+      },
+    });
     await harness.initProject({
       name: "inbox-project",
       model: "dummy/test-model",
     });
-
-    await harness.start(
-      async () => {},
-      async () => {},
-    );
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -367,17 +392,21 @@ test("harness stores agents and inbox entries in sqlite when configured", async 
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-sqlite-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          return { delivered: true, target: notification.origin };
+        },
+      },
+    });
     await harness.initProject({
       name: "sqlite-project",
       model: "dummy/test-model",
       storage: "sqlite",
     });
 
-    await harness.start(
-      async () => {},
-      async () => {},
-    );
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -441,19 +470,14 @@ test("harness emits a notification when an origin-backed task completes", async 
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-"));
 
   try {
-    const harness = Harness.load(projectDir);
     const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({
-          kind: notification.kind,
-          text: notification.text,
-          originUserId: notification.origin.userId,
-        });
-      },
-    );
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: createRecordingRouter((notification) => {
+        notifications.push(notification);
+      }),
+    });
+    await harness.start();
 
     await harness.createTask({
       chatId: "slack-T123-U123",
@@ -483,19 +507,14 @@ test("harness emits a notification when an origin-backed task fails", async () =
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-fail-notify-"));
 
   try {
-    const harness = Harness.load(projectDir);
     const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({
-          kind: notification.kind,
-          text: notification.text,
-          originUserId: notification.origin.userId,
-        });
-      },
-    );
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: createRecordingRouter((notification) => {
+        notifications.push(notification);
+      }),
+    });
+    await harness.start();
 
     harness.handleScheduledTask = async () => {
       throw new Error("task boom");
@@ -529,20 +548,22 @@ test("harness suppresses notifications when project notifications are none", asy
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-no-notify-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string }> = [];
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          notifications.push({ kind: notification.kind });
+          return { delivered: true, target: notification.origin };
+        },
+      },
+    });
     await harness.initProject({
       name: "quiet-project",
       model: "dummy/test-model",
       notifications: "none",
     });
-    const notifications: Array<{ kind: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({ kind: notification.kind });
-      },
-    );
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -570,15 +591,17 @@ test("harness suppresses agent notifications when the agent notify override is n
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-notify-none-"));
 
   try {
-    const harness = Harness.load(projectDir);
     const notifications: Array<{ kind: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({ kind: notification.kind });
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          notifications.push({ kind: notification.kind });
+          return { delivered: true, target: notification.origin };
+        },
       },
-    );
+    });
+    await harness.start();
 
     harness.promptChat = async () => {
       throw new Error("boom");
@@ -607,15 +630,17 @@ test("harness suppresses task notifications when the task notify override is non
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-none-"));
 
   try {
-    const harness = Harness.load(projectDir);
     const notifications: Array<{ kind: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({ kind: notification.kind });
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          notifications.push({ kind: notification.kind });
+          return { delivered: true, target: notification.origin };
+        },
       },
-    );
+    });
+    await harness.start();
 
     await harness.createTask({
       chatId: "slack-T123-U123",
@@ -641,7 +666,19 @@ test("harness applies notification allow and deny selectors", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-selective-notify-"));
 
   try {
-    const harness = Harness.load(projectDir);
+    const notifications: Array<{ kind: string; text: string }> = [];
+    const harness = Harness.load(projectDir, {
+      onTaskMessage: noopTaskMessage,
+      router: {
+        async send(notification) {
+          notifications.push({
+            kind: notification.kind,
+            text: notification.text,
+          });
+          return { delivered: true, target: notification.origin };
+        },
+      },
+    });
     await harness.initProject({
       name: "selective-project",
       model: "dummy/test-model",
@@ -650,17 +687,7 @@ test("harness applies notification allow and deny selectors", async () => {
         deny: ["taskCompleted"],
       },
     });
-    const notifications: Array<{ kind: string; text: string }> = [];
-
-    await harness.start(
-      async () => {},
-      async (notification) => {
-        notifications.push({
-          kind: notification.kind,
-          text: notification.text,
-        });
-      },
-    );
+    await harness.start();
 
     await harness.createTask({
       chatId: "slack-T123-U123",

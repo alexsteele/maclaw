@@ -1,4 +1,4 @@
-import type { Origin } from "../types.js";
+import type { ChannelTarget } from "../types.js";
 
 export type ChannelMessage = {
   channel: string;
@@ -17,6 +17,6 @@ export type ChannelMessageHandler = (
 export interface Channel {
   readonly name: string;
   start(messageHandler?: ChannelMessageHandler): Promise<void>;
-  send(origin: Origin, text: string): Promise<void>;
+  send(target: ChannelTarget, text: string): Promise<void>;
   stop(): Promise<void>;
 }
