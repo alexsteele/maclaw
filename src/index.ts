@@ -2,7 +2,7 @@
 
 import { runConfigCommand } from "./cli/config.js";
 import { runRepl } from "./cli/repl.js";
-import { runSetup } from "./cli/setup.js";
+import { normalizeSetupSection, runSetup } from "./cli/setup.js";
 import { MaclawServer } from "./server.js";
 
 const cliHelpText = [
@@ -11,7 +11,7 @@ const cliHelpText = [
   "Commands:",
   "  repl            Start the local REPL (default)",
   "  server          Start the maclaw server and web portal",
-  "  setup           Run guided setup",
+  "  setup [section] Run guided setup",
   "  config          Show or update project config",
   "  -h, --help      Show this help",
 ].join("\n");
@@ -42,6 +42,15 @@ const runServer = async (args: string[]): Promise<void> => {
   await server.start();
 };
 
+const runSetupCommand = async (args: string[]): Promise<void> => {
+  const startSection = normalizeSetupSection(args[0]);
+  if (args[0] && !startSection) {
+    throw new Error("Usage: maclaw setup [all|model|project|server|channels]");
+  }
+
+  await runSetup({ startSection });
+};
+
 const main = async (): Promise<void> => {
   const command = process.argv[2];
 
@@ -61,7 +70,7 @@ const main = async (): Promise<void> => {
   }
 
   if (command === "setup") {
-    await runSetup();
+    await runSetupCommand(process.argv.slice(3));
     return;
   }
 

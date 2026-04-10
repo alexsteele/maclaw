@@ -280,6 +280,36 @@ test("runSetup writes no channel config when server setup is skipped", async () 
   }
 });
 
+test("runSetup can jump straight to channels with startSection", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-channels-only-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      startSection: "channels",
+      answers: [
+        "yes",
+        "",
+      ],
+    });
+
+    assert.doesNotMatch(output.toString(), /Welcome to maclaw setup!/u);
+    assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
+    assert.doesNotMatch(output.toString(), /Set up channels\?/u);
+    assert.match(output.toString(), /Enable channels\?/u);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("runSetup can jump straight to project setup", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-project-only-"));
 
@@ -475,6 +505,37 @@ test("runSetup exits cleanly on EOF", async () => {
     assert.doesNotMatch(output.toString(), /\[maclaw setup\] failed/u);
     assert.match(output.toString(), /Where do you want to start\?/u);
     assert.match(output.toString(), /Bye!/u);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("runSetup skips the global config consent prompt when maclaw home already exists", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-existing-home-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+    const globalHome = maclawHomeDir(homeDir);
+
+    await fs.mkdir(globalHome, { recursive: true });
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      startSection: "channels",
+      answers: [""],
+    });
+
+    assert.doesNotMatch(
+      output.toString(),
+      /maclaw can save server config and API secrets/u,
+    );
+    assert.match(output.toString(), /Enable channels\?/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

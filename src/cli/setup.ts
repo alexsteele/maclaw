@@ -31,11 +31,32 @@ type SetupOptions = {
   homeDir?: string;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
+  startSection?: SetupSection;
 };
 
 type ProviderChoice = "openai" | "dummy" | "skip";
 type ChannelChoice = "slack" | "discord" | "whatsapp" | "email";
 type SetupSection = "all" | "model" | "project" | "server" | "channels";
+
+export const normalizeSetupSection = (value: string | undefined): SetupSection | undefined => {
+  switch (value?.toLowerCase()) {
+    case undefined:
+      return undefined;
+    case "all":
+      return "all";
+    case "model":
+      return "model";
+    case "project":
+      return "project";
+    case "server":
+      return "server";
+    case "channel":
+    case "channels":
+      return "channels";
+    default:
+      return undefined;
+  }
+};
 
 type ServerConfigData = {
   defaultProject?: string;
@@ -663,31 +684,39 @@ const SETUP_BANNER = [
 const runSetupFlow = async (
   prompt: SetupPrompter,
   homeDir: string,
+  startSection?: SetupSection,
 ): Promise<void> => {
   const writtenFiles: string[] = [];
 
-  SETUP_BANNER.forEach((line) => {
-    prompt.print(line);
-  });
-  prompt.print("Welcome to maclaw setup!");
-  prompt.print();
-  prompt.print("This setup will help you configure:");
-  prompt.print("  1. Model");
-  prompt.print("  2. Project");
-  prompt.print("  3. Channels");
-  prompt.print("  4. Server");
-  prompt.print();
-  prompt.print("It should take under 1 minute.")
-  prompt.print();
+  if (!startSection) {
+    SETUP_BANNER.forEach((line) => {
+      prompt.print(line);
+    });
+    prompt.print("Welcome to maclaw setup!");
+    prompt.print();
+    prompt.print("This setup will help you configure:");
+    prompt.print("  1. Model");
+    prompt.print("  2. Project");
+    prompt.print("  3. Channels");
+    prompt.print("  4. Server");
+    prompt.print();
+    prompt.print("It should take under 1 minute.");
+    prompt.print();
+  }
 
-  const setupSection = await askSetupSection(prompt);
-  prompt.print();
+  const setupSection = startSection ?? await askSetupSection(prompt);
+  if (!startSection) {
+    prompt.print();
+  }
 
   const globalHome = maclawHomeDir(homeDir);
-  const saveGlobalConfig = await prompt.askYesNo(
-    `maclaw can save server config and API secrets in ${globalHome}. Is that OK?`,
-    true,
-  );
+  const hasExistingGlobalHome = existsSync(globalHome);
+  const saveGlobalConfig = hasExistingGlobalHome
+    ? true
+    : await prompt.askYesNo(
+        `maclaw can save server config and API secrets in ${globalHome}. Is that OK?`,
+        true,
+      );
   if (!saveGlobalConfig) {
     prompt.print(`Global config will not be written. You can configure ${globalHome} manually later.`);
     prompt.print();
@@ -768,11 +797,12 @@ export const runSetup = async ({
   homeDir = os.homedir(),
   input = process.stdin,
   output = process.stdout,
+  startSection,
 }: SetupOptions = {}): Promise<void> => {
   const prompt = new SetupPrompter(input, output, answers);
 
   try {
-    await runSetupFlow(prompt, homeDir);
+    await runSetupFlow(prompt, homeDir, startSection);
   } catch (error) {
     if (isSetupCancelledError(error)) {
       output.write("\nBye!\n");
