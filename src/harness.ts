@@ -52,6 +52,7 @@ import type {
   ChatSummary,
   MessageContext,
   NotificationKind,
+  NotificationDestination,
   NotificationOverride,
   NotificationPolicy,
   NotificationTarget,
@@ -89,6 +90,7 @@ export type HarnessNotification = {
   sourceType: InboxEntry["sourceType"];
   sourceId: string;
   sourceName?: string;
+  sourceChatId?: string;
 };
 
 export type HarnessOptions = {
@@ -243,6 +245,20 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
         harness.getCurrentChatId(),
       )?.id,
     }),
+  notify: (input) => {
+    const sourceAgent = findAgentByChatId(
+      harness.listAgents(),
+      harness.getCurrentChatId(),
+    );
+
+    return harness.notify({
+      ...input,
+      sourceType: sourceAgent ? "agent" : "user",
+      sourceId: sourceAgent?.id ?? "user",
+      sourceName: sourceAgent?.name ?? "user",
+      sourceChatId: harness.getCurrentChatId(),
+    });
+  },
 });
 
 const AGENT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -695,6 +711,7 @@ export class Harness {
         sourceType: notification.sourceType,
         sourceId: notification.sourceId,
         sourceName: notification.sourceName,
+        sourceChatId: notification.sourceChatId,
       }),
     );
   }
@@ -740,6 +757,7 @@ export class Harness {
       sourceType: "task",
       sourceId: task.id,
       sourceName: task.title,
+      sourceChatId: task.chatId,
     });
   }
 
@@ -765,6 +783,7 @@ export class Harness {
       sourceType: "agent",
       sourceId: agent.id,
       sourceName: agent.name,
+      sourceChatId: agent.chatId,
     });
   }
 
@@ -951,10 +970,14 @@ export class Harness {
   }
 
   async notify(input: {
-    destination: NotificationTarget;
+    destination: NotificationDestination;
     text: string;
     origin?: Origin;
     saveToInbox?: boolean;
+    sourceType?: InboxEntry["sourceType"];
+    sourceId?: string;
+    sourceName?: string;
+    sourceChatId?: string;
   }): Promise<{ delivered: boolean; saved: boolean; target?: Origin }> {
     const text = input.text.trim();
     if (text.length === 0) {
@@ -975,9 +998,10 @@ export class Harness {
           kind: "manual",
           text,
           origin: result.target,
-          sourceType: "user",
-          sourceId: result.target.userId,
-          sourceName: "user",
+          sourceType: input.sourceType ?? "user",
+          sourceId: input.sourceId ?? result.target.userId,
+          sourceName: input.sourceName ?? "user",
+          sourceChatId: input.sourceChatId,
         }),
       );
     }

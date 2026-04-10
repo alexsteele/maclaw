@@ -1,5 +1,12 @@
 // Maclaw tools expose project-specific read and act capabilities.
-import type { AgentRecord, ChatRecord, ChatSummary, ScheduledTask, ToolDefinition } from "../types.js";
+import type {
+  AgentRecord,
+  ChatRecord,
+  ChatSummary,
+  NotificationDestination,
+  ScheduledTask,
+  ToolDefinition,
+} from "../types.js";
 import { parseTaskSchedule } from "../task.js";
 import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 
@@ -24,6 +31,10 @@ export type MaclawToolContext = {
     prompt: string;
     schedule: ScheduledTask["schedule"];
   }): Promise<ScheduledTask>;
+  notify(input: {
+    text: string;
+    destination: NotificationDestination;
+  }): Promise<{ delivered: boolean; saved: boolean; target?: AgentRecord["origin"] }>;
 };
 
 const parseOptionalChatInput = (input: unknown): { chatId?: string } => {
@@ -89,6 +100,33 @@ const parseCreateTaskInput = (
     title: requiredString(object, "title"),
     prompt: requiredString(object, "prompt"),
     when: requiredString(object, "when"),
+  };
+};
+
+const parseNotifyInput = (
+  input: unknown,
+): {
+  text: string;
+  destination: NotificationDestination;
+} => {
+  const object = parseObjectInput(input);
+  const channel = object.channel;
+
+  if (channel !== undefined && (typeof channel !== "string" || channel.trim().length === 0)) {
+    throw new Error('Expected "channel" to be a non-empty string.');
+  }
+
+  // TODO: simplify at router level. Everything is a channel.
+  const destination =
+    channel === undefined || channel === "origin"
+      ? "origin"
+      : channel === "inbox"
+        ? "inbox"
+        : { channel: channel.trim() };
+
+  return {
+    text: requiredString(object, "text"),
+    destination,
   };
 };
 
@@ -330,6 +368,38 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
           schedule: parsed.schedule,
         });
         return `scheduled task: ${task.id}`;
+      },
+    },
+    {
+      name: "notify",
+      description: 'Send a notification to the current origin by default, or to a named channel like "inbox", "email", "repl", or "web".',
+      permission: "act",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          channel: { type: "string" },
+        },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { text, destination } = parseNotifyInput(input);
+        const result = await context.notify({
+          text,
+          destination,
+        });
+        if (!result.saved) {
+          throw new Error("Could not deliver notification.");
+        }
+
+        if (result.target?.channel === "inbox") {
+          return "saved notification to inbox";
+        }
+
+        return result.target
+          ? `sent notification to ${result.target.channel}/${result.target.userId}`
+          : "saved notification to inbox";
       },
     },
   ];

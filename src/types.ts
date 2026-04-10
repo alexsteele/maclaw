@@ -71,6 +71,8 @@ export type NotificationTarget =
   | { channel: string }
   | ChannelTarget;
 
+export type NotificationDestination = string | NotificationTarget;
+
 export type NotificationOverride = {
   notify?: NotificationPolicy;
   notifyTarget?: NotificationTarget;
@@ -84,6 +86,7 @@ export type InboxEntry = {
   sourceType: "agent" | "task" | "user";
   sourceId: string;
   sourceName?: string;
+  sourceChatId?: string;
   createdAt: string;
   sentAt?: string;
   readAt?: string;

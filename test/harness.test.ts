@@ -380,6 +380,10 @@ test("harness saves delivered notifications to the project inbox", async () => {
     assert.equal(inbox[0]?.kind, "agentFailed");
     assert.equal(inbox[0]?.origin.channel, "slack");
     assert.equal(inbox[0]?.origin.userId, "slack-T123-U123");
+    assert.equal(inbox[0]?.sourceType, "agent");
+    assert.equal(inbox[0]?.sourceId, created.agent.id);
+    assert.equal(inbox[0]?.sourceName, "inbox-agent");
+    assert.equal(inbox[0]?.sourceChatId, created.agent.chatId);
     assert.match(inbox[0]?.text ?? "", /inbox-agent failed: boom/u);
     assert.ok(inbox[0]?.id);
     assert.ok(inbox[0]?.createdAt);

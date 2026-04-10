@@ -877,7 +877,7 @@ const handleSendCommand: CommandHandler = async (harness, input, options) => {
     }
 
     const result = await harness.notify({
-      destination: { channel: target },
+      destination: target,
       text,
       origin: options.origin,
       saveToInbox: true,

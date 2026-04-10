@@ -10,6 +10,7 @@ export const createInboxEntry = (input: {
   sourceType: InboxEntry["sourceType"];
   sourceId: string;
   sourceName?: string;
+  sourceChatId?: string;
 }): InboxEntry => {
   const timestamp = new Date().toISOString();
   return {
@@ -20,6 +21,7 @@ export const createInboxEntry = (input: {
     sourceType: input.sourceType,
     sourceId: input.sourceId,
     sourceName: input.sourceName,
+    sourceChatId: input.sourceChatId,
     createdAt: timestamp,
     sentAt: timestamp,
   };

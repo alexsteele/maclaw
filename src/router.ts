@@ -6,10 +6,15 @@
  */
 import type { Channel } from "./channels/channel.js";
 import type { ServerConfig } from "./server-config.js";
-import type { ChannelTarget, NotificationTarget, Origin } from "./types.js";
+import type {
+  ChannelTarget,
+  NotificationDestination,
+  NotificationTarget,
+  Origin,
+} from "./types.js";
 
 export type RoutedNotification = {
-  target: NotificationTarget;
+  target: NotificationDestination;
   origin?: Origin;
   kind?: string;
   text: string;
@@ -22,10 +27,20 @@ export interface NotificationRouter {
 }
 
 export class NoopRouter implements NotificationRouter {
+  private normalizeTarget(target: NotificationDestination): NotificationTarget {
+    if (typeof target !== "string") {
+      return target;
+    }
+
+    return target === "origin" || target === "inbox" ? target : { channel: target };
+  }
+
   async send(
     notification: RoutedNotification,
   ): Promise<{ delivered: boolean; target?: ChannelTarget }> {
-    if (notification.target === "inbox") {
+    const target = this.normalizeTarget(notification.target);
+
+    if (target === "inbox") {
       return {
         delivered: true,
         target: {
@@ -35,17 +50,17 @@ export class NoopRouter implements NotificationRouter {
       };
     }
 
-    if (notification.target === "origin") {
+    if (target === "origin") {
       return {
         delivered: false,
         target: notification.origin,
       };
     }
 
-    if ("userId" in notification.target) {
+    if ("userId" in target) {
       return {
         delivered: false,
-        target: notification.target,
+        target,
       };
     }
 
@@ -62,30 +77,40 @@ export class ChannelRouter implements NotificationRouter {
     this.channels = channels;
   }
 
+  private normalizeTarget(target: NotificationDestination): NotificationTarget {
+    if (typeof target !== "string") {
+      return target;
+    }
+
+    return target === "origin" || target === "inbox" ? target : { channel: target };
+  }
+
   private resolve(
-    target: NotificationTarget,
+    target: NotificationDestination,
     origin?: Origin,
   ): ChannelTarget | undefined {
-    if (target === "origin") {
+    const normalizedTarget = this.normalizeTarget(target);
+
+    if (normalizedTarget === "origin") {
       return origin;
     }
 
-    if (target === "inbox") {
+    if (normalizedTarget === "inbox") {
       return {
         channel: "inbox",
         userId: "local",
       };
     }
 
-    if ("userId" in target) {
-      return target;
+    if ("userId" in normalizedTarget) {
+      return normalizedTarget;
     }
 
-    if (origin?.channel === target.channel) {
+    if (origin?.channel === normalizedTarget.channel) {
       return origin;
     }
 
-    if (target.channel === "email" && this.config.channels?.email?.enabled) {
+    if (normalizedTarget.channel === "email" && this.config.channels?.email?.enabled) {
       const recipient = this.config.channels.email.to ?? this.config.channels.email.from;
       if (!recipient) {
         return undefined;

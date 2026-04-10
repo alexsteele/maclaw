@@ -401,7 +401,7 @@ test("dispatchCommand can send a manual notification to email when configured", 
           if (
             notification.target === "origin" ||
             notification.target === "inbox" ||
-            notification.target.channel !== "email"
+            notification.target !== "email"
           ) {
             return { delivered: false };
           }
@@ -441,7 +441,7 @@ test("dispatchCommand can send a manual notification to repl when configured", a
           if (
             notification.target === "origin" ||
             notification.target === "inbox" ||
-            notification.target.channel !== "repl"
+            notification.target !== "repl"
           ) {
             return { delivered: false };
           }

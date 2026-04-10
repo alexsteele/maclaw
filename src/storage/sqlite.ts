@@ -65,6 +65,7 @@ const SQLITE_SCHEMA = `
     source_type text not null,
     source_id text not null,
     source_name text,
+    source_chat_id text,
     created_at text not null,
     sent_at text,
     read_at text
@@ -157,6 +158,7 @@ const rowToInboxEntry = (row: Record<string, unknown>): InboxEntry => ({
   sourceType: row.source_type as InboxEntry["sourceType"],
   sourceId: String(row.source_id),
   sourceName: row.source_name === null ? undefined : String(row.source_name),
+  sourceChatId: row.source_chat_id === null ? undefined : String(row.source_chat_id),
   createdAt: String(row.created_at),
   sentAt: row.sent_at === null ? undefined : String(row.sent_at),
   readAt: row.read_at === null ? undefined : String(row.read_at),
@@ -318,9 +320,9 @@ export class SqliteInboxStore implements InboxStore {
     this.database
       .prepare(`
         insert into inbox (
-          id, kind, text, origin_json, source_type, source_id, source_name, created_at, sent_at, read_at
+          id, kind, text, origin_json, source_type, source_id, source_name, source_chat_id, created_at, sent_at, read_at
         )
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         entry.id,
@@ -330,6 +332,7 @@ export class SqliteInboxStore implements InboxStore {
         entry.sourceType,
         entry.sourceId,
         entry.sourceName ?? null,
+        entry.sourceChatId ?? null,
         entry.createdAt,
         entry.sentAt ?? null,
         entry.readAt ?? null,

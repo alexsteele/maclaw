@@ -162,14 +162,18 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     const listTools = tools.find((tool) => tool.name === "list_tools");
     const createAgent = tools.find((tool) => tool.name === "create_agent");
     const createTask = tools.find((tool) => tool.name === "create_task");
+    const notify = tools.find((tool) => tool.name === "notify");
 
     assert.ok(listTools);
     assert.ok(createAgent);
     assert.ok(createTask);
+    assert.ok(notify);
     assert.equal(createAgent.permission, "act");
     assert.equal(createTask.permission, "act");
+    assert.equal(notify.permission, "act");
     assert.match(await listTools.execute({}), /create_agent \[act\]/u);
     assert.match(await listTools.execute({}), /create_task \[act\]/u);
+    assert.match(await listTools.execute({}), /notify \[act\]/u);
 
     const agentReply = await createAgent.execute({
       name: "planner",
@@ -200,6 +204,17 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(tasks[0]?.createdBy, "tool");
     assert.equal(tasks[0]?.createdByAgentId, undefined);
 
+    const notifyReply = await notify.execute({
+      text: "Daily brief is ready",
+      channel: "inbox",
+    });
+    const inbox = await harness.listInbox();
+
+    assert.equal(notifyReply, "saved notification to inbox");
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.sourceType, "user");
+    assert.equal(inbox[0]?.sourceChatId, "default");
+
     await harness.switchChat(agent.chatId);
 
     const childAgentReply = await createAgent.execute({
@@ -227,6 +242,19 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(childTasks[0]?.sourceChatId, agent.chatId);
     assert.equal(childTasks[0]?.createdBy, "tool");
     assert.equal(childTasks[0]?.createdByAgentId, agent.id);
+
+    const childNotifyReply = await notify.execute({
+      text: "Child brief is ready",
+      channel: "inbox",
+    });
+    const childInbox = await harness.listInbox();
+
+    assert.equal(childNotifyReply, "saved notification to inbox");
+    assert.equal(childInbox.length, 2);
+    assert.equal(childInbox[1]?.sourceType, "agent");
+    assert.equal(childInbox[1]?.sourceId, agent.id);
+    assert.equal(childInbox[1]?.sourceName, agent.name);
+    assert.equal(childInbox[1]?.sourceChatId, agent.chatId);
   } finally {
     harness?.cancelAgent("planner");
     harness?.cancelAgent("child-planner");
