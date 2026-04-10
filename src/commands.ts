@@ -27,6 +27,7 @@ export const helpText = [
   "Commands:",
   "  /help              Show this help",
   "  /new               Create and switch to a new chat",
+  "  /switch            Switch to a chat",
   "  /fork              Fork the current chat",
   "  /reset             Clear the current chat",
   "  /compress          Compress the current chat",
@@ -1397,6 +1398,22 @@ const handleNewCommand: CommandHandler = async (harness, input, options) => {
   return handleChatCommand(harness, "/chat new", options);
 };
 
+const handleSwitchCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/switch" || input === "/switch help") {
+    return "Usage: /switch <chat id>";
+  }
+
+  if (input.startsWith("/switch ")) {
+    return handleChatCommand(
+      harness,
+      `/chat switch ${input.slice("/switch ".length).trim()}`,
+      options,
+    );
+  }
+
+  return "Usage: /switch <chat id>";
+};
+
 const handleResetCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/reset") {
     return handleChatCommand(harness, "/chat reset", options);
@@ -1424,6 +1441,7 @@ const handleForkCommand: CommandHandler = async (harness, input, options) => {
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
   new: handleNewCommand,
+  switch: handleSwitchCommand,
   fork: handleForkCommand,
   reset: handleResetCommand,
   send: handleSendCommand,

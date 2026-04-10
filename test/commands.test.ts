@@ -99,6 +99,21 @@ test("dispatchCommand creates and switches to a new chat with /new", async () =>
   }
 });
 
+test("dispatchCommand switches chats with /switch", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-switch-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/switch jazz");
+
+    assert.equal(reply, "switched to chat: jazz");
+    assert.equal(harness.getCurrentChatId(), "jazz");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand forks the current chat with /fork", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-fork-alias-"));
 

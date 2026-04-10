@@ -68,6 +68,7 @@ Commands:
   ?                  Alias for /help
   /help              Show this help
   /new [id]          Create and switch to a new chat
+  /switch X          Switch to chat X
   /fork [id]         Fork the current chat
   /reset             Clear the current chat
   /project           Project information commands
@@ -79,7 +80,6 @@ Commands:
   /skills            List local skills
   /agent             Agent management commands
   /task              Task scheduling commands
-  /switch X          Switch the REPL to project folder X
   /verbose <on|off>  Toggle verbose reply metadata
   /quit              Exit the REPL
 ```

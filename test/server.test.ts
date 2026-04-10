@@ -84,7 +84,7 @@ test("server handles project commands and routes chat messages by active project
     const switchReply = await server.handleMessage({
       channel: "whatsapp",
       userId: "whatsapp-15551234567",
-      text: "/switch work",
+      text: "/project switch work",
     });
     assert.equal(switchReply, "Switched to project: work");
 

@@ -36,7 +36,6 @@ const helpText = [
   "  /project                 Show the current project",
   "  /project list            List available projects",
   "  /project switch <name>   Switch to a different project",
-  "  /switch <name>           Alias for /project switch <name>",
   "",
   "Any other message is sent to the current project's chat.",
 ].join("\n");
@@ -145,6 +144,93 @@ export class MaclawServer {
       currentProject: this.getDefaultProjectName(),
       projects: this.getPortalProjects(),
     });
+  }
+
+  async start(): Promise<void> {
+    if (this.started) {
+      return;
+    }
+
+    for (const project of this.config.projects) {
+      this.projects.set(
+        project.name,
+        Harness.load(project.folder, {
+          onTaskMessage: async (task, message) =>
+            logScheduledTask(project.name, task, message),
+          router: this._router,
+        }),
+      );
+    }
+
+    this.channels.set("web", this.webChannel);
+
+    if (this.config.channels?.slack?.enabled) {
+      this.channels.set(
+        "slack",
+        new SlackChannel(this.config.channels.slack, this.secrets.slack),
+      );
+    }
+
+    if (this.config.channels?.discord?.enabled) {
+      this.channels.set(
+        "discord",
+        new DiscordChannel(this.config.channels.discord, this.secrets.discord),
+      );
+    }
+
+    if (this.config.channels?.email?.enabled) {
+      this.channels.set(
+        "email",
+        new EmailChannel(this.config.channels.email, this.secrets.email),
+      );
+    }
+
+    if (this.config.channels?.whatsapp?.enabled) {
+      this.channels.set(
+        "whatsapp",
+        new WhatsAppChannel(this.config.channels.whatsapp, this.secrets.whatsapp),
+      );
+    }
+
+    for (const harness of this.projects.values()) {
+      await harness.start();
+    }
+
+    if (this.options.servePortal !== false) {
+      await this.startPortal();
+    }
+
+    for (const channel of this.channels.values()) {
+      await channel.start(this.handleMessage.bind(this));
+    }
+
+    this.started = true;
+  }
+
+  async stop(): Promise<void> {
+    for (const channel of [...this.channels.values()].reverse()) {
+      await channel.stop();
+    }
+    if (this.httpServer) {
+      const server = this.httpServer;
+      this.httpServer = undefined;
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+
+    for (const harness of this.projects.values()) {
+      harness.teardown();
+    }
+
+    this.resetRuntimeState();
   }
 
   listProjectNames(): ProjectName[] {
@@ -455,13 +541,6 @@ export class MaclawServer {
       );
     }
 
-    if (message.text.startsWith("/switch ")) {
-      return this.handleProjectSwitch(
-        message,
-        message.text.slice("/switch ".length).trim(),
-      );
-    }
-
     const projectName = this.getActiveProjectName(message) ?? this.getDefaultProjectName();
     if (!projectName) {
       return `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
@@ -488,90 +567,4 @@ export class MaclawServer {
     return reply.content;
   }
 
-  async start(): Promise<void> {
-    if (this.started) {
-      return;
-    }
-
-    for (const project of this.config.projects) {
-      this.projects.set(
-        project.name,
-        Harness.load(project.folder, {
-          onTaskMessage: async (task, message) =>
-            logScheduledTask(project.name, task, message),
-          router: this._router,
-        }),
-      );
-    }
-
-    this.channels.set("web", this.webChannel);
-
-    if (this.config.channels?.slack?.enabled) {
-      this.channels.set(
-        "slack",
-        new SlackChannel(this.config.channels.slack, this.secrets.slack),
-      );
-    }
-
-    if (this.config.channels?.discord?.enabled) {
-      this.channels.set(
-        "discord",
-        new DiscordChannel(this.config.channels.discord, this.secrets.discord),
-      );
-    }
-
-    if (this.config.channels?.email?.enabled) {
-      this.channels.set(
-        "email",
-        new EmailChannel(this.config.channels.email, this.secrets.email),
-      );
-    }
-
-    if (this.config.channels?.whatsapp?.enabled) {
-      this.channels.set(
-        "whatsapp",
-        new WhatsAppChannel(this.config.channels.whatsapp, this.secrets.whatsapp),
-      );
-    }
-
-    for (const harness of this.projects.values()) {
-      await harness.start();
-    }
-
-    if (this.options.servePortal !== false) {
-      await this.startPortal();
-    }
-
-    for (const channel of this.channels.values()) {
-      await channel.start(this.handleMessage.bind(this));
-    }
-
-    this.started = true;
-  }
-
-  async stop(): Promise<void> {
-    for (const channel of [...this.channels.values()].reverse()) {
-      await channel.stop();
-    }
-    if (this.httpServer) {
-      const server = this.httpServer;
-      this.httpServer = undefined;
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    }
-
-    for (const harness of this.projects.values()) {
-      harness.teardown();
-    }
-
-    this.resetRuntimeState();
-  }
 }
