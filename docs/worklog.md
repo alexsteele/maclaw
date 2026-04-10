@@ -7,7 +7,12 @@ Derived from local git history.
 | 2026-04-04 |        22 |                          6.5 | +8,904 / -2,417 |
 | 2026-04-05 |        30 |                          4.3 | +3,555 / -504   |
 | 2026-04-06 |        41 |                          3.6 | +5,451 / -1,079 |
-| 2026-04-08 |        19 |                          1.7 | +1,755 / -94    |
+| 2026-04-08 |        22 |                          1.9 | +2,055 / -100   |
+| 2026-04-09 |         6 |                          1.5 | +1,630 / -329   |
+
+Current code size:
+- `src/`: `10,830` lines
+- `test/`: `5,245` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -57,3 +62,15 @@ Derived from local git history.
 - Added response telemetry for latency and tool iterations.
 - Refined tool and provenance plumbing for agent/task creation.
 - Agents can spawn agents!
+
+## 2026-04-09 Notes
+
+- email support
+- `/send email | hello world` works
+- repl notification support
+- `ChannelRouter` and `ChannelTarget`.
+- `Harness::notify()`
+- `/switch` for chats. `/project switch` for projects.
+- Added `notify`, `read_chat`, and `list_channels` tools.
+- Extended inbox provenance with source chat tracking for tool and lifecycle
+  notifications.

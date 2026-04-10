@@ -65,6 +65,7 @@ export type NotificationPolicy =
       deny?: NotificationSelector[];
     };
 
+// TODO: simplify
 export type NotificationTarget =
   | "inbox"
   | "origin"
