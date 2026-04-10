@@ -1,5 +1,5 @@
 /**
- * Interactive first-run setup for provider, project, and server/channel config.
+ * Interactive first-run setup for model, project, server, and channel config.
  *
  * Proposal and example flow:
  * - docs/setup.md
@@ -7,9 +7,12 @@
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
+import { existsSync } from "node:fs";
 import {
+  defaultProjectDataDir,
   initProjectConfig,
   normalizeConfiguredModel,
+  parseConfiguredModel,
   type ProjectConfig,
 } from "../config.js";
 import { renderModelSuggestions } from "../models.js";
@@ -32,6 +35,7 @@ type SetupOptions = {
 
 type ProviderChoice = "openai" | "dummy" | "skip";
 type ChannelChoice = "slack" | "discord" | "whatsapp" | "email";
+type SetupSection = "all" | "model" | "project" | "server" | "channels";
 
 type ServerConfigData = {
   defaultProject?: string;
@@ -81,6 +85,42 @@ const loadSetupServerSecrets = async (homeDir: string): Promise<ServerSecretsDat
   );
 };
 
+const projectConfigFileForFolder = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "maclaw.json");
+
+const findExistingDefaultProjectFolder = (
+  homeDir: string,
+  serverConfig: ServerConfigData,
+): string | undefined => {
+  const configuredDefaultProject = serverConfig.defaultProject;
+  if (configuredDefaultProject) {
+    const configuredProject = (serverConfig.projects ?? []).find(
+      (project) => project.name === configuredDefaultProject,
+    );
+    if (configuredProject && existsSync(projectConfigFileForFolder(configuredProject.folder))) {
+      return configuredProject.folder;
+    }
+  }
+
+  const fallbackProjectFolder = path.join(maclawHomeDir(homeDir), "projects", "default");
+  return existsSync(projectConfigFileForFolder(fallbackProjectFolder))
+    ? fallbackProjectFolder
+    : undefined;
+};
+
+const loadExistingProjectConfig = async (
+  projectFolder: string | undefined,
+): Promise<Partial<ProjectConfig>> => {
+  if (!projectFolder) {
+    return {};
+  }
+
+  return readJsonFile<Partial<ProjectConfig>>(
+    projectConfigFileForFolder(projectFolder),
+    {},
+  );
+};
+
 class SetupPrompter {
   private rl?: readline.Interface;
 
@@ -98,6 +138,43 @@ class SetupPrompter {
     this.output.write(`${line}\n`);
   }
 
+  private printDefault(defaultValue: string): void {
+    this.print(`Default: ${defaultValue}`);
+  }
+
+  private async waitForAnswer(prompt: string): Promise<string> {
+    this.rl ??= readline.createInterface({
+      input: this.input,
+      output: this.output,
+    });
+    const rl = this.rl;
+
+    let cancel = (): void => {};
+    const cancelOnEof = new Promise<never>((_resolve, reject) => {
+      cancel = (): void => {
+        this.input.removeListener("end", cancel);
+        this.input.removeListener("close", cancel);
+        rl.removeListener("close", cancel);
+        reject(new SetupCancelledError());
+      };
+
+      this.input.once("end", cancel);
+      this.input.once("close", cancel);
+      rl.once("close", cancel);
+    });
+
+    try {
+      return await Promise.race([
+        rl.question(prompt),
+        cancelOnEof,
+      ]);
+    } finally {
+      this.input.removeListener("end", cancel);
+      this.input.removeListener("close", cancel);
+      rl.removeListener("close", cancel);
+    }
+  }
+
   private async nextAnswer(prompt: string): Promise<string> {
     if (this.answers.length > 0) {
       const answer = this.answers.shift() ?? "";
@@ -105,23 +182,24 @@ class SetupPrompter {
       return answer.trim();
     }
 
-    this.rl ??= readline.createInterface({
-      input: this.input,
-      output: this.output,
-    });
-    return (await this.rl.question(prompt)).trim();
+    return (await this.waitForAnswer(prompt)).trim();
   }
 
   async askLine(prompt: string, defaultValue?: string): Promise<string> {
-    const suffix = defaultValue ? ` [${defaultValue}]` : "";
-    const answer = await this.nextAnswer(`${prompt}${suffix}\n> `);
+    this.print(prompt);
+    if (defaultValue) {
+      this.printDefault(defaultValue);
+    }
+    const answer = await this.nextAnswer("> ");
     return answer || defaultValue || "";
   }
 
   async askYesNo(prompt: string, defaultValue = true): Promise<boolean> {
     const defaultLabel = defaultValue ? "yes" : "no";
     while (true) {
-      const answer = (await this.nextAnswer(`${prompt} [${defaultLabel}]\n> `)).toLowerCase();
+      this.print(prompt);
+      this.printDefault(defaultLabel);
+      const answer = (await this.nextAnswer("> ")).toLowerCase();
       if (!answer) {
         return defaultValue;
       }
@@ -147,6 +225,7 @@ class SetupPrompter {
     options.forEach((option, index) => {
       this.print(`  ${index + 1}. ${option}`);
     });
+    this.printDefault(defaultValue);
 
     while (true) {
       const answer = (await this.nextAnswer("> ")).toLowerCase();
@@ -171,16 +250,27 @@ class SetupPrompter {
   async askMultiChoice<T extends string>(
     prompt: string,
     options: T[],
+    settings: { skipOptionLabel?: string } = {},
   ): Promise<T[]> {
     this.print(prompt);
     options.forEach((option, index) => {
       this.print(`  ${index + 1}. ${option}`);
     });
+    if (settings.skipOptionLabel) {
+      this.print(`  ${options.length + 1}. ${settings.skipOptionLabel}`);
+    }
     this.print("  Enter comma-separated numbers or names, or leave blank to skip.");
 
     while (true) {
       const answer = (await this.nextAnswer("> ")).toLowerCase();
-      if (!answer || answer === "skip" || answer === "none") {
+      const skipNumber = String(options.length + 1);
+      if (
+        !answer
+        || answer === "skip"
+        || answer === "none"
+        || (settings.skipOptionLabel && answer === settings.skipOptionLabel.toLowerCase())
+        || (settings.skipOptionLabel && answer === skipNumber)
+      ) {
         return [];
       }
 
@@ -212,15 +302,28 @@ class SetupPrompter {
   }
 }
 
+class SetupCancelledError extends Error {
+  constructor() {
+    super("Setup cancelled.");
+  }
+}
+
+const isSetupCancelledError = (error: unknown): boolean =>
+  error instanceof SetupCancelledError
+  || (error instanceof Error && error.name === "AbortError");
+
 const runProviderSetup = async (
   prompt: SetupPrompter,
   projectConfig: Partial<ProjectConfig>,
   serverSecrets: ServerSecretsData,
 ): Promise<void> => {
+  const existingModel = projectConfig.model
+    ? parseConfiguredModel(normalizeConfiguredModel(projectConfig.model))
+    : undefined;
   const providerChoice = await prompt.askChoice<ProviderChoice>(
-    "Provider?",
+    "Model source?",
     ["openai", "dummy", "skip"],
-    "openai",
+    existingModel?.provider ?? "openai",
   );
 
   if (providerChoice === "openai") {
@@ -230,11 +333,15 @@ const runProviderSetup = async (
     prompt.print("Suggested models:");
     prompt.print(renderModelSuggestions("openai"));
 
-    projectConfig.model = normalizeConfiguredModel(
-      await prompt.askLine("Model?", "gpt-5.4-mini"),
+    const model = normalizeConfiguredModel(
+      await prompt.askLine(
+        "Model?",
+        existingModel?.provider === "openai" ? existingModel.modelName : "gpt-5.4-mini",
+      ),
       "openai",
     );
     const apiKey = await prompt.askLine("OpenAI API key");
+    projectConfig.model = model;
     if (apiKey) {
       serverSecrets.openai = { apiKey };
     }
@@ -245,10 +352,14 @@ const runProviderSetup = async (
     prompt.print();
     prompt.print("Suggested models:");
     prompt.print(renderModelSuggestions("dummy"));
-    projectConfig.model = normalizeConfiguredModel(
-      await prompt.askLine("Model?", "default"),
+    const model = normalizeConfiguredModel(
+      await prompt.askLine(
+        "Model?",
+        existingModel?.provider === "dummy" ? existingModel.modelName : "default",
+      ),
       "dummy",
     );
+    projectConfig.model = model;
   }
 };
 
@@ -259,8 +370,16 @@ const runProjectSetup = async (
   serverConfig: ServerConfigData,
 ): Promise<ProjectConfig | undefined> => {
   const defaultProjectLocation = path.join(maclawHomeDir(homeDir), "projects", "default");
+  const existingProjectFolder = findExistingDefaultProjectFolder(homeDir, serverConfig);
+  const selectedDefaultProjectFolder = existingProjectFolder ?? defaultProjectLocation;
+
+  if (existingProjectFolder) {
+    prompt.print(`Found existing default project: ${existingProjectFolder}`);
+    prompt.print();
+  }
+
   const projectChoice = await prompt.askChoice(
-    `Create a default project in ${defaultProjectLocation}?`,
+    `Create or update the default project in ${selectedDefaultProjectFolder}?`,
     ["yes", "no", "other location"],
     "yes",
   );
@@ -273,7 +392,7 @@ const runProjectSetup = async (
     expandHome(
       projectChoice === "other location"
         ? await prompt.askLine("Where should the default project live?")
-        : defaultProjectLocation,
+        : selectedDefaultProjectFolder,
       homeDir,
     ),
   );
@@ -293,42 +412,97 @@ const runProjectSetup = async (
 const runServerSetup = async (
   prompt: SetupPrompter,
   serverConfig: ServerConfigData,
-  serverSecrets: ServerSecretsData,
 ): Promise<boolean> => {
   const setupServer = await prompt.askChoice(
-    "Set up maclaw server and connectors?",
+    "Set up maclaw server?",
     ["yes", "skip"],
-    "skip",
+    "yes",
   );
 
   if (setupServer !== "yes") {
     return false;
   }
 
-  const selectedChannels = await prompt.askMultiChoice<ChannelChoice>("Enable channels?", [
-    "slack",
-    "discord",
-    "whatsapp",
-    "email",
-  ]);
+  const registeredProjects = serverConfig.projects ?? [];
+  if (registeredProjects.length === 0) {
+    prompt.print();
+    prompt.print("No projects are registered in the server config yet.");
+    prompt.print("Use the project step now, or update server.json later.");
+    return true;
+  }
+
+  if (
+    serverConfig.defaultProject
+    && registeredProjects.some((project) => project.name === serverConfig.defaultProject)
+  ) {
+    prompt.print();
+    prompt.print(`Found existing default server project: ${serverConfig.defaultProject}`);
+    return true;
+  }
+
+  if (registeredProjects.length === 1) {
+    serverConfig.defaultProject = registeredProjects[0]?.name;
+    prompt.print();
+    prompt.print(`Default server project: ${serverConfig.defaultProject}`);
+    return true;
+  }
+
+  prompt.print();
+  const projectNames = registeredProjects.map((project) => project.name);
+  serverConfig.defaultProject = await prompt.askChoice(
+    "Default server project?",
+    projectNames,
+    projectNames.includes(serverConfig.defaultProject ?? "")
+      ? serverConfig.defaultProject as string
+      : projectNames[0],
+  );
+  return true;
+};
+
+// notes: Do not override server config until we receive a complete config from the user.
+const runChannelSetup = async (
+  prompt: SetupPrompter,
+  serverConfig: ServerConfigData,
+  serverSecrets: ServerSecretsData,
+): Promise<boolean> => {
+  const selectedChannels = await prompt.askMultiChoice<ChannelChoice>(
+    "Enable channels?",
+    [
+      "slack",
+      "discord",
+      "whatsapp",
+      "email",
+    ],
+    { skipOptionLabel: "skip" },
+  );
+
+  if (selectedChannels.length === 0) {
+    return false;
+  }
 
   if (selectedChannels.includes("slack")) {
     prompt.print();
     prompt.print("Slack setup:");
     prompt.print("  Create a Slack app and enable Socket Mode:");
     prompt.print(`  ${SLACK_SETUP_URL}`);
-    const channels = (serverConfig.channels ??= {});
-    channels.slack = {
-      ...(channels.slack ?? {}),
+    printExistingChannelConfig(prompt, "slack", serverConfig.channels?.slack);
+    const slackConfig = {
+      ...(serverConfig.channels?.slack ?? {}),
       enabled: true,
     };
     const appToken = await prompt.askLine("Slack app token");
     const botToken = await prompt.askLine("Slack bot token");
+    const slackSecrets =
+      appToken || botToken
+        ? {
+            ...(appToken ? { appToken } : {}),
+            ...(botToken ? { botToken } : {}),
+          }
+        : undefined;
+    const channels = (serverConfig.channels ??= {});
+    channels.slack = slackConfig;
     if (appToken || botToken) {
-      serverSecrets.slack = {
-        ...(appToken ? { appToken } : {}),
-        ...(botToken ? { botToken } : {}),
-      };
+      serverSecrets.slack = slackSecrets;
     }
   }
 
@@ -337,12 +511,14 @@ const runServerSetup = async (
     prompt.print("Discord setup:");
     prompt.print("  Register a bot in the Discord Developer Portal:");
     prompt.print(`  ${DISCORD_SETUP_URL}`);
-    const channels = (serverConfig.channels ??= {});
-    channels.discord = {
-      ...(channels.discord ?? {}),
+    printExistingChannelConfig(prompt, "discord", serverConfig.channels?.discord);
+    const discordConfig = {
+      ...(serverConfig.channels?.discord ?? {}),
       enabled: true,
     };
     const botToken = await prompt.askLine("Discord bot token");
+    const channels = (serverConfig.channels ??= {});
+    channels.discord = discordConfig;
     if (botToken) {
       serverSecrets.discord = { botToken };
     }
@@ -354,20 +530,26 @@ const runServerSetup = async (
     prompt.print("  Configure a WhatsApp Cloud API app and webhook:");
     prompt.print(`  ${WHATSAPP_SETUP_URL}`);
     prompt.print("  Warning: this exposes a public webhook, so be careful how and where you run it.");
-    const channels = (serverConfig.channels ??= {});
+    printExistingChannelConfig(prompt, "whatsapp", serverConfig.channels?.whatsapp);
     const phoneNumberId = await prompt.askLine("WhatsApp phone number id");
-    channels.whatsapp = {
-      ...(channels.whatsapp ?? {}),
+    const whatsappConfig = {
+      ...(serverConfig.channels?.whatsapp ?? {}),
       enabled: true,
       ...(phoneNumberId ? { phoneNumberId } : {}),
     };
     const accessToken = await prompt.askLine("WhatsApp access token");
     const verifyToken = await prompt.askLine("WhatsApp verify token");
+    const whatsappSecrets =
+      accessToken || verifyToken
+        ? {
+            ...(accessToken ? { accessToken } : {}),
+            ...(verifyToken ? { verifyToken } : {}),
+          }
+        : undefined;
+    const channels = (serverConfig.channels ??= {});
+    channels.whatsapp = whatsappConfig;
     if (accessToken || verifyToken) {
-      serverSecrets.whatsapp = {
-        ...(accessToken ? { accessToken } : {}),
-        ...(verifyToken ? { verifyToken } : {}),
-      };
+      serverSecrets.whatsapp = whatsappSecrets;
     }
   }
 
@@ -377,14 +559,14 @@ const runServerSetup = async (
     prompt.print("  maclaw sends outbound email notifications over SMTP.");
     prompt.print("  For Gmail, use smtp.gmail.com:587 with STARTTLS and a Google App Password:");
     prompt.print(`  ${GMAIL_APP_PASSWORDS_URL}`);
-    const channels = (serverConfig.channels ??= {});
+    printExistingChannelConfig(prompt, "email", serverConfig.channels?.email);
     const from = await prompt.askLine("Email from address");
     const to = await prompt.askLine("Default email to address (optional)");
     const host = await prompt.askLine("SMTP host");
     const portText = await prompt.askLine("SMTP port", "587");
     const startTls = await prompt.askYesNo("Use STARTTLS?", true);
-    channels.email = {
-      ...(channels.email ?? {}),
+    const emailConfig = {
+      ...(serverConfig.channels?.email ?? {}),
       enabled: true,
       from,
       ...(to ? { to } : {}),
@@ -394,11 +576,17 @@ const runServerSetup = async (
     };
     const smtpUser = await prompt.askLine("SMTP username");
     const smtpPassword = await prompt.askLine("SMTP password");
+    const emailSecrets =
+      smtpUser || smtpPassword
+        ? {
+            ...(smtpUser ? { smtpUser } : {}),
+            ...(smtpPassword ? { smtpPassword } : {}),
+          }
+        : undefined;
+    const channels = (serverConfig.channels ??= {});
+    channels.email = emailConfig;
     if (smtpUser || smtpPassword) {
-      serverSecrets.email = {
-        ...(smtpUser ? { smtpUser } : {}),
-        ...(smtpPassword ? { smtpPassword } : {}),
-      };
+      serverSecrets.email = emailSecrets;
     }
   }
 
@@ -421,21 +609,78 @@ const writeSetupConfig = async (
   writtenFiles.push(serverSecretsPath);
 };
 
+const printExistingConfigStatus = (
+  prompt: SetupPrompter,
+  homeDir: string,
+  serverConfig: ServerConfigData,
+): void => {
+  const serverConfigPath = defaultServerConfigFile(homeDir);
+
+  if (existsSync(serverConfigPath)) {
+    prompt.print(`Found existing server config: ${serverConfigPath}`);
+    const configuredChannels = Object.entries(serverConfig.channels ?? {})
+      .filter(([, channelConfig]) => channelConfig?.enabled)
+      .map(([channelName]) => channelName);
+    if (configuredChannels.length > 0) {
+      prompt.print(`Configured channels: ${configuredChannels.join(", ")}`);
+    }
+  }
+
+  if (existsSync(serverConfigPath)) {
+    prompt.print();
+  }
+};
+
+const printExistingChannelConfig = (
+  prompt: SetupPrompter,
+  channelName: string,
+  channelConfig: unknown,
+): void => {
+  if (!channelConfig) {
+    return;
+  }
+
+  prompt.print(`Current ${channelName} config:`);
+  prompt.print(JSON.stringify(channelConfig, null, 2));
+};
+
+const askSetupSection = async (prompt: SetupPrompter): Promise<SetupSection> => {
+  return prompt.askChoice<SetupSection>(
+    "Where do you want to start?",
+    ["all", "model", "project", "server", "channels"],
+    "all",
+  );
+};
+
+const SETUP_BANNER = [
+  "                      _                ",
+  " _ __ ___   __ _  ___| | __ ___      __",
+  "| '_ ` _ \\ / _` |/ __| |/ _` \\ \\ /\\ / /",
+  "| | | | | | (_| | (__| | (_| |\\ V  V / ",
+  "|_| |_| |_|\\__,_|\\___|_|\\__,_| \\_/\\_/  ",
+];
+
 const runSetupFlow = async (
   prompt: SetupPrompter,
   homeDir: string,
 ): Promise<void> => {
   const writtenFiles: string[] = [];
 
-  prompt.print("Welcome to maclaw setup.");
+  SETUP_BANNER.forEach((line) => {
+    prompt.print(line);
+  });
+  prompt.print("Welcome to maclaw setup!");
   prompt.print();
-  prompt.print("This setup will help you:");
-  prompt.print("  1. Choose a provider and model");
-  prompt.print("  2. Pick a default project");
-  prompt.print("  3. Optionally configure maclaw server and connectors");
+  prompt.print("This setup will help you configure:");
+  prompt.print("  1. Model");
+  prompt.print("  2. Project");
+  prompt.print("  3. Channels");
+  prompt.print("  4. Server");
   prompt.print();
-  prompt.print("Once complete, you can run a local maclaw REPL with `maclaw` and a server with");
-  prompt.print("`maclaw server`.");
+  prompt.print("It should take under 1 minute.")
+  prompt.print();
+
+  const setupSection = await askSetupSection(prompt);
   prompt.print();
 
   const globalHome = maclawHomeDir(homeDir);
@@ -455,18 +700,37 @@ const runSetupFlow = async (
   const serverSecrets = saveGlobalConfig
     ? await loadSetupServerSecrets(homeDir)
     : {};
+  const existingProjectConfig = await loadExistingProjectConfig(
+    findExistingDefaultProjectFolder(homeDir, serverConfig),
+  );
 
-  await runProviderSetup(prompt, projectConfig, serverSecrets);
+  Object.assign(projectConfig, existingProjectConfig);
 
-  const defaultProject = await runProjectSetup(prompt, homeDir, projectConfig, serverConfig);
+  if (saveGlobalConfig) {
+    printExistingConfigStatus(prompt, homeDir, serverConfig);
+  }
+
+  if (setupSection === "all" || setupSection === "model") {
+    await runProviderSetup(prompt, projectConfig, serverSecrets);
+  }
+
+  const defaultProject =
+    setupSection === "all" || setupSection === "project"
+      ? await runProjectSetup(prompt, homeDir, projectConfig, serverConfig)
+      : undefined;
   if (defaultProject) {
     writtenFiles.push(defaultProject.projectConfigFile);
   }
 
   const configuredServer = saveGlobalConfig
-    ? await runServerSetup(prompt, serverConfig, serverSecrets)
+    && (setupSection === "all" || setupSection === "server")
+    ? await runServerSetup(prompt, serverConfig)
     : false;
-  const shouldShowServerCommand = Boolean(defaultProject) || configuredServer;
+  const configuredChannels = saveGlobalConfig
+    && (setupSection === "all" || setupSection === "channels")
+    ? await runChannelSetup(prompt, serverConfig, serverSecrets)
+    : false;
+  const shouldShowServerCommand = Boolean(defaultProject) || configuredServer || configuredChannels;
 
   if (saveGlobalConfig) {
     await writeSetupConfig(
@@ -486,7 +750,7 @@ const runSetupFlow = async (
   }
 
   prompt.print();
-  prompt.print("Done.");
+  prompt.print("Done! 🦞");
   prompt.print("Run:");
   prompt.print("  maclaw");
   if (shouldShowServerCommand) {
@@ -510,6 +774,11 @@ export const runSetup = async ({
   try {
     await runSetupFlow(prompt, homeDir);
   } catch (error) {
+    if (isSetupCancelledError(error)) {
+      output.write("\nBye!\n");
+      return;
+    }
+
     logSetupError(error);
     throw error;
   } finally {
