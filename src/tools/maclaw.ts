@@ -12,10 +12,13 @@ import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 
 export type MaclawToolContext = {
   defaultTaskTime: string;
+  contextMessages: number;
   getCurrentChatId(): string;
   listTools(): ToolDefinition[];
+  listChannels(): string[];
   listChats(): Promise<ChatSummary[]>;
   loadChat(chatId: string): Promise<ChatRecord>;
+  readChat(chatId?: string, limit?: number): Promise<ChatRecord>;
   listAgents(): AgentRecord[];
   findAgent(agentRef: string): AgentRecord | undefined;
   listTasks(chatId?: string): Promise<ScheduledTask[]>;
@@ -45,6 +48,22 @@ const parseOptionalChatInput = (input: unknown): { chatId?: string } => {
   }
 
   return { chatId: requiredString(object, "chatId") };
+};
+
+const parseReadChatInput = (
+  input: unknown,
+): {
+  chatId?: string;
+  limit?: number;
+} => {
+  const object = parseObjectInput(input);
+  const chatId = object.chatId;
+  const limit = object.limit;
+
+  return {
+    ...(chatId === undefined ? {} : { chatId: requiredString(object, "chatId") }),
+    ...(typeof limit === "number" ? { limit } : {}),
+  };
 };
 
 const parseShowAgentInput = (input: unknown): { agent: string } => {
@@ -144,6 +163,28 @@ const formatChat = (chat: ChatRecord): string =>
     `summary: ${chat.summary ?? "(none)"}`,
   ].join("\n");
 
+const formatChatMessages = (chat: ChatRecord): string => {
+  const parts: string[] = [];
+  if (chat.summary) {
+    parts.push(`summary:\n${chat.summary}`);
+  }
+
+  if (chat.messages.length === 0) {
+    parts.push("messages:\n(none)");
+    return parts.join("\n\n");
+  }
+
+  parts.push(
+    [
+      "messages:",
+      ...chat.messages.map(
+        (message) => `[${message.role}] ${message.content}`,
+      ),
+    ].join("\n"),
+  );
+  return parts.join("\n\n");
+};
+
 const formatAgent = (agent: AgentRecord): string =>
   [
     `id: ${agent.id}`,
@@ -209,6 +250,21 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
       },
     },
     {
+      name: "list_channels",
+      description: "List the available notification destination channels like origin, inbox, email, repl, or web.",
+      permission: "read",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        parseEmptyInput(input);
+        const channels = context.listChannels();
+        return channels.length === 0 ? "No channels found." : channels.map((channel) => `- ${channel}`).join("\n");
+      },
+    },
+    {
       name: "show_chat",
       description: "Show metadata for a saved chat. Defaults to the current chat.",
       permission: "read",
@@ -223,6 +279,24 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
         const { chatId } = parseOptionalChatInput(input);
         const chat = await context.loadChat(chatId ?? context.getCurrentChatId());
         return formatChat(chat);
+      },
+    },
+    {
+      name: "read_chat",
+      description: "Read the recent chat context, including the compressed summary when present. Defaults to the current chat and the project's context limit.",
+      permission: "read",
+      inputSchema: {
+        type: "object",
+        properties: {
+          chatId: { type: "string" },
+          limit: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { chatId, limit } = parseReadChatInput(input);
+        const chat = await context.readChat(chatId, limit ?? context.contextMessages);
+        return formatChatMessages(chat);
       },
     },
     {

@@ -24,6 +24,7 @@ export interface NotificationRouter {
   send(
     notification: RoutedNotification,
   ): Promise<{ delivered: boolean; target?: ChannelTarget }>;
+  listChannels(origin?: Origin): string[];
 }
 
 export class NoopRouter implements NotificationRouter {
@@ -65,6 +66,15 @@ export class NoopRouter implements NotificationRouter {
     }
 
     return { delivered: false };
+  }
+
+  listChannels(origin?: Origin): string[] {
+    const channels = new Set(["inbox", "origin"]);
+    if (origin?.channel) {
+      channels.add(origin.channel);
+    }
+
+    return [...channels];
   }
 }
 
@@ -144,5 +154,14 @@ export class ChannelRouter implements NotificationRouter {
 
     await channel.send(target, notification.text);
     return { delivered: true, target };
+  }
+
+  listChannels(origin?: Origin): string[] {
+    const channels = new Set(["inbox", "origin", ...this.channels.keys()]);
+    if (origin?.channel) {
+      channels.add(origin.channel);
+    }
+
+    return [...channels].sort();
   }
 }

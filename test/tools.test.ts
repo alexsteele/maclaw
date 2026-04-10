@@ -115,7 +115,9 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     const tools = harness.listTools();
     const listTools = tools.find((tool) => tool.name === "list_tools");
     const listChats = tools.find((tool) => tool.name === "list_chats");
+    const listChannels = tools.find((tool) => tool.name === "list_channels");
     const showChat = tools.find((tool) => tool.name === "show_chat");
+    const readChat = tools.find((tool) => tool.name === "read_chat");
     const listAgents = tools.find((tool) => tool.name === "list_agents");
     const showAgent = tools.find((tool) => tool.name === "show_agent");
     const listTasks = tools.find((tool) => tool.name === "list_tasks");
@@ -123,21 +125,33 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
 
     assert.ok(listTools);
     assert.ok(listChats);
+    assert.ok(listChannels);
     assert.ok(showChat);
+    assert.ok(readChat);
     assert.ok(listAgents);
     assert.ok(showAgent);
     assert.ok(listTasks);
     assert.ok(showTask);
     assert.equal(listTools.permission, "read");
     assert.equal(listChats.permission, "read");
+    assert.equal(listChannels.permission, "read");
+    assert.equal(readChat.permission, "read");
     assert.equal(showAgent.permission, "read");
     assert.equal(showTask.permission, "read");
 
     assert.match(await listTools.execute({}), /list_chats \[read\]/u);
+    assert.match(await listTools.execute({}), /list_channels \[read\]/u);
+    assert.match(await listTools.execute({}), /read_chat \[read\]/u);
     assert.match(await listTools.execute({}), /show_agent \[read\]/u);
     assert.match(await listChats.execute({}), /default/u);
     assert.match(await listChats.execute({}), /branch-a/u);
+    assert.match(await listChannels.execute({}), /- inbox/u);
+    assert.match(await listChannels.execute({}), /- origin/u);
     assert.match(await showChat.execute({ chatId: "branch-a" }), /^id: branch-a$/mu);
+    assert.match(
+      await readChat.execute({ chatId: "branch-a" }),
+      /\[assistant\] No model provider configured\./u,
+    );
     assert.match(await listAgents.execute({}), /planner: /u);
     assert.match(await showAgent.execute({ agent: "planner" }), /^name: planner$/mu);
     assert.match(await listTasks.execute({}), /Daily Brief/u);

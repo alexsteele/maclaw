@@ -96,6 +96,7 @@ export type HarnessNotification = {
 export type HarnessOptions = {
   onTaskMessage?: TaskMessageHandler;
   router?: NotificationRouter;
+  origin?: Origin;
 };
 
 export type AgentCreateOptions = {
@@ -217,10 +218,13 @@ const findAgentByChatId = (
 
 const createToolContext = (harness: Harness): MaclawToolContext => ({
   defaultTaskTime: harness.config.defaultTaskTime,
+  contextMessages: harness.config.contextMessages,
   getCurrentChatId: () => harness.getCurrentChatId(),
   listTools: () => harness.listTools(),
+  listChannels: () => harness.listChannels(),
   listChats: () => harness.listChats(),
   loadChat: (chatId) => harness.loadChat(chatId),
+  readChat: (chatId, limit) => harness.readChat(chatId, limit),
   listAgents: () => harness.listAgents(),
   findAgent: (agentRef) => harness.findAgent(agentRef),
   listTasks: (chatId) => harness.listTasks(chatId),
@@ -304,6 +308,7 @@ export class Harness {
   private _runningAgents = new Map<string, Agent>();
   private _taskListener?: TaskMessageHandler;
   private _router: NotificationRouter;
+  private _origin?: Origin;
 
   constructor(config: ProjectConfig, options: HarnessOptions = {}) {
     this._config = config;
@@ -316,6 +321,7 @@ export class Harness {
     this._inboxStore = createInboxStore(config);
     this._taskListener = options.onTaskMessage;
     this._router = options.router ?? new NoopRouter();
+    this._origin = options.origin;
   }
 
   static load(cwd?: string, options: HarnessOptions = {}): Harness {
@@ -480,6 +486,18 @@ export class Harness {
 
   listTools() {
     return this._tools;
+  }
+
+  listChannels(): string[] {
+    return this._router.listChannels(this._origin);
+  }
+
+  async readChat(chatId?: string, limit = this.config.contextMessages): Promise<ChatRecord> {
+    const chat = await this.loadChat(chatId ?? this.getCurrentChatId());
+    return {
+      ...chat,
+      messages: chat.messages.slice(-Math.max(limit, 1)),
+    };
   }
 
   async switchChat(chatId: string): Promise<ChatRecord> {
