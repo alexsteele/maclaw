@@ -399,44 +399,70 @@ const runProjectSetup = async (
   projectConfig: Partial<ProjectConfig>,
   serverConfig: ServerConfigData,
 ): Promise<ProjectConfig | undefined> => {
-  const defaultProjectLocation = path.join(maclawHomeDir(homeDir), "projects", "default");
-  const existingProjectFolder = findExistingDefaultProjectFolder(homeDir, serverConfig);
-  const selectedDefaultProjectFolder = existingProjectFolder ?? defaultProjectLocation;
+  const existingDefaultProjectName = serverConfig.defaultProject;
+  const existingDefaultProject = existingDefaultProjectName
+    ? (serverConfig.projects ?? []).find((project) => project.name === existingDefaultProjectName)
+    : undefined;
+  const existingProjectFolder = existingDefaultProject?.folder
+    ?? findExistingDefaultProjectFolder(homeDir, serverConfig);
 
-  if (existingProjectFolder) {
-    prompt.print(`Found existing default project: ${existingProjectFolder}`);
+  if (existingProjectFolder && existingDefaultProjectName) {
+    prompt.print(`Found existing default project: ${existingDefaultProjectName}`);
+    prompt.print(`  ${existingProjectFolder}`);
     prompt.print();
   }
 
-  const projectChoice = await prompt.askChoice(
-    `Create or update the default project in ${selectedDefaultProjectFolder}?`,
-    ["yes", "no", "other location"],
-    "yes",
+  const projectName = await prompt.askLine(
+    "Project name",
+    existingDefaultProjectName ?? "default",
   );
-
-  if (projectChoice === "no") {
-    return undefined;
-  }
-
+  const defaultProjectFolder =
+    existingProjectFolder && existingDefaultProjectName === projectName
+      ? existingProjectFolder
+      : path.join(maclawHomeDir(homeDir), "projects", projectName);
   const projectFolder = path.resolve(
     expandHome(
-      projectChoice === "other location"
-        ? await prompt.askLine("Where should the default project live?")
-        : selectedDefaultProjectFolder,
+      await prompt.askLine("Project folder", defaultProjectFolder),
       homeDir,
     ),
   );
 
-  const defaultProject = await initProjectConfig(projectFolder, projectConfig);
-  serverConfig.defaultProject = defaultProject.name;
+  if (
+    existingDefaultProjectName
+    && existingProjectFolder
+    && (
+      existingDefaultProjectName !== projectName
+      || path.resolve(existingProjectFolder) !== projectFolder
+    )
+  ) {
+    const shouldCreateAnotherProject = await prompt.askYesNo(
+      `You already have default project ${existingDefaultProjectName}. Create another project?`,
+      false,
+    );
+    if (!shouldCreateAnotherProject) {
+      return undefined;
+    }
+  }
+
+  const createdProject = await initProjectConfig(projectFolder, {
+    ...projectConfig,
+    name: projectName,
+  });
+  const shouldSetDefaultProject = await prompt.askYesNo(
+    `Make ${createdProject.name} the default project?`,
+    !existingDefaultProjectName || existingDefaultProjectName === createdProject.name,
+  );
+  if (shouldSetDefaultProject) {
+    serverConfig.defaultProject = createdProject.name;
+  }
   serverConfig.projects = [
-    ...(serverConfig.projects ?? []).filter((project) => project.name !== defaultProject.name),
+    ...(serverConfig.projects ?? []).filter((project) => project.name !== createdProject.name),
     {
-      name: defaultProject.name,
-      folder: defaultProject.projectFolder,
+      name: createdProject.name,
+      folder: createdProject.projectFolder,
     },
   ];
-  return defaultProject;
+  return createdProject;
 };
 
 const runServerSetup = async (
@@ -769,7 +795,12 @@ const runSetupFlow = async (
 
   const defaultProject =
     setupSection === "all" || setupSection === "project"
-      ? await runProjectSetup(prompt, homeDir, projectConfig, serverConfig)
+      ? await runProjectSetup(
+          prompt,
+          homeDir,
+          projectConfig,
+          serverConfig,
+        )
       : undefined;
   if (defaultProject) {
     writtenFiles.push(defaultProject.projectConfigFile);
@@ -818,6 +849,7 @@ const logSetupError = (error: unknown): void => {
 
 export const runSetup = async ({
   answers = [],
+  cwd = process.cwd(),
   homeDir = os.homedir(),
   input = process.stdin,
   output = process.stdout,

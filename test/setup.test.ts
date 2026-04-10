@@ -39,8 +39,10 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       "1",
       "gpt-5.4-mini",
       "sk-test-openai",
-      "1",
-      "1",
+      "",
+      "",
+      "",
+      "",
       "",
       "1,2",
       "xapp-slack",
@@ -358,7 +360,9 @@ test("runSetup can jump straight to project setup", async () => {
       answers: [
         "3",
         "yes",
-        "1",
+        "",
+        "",
+        "",
       ],
     });
 
@@ -378,6 +382,53 @@ test("runSetup can jump straight to project setup", async () => {
     assert.equal(serverConfig.projects?.length, 1);
     assert.doesNotMatch(output.toString(), /Model source\?/u);
     assert.doesNotMatch(output.toString(), /Set up channels\?/u);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("runSetup project can initialize the current folder", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-project-current-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd-project");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+
+    await fs.mkdir(cwd, { recursive: true });
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      startSection: "project",
+      answers: [
+        "yes",
+        "cwd-project",
+        cwd,
+        "",
+      ],
+    });
+
+    const projectConfigPath = path.join(cwd, ".maclaw", "maclaw.json");
+    const serverConfigPath = path.join(maclawHomeDir(homeDir), "server.json");
+    const projectConfig = JSON.parse(await readFile(projectConfigPath, "utf8")) as {
+      name?: string;
+    };
+    const serverConfig = JSON.parse(await readFile(serverConfigPath, "utf8")) as {
+      defaultProject?: string;
+      projects?: Array<{ name: string; folder: string }>;
+    };
+
+    assert.equal(projectConfig.name, "cwd-project");
+    assert.equal(serverConfig.defaultProject, "cwd-project");
+    assert.deepEqual(serverConfig.projects, [
+      { name: "cwd-project", folder: cwd },
+    ]);
+    assert.match(output.toString(), /Project name/u);
+    assert.match(output.toString(), /Project folder/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -424,12 +475,14 @@ test("runSetup notes existing default project config and keeps the current defau
       output,
       answers: [
         "1",
-        "yes",
         "3",
-        "1",
-        "4",
-        "1",
-        "2",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
       ],
     });
 
@@ -488,7 +541,9 @@ test("runSetup keeps the existing model and project when walking through default
       output,
       answers: [
         "1",
-        "yes",
+        "",
+        "",
+        "",
         "",
         "",
         "",
