@@ -470,6 +470,44 @@ test("harness stores tasks in sqlite when configured", async () => {
   }
 });
 
+test("harness stores agent inbox entries in sqlite when configured", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-sqlite-agent-inbox-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "sqlite-agent-inbox-project",
+      model: "dummy/test-model",
+      storage: "sqlite",
+    });
+
+    const created = await harness.createAgent({
+      name: "sqlite-agent",
+      prompt: "Wait here",
+      maxSteps: 50,
+    });
+    assert.ok(created.agent);
+    assert.equal(harness.pauseAgent(created.agent.id)?.status, "paused");
+
+    const entry = await harness.sendAgentInboxMessage({
+      agentRef: created.agent.id,
+      text: "Please pick this up after restart",
+      sourceType: "user",
+      sourceId: "alex",
+      sourceName: "Alex",
+      sourceChatId: "default",
+    });
+    assert.ok(entry);
+
+    const entries = await harness.listAgentInbox(created.agent.id);
+    assert.equal(entries?.length, 1);
+    assert.equal(entries?.[0]?.text, "Please pick this up after restart");
+    assert.equal(entries?.[0]?.sourceName, "Alex");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("updateProjectConfig migrates project data when storage changes", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-storage-migrate-"));
 
@@ -504,6 +542,16 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     });
     assert.equal(notification.saved, true);
 
+    const agentInboxEntry = await harness.sendAgentInboxMessage({
+      agentRef: created.agent.id,
+      text: "Stored agent inbox message",
+      sourceType: "user",
+      sourceId: "alex",
+      sourceName: "Alex",
+      sourceChatId: "default",
+    });
+    assert.ok(agentInboxEntry);
+
     const nextConfig = await harness.updateProjectConfig({ storage: "sqlite" });
 
     assert.equal(nextConfig.storage, "sqlite");
@@ -524,6 +572,11 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     const inbox = await harness.listInbox();
     assert.equal(inbox.length, 1);
     assert.equal(inbox[0]?.text, "Stored inbox message");
+
+    const agentInbox = await harness.listAgentInbox(created.agent.id);
+    assert.equal(agentInbox?.length, 1);
+    assert.equal(agentInbox?.[0]?.text, "Stored agent inbox message");
+    assert.equal(agentInbox?.[0]?.sourceName, "Alex");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

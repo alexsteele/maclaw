@@ -7,10 +7,17 @@
  */
 import { type ProjectConfig } from "../config.js";
 import type { AgentStore } from "../agent.js";
+import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatStore } from "../chats.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
-import type { AgentRecord, ChatRecord, InboxEntry, ScheduledTask } from "../types.js";
+import type {
+  AgentInboxEntry,
+  AgentRecord,
+  ChatRecord,
+  InboxEntry,
+  ScheduledTask,
+} from "../types.js";
 import { createJsonProjectStorage } from "./json.js";
 import { createMemoryProjectStorage } from "./memory.js";
 import { createSqliteProjectStorage } from "./sqlite.js";
@@ -20,6 +27,7 @@ export type ProjectSnapshot = {
   tasks: ScheduledTask[];
   agents: AgentRecord[];
   inbox: InboxEntry[];
+  agentInbox: AgentInboxEntry[];
 };
 
 export interface ProjectStorage {
@@ -27,6 +35,7 @@ export interface ProjectStorage {
   tasks: TaskStore;
   agents: AgentStore;
   inbox: InboxStore;
+  agentInbox: AgentInboxStore;
   // Load/restore a snapshot of all project data.
   loadSnapshot(activeChatId: string): Promise<ProjectSnapshot>;
   restoreSnapshot(snapshot: ProjectSnapshot): Promise<void>;
@@ -52,6 +61,11 @@ export const loadProjectSnapshot = async (
     tasks: await storage.tasks.loadTasks(),
     agents: storage.agents.listAgents(),
     inbox: await storage.inbox.loadEntries(),
+    agentInbox: (
+      await Promise.all(
+        storage.agents.listAgents().map((agent) => storage.agentInbox.loadEntries(agent.id)),
+      )
+    ).flat(),
   };
 };
 
@@ -72,6 +86,14 @@ export const restoreProjectSnapshot = async (
   await storage.inbox.clearEntries();
   for (const entry of snapshot.inbox) {
     await storage.inbox.saveEntry(structuredClone(entry));
+  }
+
+  const agentIds = new Set(snapshot.agentInbox.map((entry) => entry.agentId));
+  for (const agentId of agentIds) {
+    await storage.agentInbox.clearEntries(agentId);
+  }
+  for (const entry of snapshot.agentInbox) {
+    await storage.agentInbox.saveEntry(structuredClone(entry));
   }
 };
 

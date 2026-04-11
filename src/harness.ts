@@ -16,6 +16,7 @@ import {
   type ProjectConfig,
 } from "./config.js";
 import { Agent, type AgentStore } from "./agent.js";
+import { createAgentInboxEntry, type AgentInboxStore } from "./agent-inbox.js";
 import { ensureDir } from "./fs-utils.js";
 import {
   createInboxEntry,
@@ -37,6 +38,7 @@ import {
 } from "./chats.js";
 import type {
   AgentRecord,
+  AgentInboxEntry,
   ChatRecord,
   ChatSummary,
   MessageContext,
@@ -252,6 +254,7 @@ export class Harness {
   private _tools: ToolDefinition[];
   private _chatRuntime: ChatRuntime;
   private _agentStore: AgentStore;
+  private _agentInboxStore: AgentInboxStore;
   private _inboxStore: InboxStore;
   private _runningAgents = new Map<string, Agent>();
   private _taskListener?: TaskMessageHandler;
@@ -267,6 +270,7 @@ export class Harness {
     this._tools = createFilteredTools(config, this);
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
+    this._agentInboxStore = this._storage.agentInbox;
     this._inboxStore = this._storage.inbox;
     this._taskListener = options.onTaskMessage;
     this._router = options.router ?? new NoopRouter();
@@ -322,6 +326,7 @@ export class Harness {
     const nextTools = createFilteredTools(nextConfig, this);
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = nextStorage.agents;
+    const nextAgentInboxStore = nextStorage.agentInbox;
 
     const activeChat = await this.loadCurrentChat();
     await nextChatStore.saveChat(activeChat);
@@ -347,6 +352,7 @@ export class Harness {
     this._tools = nextTools;
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
+    this._agentInboxStore = nextAgentInboxStore;
     this._inboxStore = nextStorage.inbox;
 
     if (this._taskListener) {
@@ -383,6 +389,7 @@ export class Harness {
     this._tools = createFilteredTools(nextConfig, this);
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
+    this._agentInboxStore = this._storage.agentInbox;
     this._inboxStore = this._storage.inbox;
 
     if (this._taskListener) {
@@ -909,6 +916,59 @@ export class Harness {
   // Notifications
   async listInbox(): Promise<InboxEntry[]> {
     return this._inboxStore.loadEntries();
+  }
+
+  async listAgentInbox(agentRef: string): Promise<AgentInboxEntry[] | undefined> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return undefined;
+    }
+
+    return this._agentInboxStore.loadEntries(agent.id);
+  }
+
+  async sendAgentInboxMessage(input: {
+    agentRef: string;
+    text: string;
+    sourceType: AgentInboxEntry["sourceType"];
+    sourceId: string;
+    sourceName?: string;
+    sourceChatId?: string;
+  }): Promise<AgentInboxEntry | undefined> {
+    const agent = this.findAgent(input.agentRef);
+    const text = input.text.trim();
+    if (!agent || text.length === 0) {
+      return undefined;
+    }
+
+    const entry = createAgentInboxEntry({
+      agentId: agent.id,
+      text,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      sourceName: input.sourceName,
+      sourceChatId: input.sourceChatId,
+    });
+    await this._agentInboxStore.saveEntry(entry);
+    return entry;
+  }
+
+  async deleteAgentInboxEntry(agentRef: string, entryId: string): Promise<boolean> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return false;
+    }
+
+    return this._agentInboxStore.deleteEntry(agent.id, entryId);
+  }
+
+  async clearAgentInbox(agentRef: string): Promise<number | undefined> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return undefined;
+    }
+
+    return this._agentInboxStore.clearEntries(agent.id);
   }
 
   async deleteInboxEntry(entryId: string): Promise<boolean> {

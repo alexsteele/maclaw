@@ -15,6 +15,7 @@ import {
 import { renderModelSuggestions } from "./models.js";
 import { parseTaskSchedule } from "./task.js";
 import type {
+  AgentInboxEntry,
   AgentRecord,
   InboxEntry,
   NotificationOverride,
@@ -134,6 +135,10 @@ export const agentHelpText = [
   "  /agent",
   "  /agent list",
   "  /agent create <name> | <prompt> [| <json options>]",
+  "  /agent send <name> | <message>",
+  "  /agent inbox <name>",
+  "  /agent inbox clear <name>",
+  "  /agent inbox rm <name> <id>",
   "  /agent chat <name>",
   "  /agent return <name>",
   "  /agent show <name>",
@@ -374,6 +379,20 @@ const renderAgentInfo = (agent: AgentRecord): string =>
     `finishedAt: ${agent.finishedAt ?? "(not finished)"}`,
     `lastError: ${agent.lastError ?? "(none)"}`,
   ].join("\n");
+
+const renderAgentInbox = (entries: AgentInboxEntry[]): string => {
+  if (entries.length === 0) {
+    return "(empty)";
+  }
+
+  return entries
+    .map((entry) => [
+      `${entry.id} [${entry.sourceType}] ${entry.createdAt}`,
+      `from: ${entry.sourceType} ${entry.sourceName ?? entry.sourceId}`,
+      entry.text,
+    ].join("\n"))
+    .join("\n\n");
+};
 
 const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
   const projectConfig = harness.config;
@@ -1269,6 +1288,71 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
 
     const agent = harness.findAgent(agentRef);
     return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
+  }
+
+  if (input.startsWith("/agent send ")) {
+    const body = input.slice("/agent send ".length).trim();
+    const separatorIndex = body.indexOf("|");
+    if (separatorIndex < 0) {
+      return "Usage: /agent send <name> | <message>";
+    }
+
+    const agentRef = body.slice(0, separatorIndex).trim();
+    const text = body.slice(separatorIndex + 1).trim();
+    if (agentRef.length === 0 || text.length === 0) {
+      return "Usage: /agent send <name> | <message>";
+    }
+
+    const entry = await harness.sendAgentInboxMessage({
+      agentRef,
+      text,
+      sourceType: "user",
+      sourceId: options.origin?.userId ?? "user",
+      sourceName: options.origin?.userId,
+      sourceChatId: getScopedChatId(harness, options),
+    });
+    return entry ? `sent message to agent: ${agentRef}` : `agent not found: ${agentRef}`;
+  }
+
+  if (input.startsWith("/agent inbox clear ")) {
+    const agentRef = input.slice("/agent inbox clear ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent inbox clear <name>";
+    }
+
+    const cleared = await harness.clearAgentInbox(agentRef);
+    return cleared === undefined
+      ? `agent not found: ${agentRef}`
+      : `cleared agent inbox: ${cleared}`;
+  }
+
+  if (input.startsWith("/agent inbox rm ")) {
+    const body = input.slice("/agent inbox rm ".length).trim();
+    const spaceIndex = body.lastIndexOf(" ");
+    if (spaceIndex < 0) {
+      return "Usage: /agent inbox rm <name> <id>";
+    }
+
+    const agentRef = body.slice(0, spaceIndex).trim();
+    const entryId = body.slice(spaceIndex + 1).trim();
+    if (agentRef.length === 0 || entryId.length === 0) {
+      return "Usage: /agent inbox rm <name> <id>";
+    }
+
+    const deleted = await harness.deleteAgentInboxEntry(agentRef, entryId);
+    return deleted
+      ? `deleted agent inbox entry: ${entryId}`
+      : `agent inbox entry not found: ${entryId}`;
+  }
+
+  if (input.startsWith("/agent inbox ")) {
+    const agentRef = input.slice("/agent inbox ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent inbox <name>";
+    }
+
+    const entries = await harness.listAgentInbox(agentRef);
+    return entries ? renderAgentInbox(entries) : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent chat ")) {

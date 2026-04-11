@@ -5,12 +5,14 @@ import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import {
   defaultAgentsFile,
+  defaultAgentInboxFile,
   defaultInboxFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   type ProjectConfig,
 } from "../config.js";
 import type { AgentStore } from "../agent.js";
+import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
 import {
   appendJsonLine,
@@ -29,6 +31,7 @@ import {
 } from "./index.js";
 import type {
   AgentRecord,
+  AgentInboxEntry,
   ChatRecord,
   ChatSummary,
   InboxEntry,
@@ -130,6 +133,43 @@ export class JsonFileInboxStore implements InboxStore {
     const entries = await this.loadEntries();
     await writeJsonFile(this.filePath, []);
     return entries.length;
+  }
+}
+
+export class JsonFileAgentInboxStore implements AgentInboxStore {
+  private readonly filePath: string;
+
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
+
+  async loadEntries(agentId: string): Promise<AgentInboxEntry[]> {
+    const entries = await readJsonLines<AgentInboxEntry>(this.filePath);
+    return entries.filter((entry) => entry.agentId === agentId);
+  }
+
+  saveEntry(entry: AgentInboxEntry): Promise<void> {
+    return appendJsonLine(this.filePath, entry);
+  }
+
+  async deleteEntry(agentId: string, entryId: string): Promise<boolean> {
+    const entries = await readJsonLines<AgentInboxEntry>(this.filePath);
+    const nextEntries = entries.filter(
+      (entry) => !(entry.agentId === agentId && entry.id === entryId),
+    );
+    if (nextEntries.length === entries.length) {
+      return false;
+    }
+
+    await writeJsonFile(this.filePath, nextEntries);
+    return true;
+  }
+
+  async clearEntries(agentId: string): Promise<number> {
+    const entries = await readJsonLines<AgentInboxEntry>(this.filePath);
+    const nextEntries = entries.filter((entry) => entry.agentId !== agentId);
+    await writeJsonFile(this.filePath, nextEntries);
+    return entries.length - nextEntries.length;
   }
 }
 
@@ -310,11 +350,13 @@ export class JsonProjectStorage implements ProjectStorage {
   readonly tasks: TaskStore;
   readonly agents: AgentStore;
   readonly inbox: InboxStore;
+  readonly agentInbox: AgentInboxStore;
   private readonly chatsDir: string;
   private readonly tasksFile: string;
   private readonly taskRunsFile: string;
   private readonly agentsFile: string;
   private readonly inboxFile: string;
+  private readonly agentInboxFile: string;
   private readonly chatOptions: ChatLoadOptions;
 
   constructor(
@@ -322,22 +364,26 @@ export class JsonProjectStorage implements ProjectStorage {
     tasks: TaskStore,
     agents: AgentStore,
     inbox: InboxStore,
+    agentInbox: AgentInboxStore,
     chatsDir: string,
     tasksFile: string,
     taskRunsFile: string,
     agentsFile: string,
     inboxFile: string,
+    agentInboxFile: string,
     chatOptions: ChatLoadOptions,
   ) {
     this.chats = chats;
     this.tasks = tasks;
     this.agents = agents;
     this.inbox = inbox;
+    this.agentInbox = agentInbox;
     this.chatsDir = chatsDir;
     this.tasksFile = tasksFile;
     this.taskRunsFile = taskRunsFile;
     this.agentsFile = agentsFile;
     this.inboxFile = inboxFile;
+    this.agentInboxFile = agentInboxFile;
     this.chatOptions = chatOptions;
   }
 
@@ -352,6 +398,7 @@ export class JsonProjectStorage implements ProjectStorage {
   async clear(): Promise<void> {
     await rm(this.agentsFile, { force: true });
     await rm(this.inboxFile, { force: true });
+    await rm(this.agentInboxFile, { force: true });
     await rm(this.tasksFile, { force: true });
     await rm(this.taskRunsFile, { force: true });
 
@@ -387,11 +434,13 @@ export const createJsonProjectStorage = (config: ProjectConfig): ProjectStorage 
     ),
     new JsonFileAgentStore(defaultAgentsFile(config.projectFolder)),
     new JsonFileInboxStore(defaultInboxFile(config.projectFolder)),
+    new JsonFileAgentInboxStore(defaultAgentInboxFile(config.projectFolder)),
     config.chatsDir,
     defaultTasksFile(config.projectFolder),
     defaultTaskRunsFile(config.projectFolder),
     defaultAgentsFile(config.projectFolder),
     defaultInboxFile(config.projectFolder),
+    defaultAgentInboxFile(config.projectFolder),
     {
       retentionDays: config.retentionDays,
       compressionMode: config.compressionMode,

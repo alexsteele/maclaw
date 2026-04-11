@@ -985,6 +985,51 @@ test("dispatchCommand loads agent and task prompts from @files", async () => {
   }
 });
 
+test("dispatchCommand can send and manage agent inbox messages", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-inbox-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = await harness.createAgent({
+      name: "research-agent",
+      prompt: "Start here",
+      maxSteps: 50,
+    });
+    assert.ok(created.agent);
+
+    const pauseReply = await dispatchCommand(harness, "/agent pause research-agent");
+    const sendReply = await dispatchCommand(
+      harness,
+      "/agent send research-agent | Focus on the persisted inbox design",
+      {
+        origin: {
+          channel: "repl",
+          userId: "alex",
+        },
+      },
+    );
+    const inboxReply = await dispatchCommand(harness, "/agent inbox research-agent");
+    const entries = await harness.listAgentInbox("research-agent");
+    const entryId = entries?.[0]?.id;
+    assert.ok(entryId);
+
+    const deleteReply = await dispatchCommand(
+      harness,
+      `/agent inbox rm research-agent ${entryId}`,
+    );
+    const clearReply = await dispatchCommand(harness, "/agent inbox clear research-agent");
+
+    assert.equal(pauseReply, "paused agent: research-agent");
+    assert.equal(sendReply, "sent message to agent: research-agent");
+    assert.match(inboxReply ?? "", /Focus on the persisted inbox design/u);
+    assert.match(inboxReply ?? "", /from: user alex/u);
+    assert.equal(deleteReply, `deleted agent inbox entry: ${entryId}`);
+    assert.equal(clearReply, "cleared agent inbox: 0");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand schedules a task with notification overrides", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-notify-options-"));
 

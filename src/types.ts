@@ -93,6 +93,18 @@ export type InboxEntry = {
   readAt?: string;
 };
 
+export type AgentInboxEntry = {
+  id: string;
+  agentId: string;
+  text: string;
+  sourceType: "agent" | "task" | "user" | "system";
+  sourceId: string;
+  sourceName?: string;
+  sourceChatId?: string;
+  createdAt: string;
+  readAt?: string;
+};
+
 export type AgentStatus =
   | "pending"
   | "running"
