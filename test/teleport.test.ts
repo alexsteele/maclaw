@@ -9,6 +9,7 @@ import { MaclawServer } from "../src/server.js";
 import type { RemoteCommandRequest, RemoteCommandResponse } from "../src/teleport.js";
 import {
   RemoteRuntimeClient,
+  TeleportSession,
   sendTeleportCommand,
 } from "../src/teleport.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -220,6 +221,74 @@ test("sendTeleportCommand uses a configured SSH remote", async () => {
       ],
     },
   ]);
+});
+
+test("TeleportSession reuses one SSH tunnel across multiple commands", async () => {
+  const spawnCalls: Array<{
+    command: string;
+    args: string[];
+  }> = [];
+  const fetchBodies: string[] = [];
+  const tunnel = new EventEmitter() as EventEmitter & {
+    kill: (signal?: NodeJS.Signals | number) => boolean;
+    stderr: EventEmitter;
+  };
+  tunnel.stderr = new EventEmitter();
+  tunnel.kill = () => {
+    queueMicrotask(() => {
+      tunnel.emit("exit", 0, null);
+    });
+    return true;
+  };
+
+  const session = new TeleportSession(
+    "gpu-box",
+    {
+      remotes: [
+        {
+          name: "gpu-box",
+          sshHost: "gpu.example.com",
+        },
+      ],
+    },
+    {
+      startupDelayMs: 0,
+      spawnFn(command, args) {
+        spawnCalls.push({ command, args });
+        return tunnel as never;
+      },
+      fetchFn: async (_input, init) => {
+        fetchBodies.push(String(init?.body));
+        return new Response(
+          JSON.stringify({
+            project: "home",
+            chatId: "remote-chat",
+            reply: "ok",
+            handledAsCommand: true,
+          } satisfies RemoteCommandResponse),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+            },
+          },
+        );
+      },
+      sleep: async () => {},
+    },
+  );
+
+  try {
+    await session.sendCommand({ text: "/project" });
+    await session.sendCommand({ text: "/help" });
+  } finally {
+    await session.stop();
+  }
+
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(fetchBodies.length, 2);
+  assert.match(fetchBodies[0] ?? "", /"text":"\/project"/u);
+  assert.match(fetchBodies[1] ?? "", /"text":"\/help"/u);
 });
 
 test("server remote commands can send chat messages into the target chat", async () => {

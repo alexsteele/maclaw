@@ -98,18 +98,21 @@ Web portal listening on http://localhost:4000/
 
 ## Teleport
 
-`/teleport` supports remote control over SSH tunnels. Start the remote server in
-API-only mode, forward the port over SSH, and send commands through the
-forwarded local URL:
+`maclaw teleport` supports remote control over SSH tunnels. The easiest flow is
+to define a named remote in `~/.maclaw/server.json` and let maclaw open the
+tunnel for a single command:
 
 ```shell
 remote$ maclaw server --api-only --port 4000
+
+# automatic forwarding
+local$ manual setup remotes
+local$ maclaw teleport gpu-box --project home "/help"
+
+# manual forwarding
 local$ ssh -L 4100:127.0.0.1:4000 alex@gpu.example.com
 local$ maclaw teleport http://127.0.0.1:4100 --project home "/help"
 ```
-
-If you define named remotes in `~/.maclaw/server.json`, `maclaw teleport` can
-also open the SSH tunnel for a single command itself.
 
 See [docs/config.md](docs/config.md) for the full server config and secrets
 shape.

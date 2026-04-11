@@ -18,11 +18,13 @@ import {
 import { renderModelSuggestions } from "../models.js";
 import {
   defaultServerPort,
+  defaultTeleportForwardPort,
   defaultServerConfigFile,
   defaultServerSecretsFile,
   maclawHomeDir,
   type ServerConfig,
   type ServerSecrets,
+  type TeleportRemoteConfig,
 } from "../server-config.js";
 import { readJsonFile, writeJsonFile } from "../fs-utils.js";
 
@@ -37,7 +39,7 @@ type SetupOptions = {
 
 type ProviderChoice = "openai" | "dummy" | "skip";
 type ChannelChoice = "slack" | "discord" | "whatsapp" | "email";
-type SetupSection = "all" | "model" | "project" | "server" | "channels";
+type SetupSection = "all" | "model" | "project" | "server" | "channels" | "remotes";
 
 export const normalizeSetupSection = (value: string | undefined): SetupSection | undefined => {
   switch (value?.toLowerCase()) {
@@ -54,6 +56,9 @@ export const normalizeSetupSection = (value: string | undefined): SetupSection |
     case "channel":
     case "channels":
       return "channels";
+    case "remote":
+    case "remotes":
+      return "remotes";
     default:
       return undefined;
   }
@@ -63,6 +68,7 @@ type ServerConfigData = {
   defaultProject?: string;
   port?: number;
   projects?: ServerConfig["projects"];
+  remotes?: ServerConfig["remotes"];
   channels?: {
     discord?: Partial<NonNullable<ServerConfig["channels"]>["discord"]>;
     email?: Partial<NonNullable<ServerConfig["channels"]>["email"]>;
@@ -663,6 +669,85 @@ const runChannelSetup = async (
   return true;
 };
 
+const runRemoteSetup = async (
+  prompt: SetupPrompter,
+  serverConfig: ServerConfigData,
+  confirmSetup = true,
+): Promise<boolean> => {
+  if (confirmSetup) {
+    const setupRemotes = await prompt.askChoice(
+      "Set up remotes?",
+      ["yes", "skip"],
+      "skip",
+    );
+    if (setupRemotes !== "yes") {
+      return false;
+    }
+  }
+
+  prompt.print();
+  prompt.print("Remote setup:");
+  prompt.print("  A remote lets maclaw open a temporary SSH tunnel for teleport.");
+  prompt.print("  Run `maclaw server --api-only` on the remote host.");
+
+  const configuredRemoteNames = (serverConfig.remotes ?? []).map((remote) => remote.name);
+  if (configuredRemoteNames.length > 0) {
+    prompt.print(`Configured remotes: ${configuredRemoteNames.join(", ")}`);
+  }
+
+  const remoteName = await prompt.askLine(
+    "Remote name",
+    configuredRemoteNames[0] ?? "remote",
+  );
+  const existingRemote = (serverConfig.remotes ?? []).find((remote) => remote.name === remoteName);
+  printExistingRemoteConfig(prompt, existingRemote);
+
+  const sshHost = await prompt.askLine(
+    "SSH host",
+    existingRemote?.sshHost ?? "",
+  );
+  const sshUser = await prompt.askLine(
+    "SSH user (optional)",
+    existingRemote?.sshUser ?? "",
+    { preserveBlank: true },
+  );
+  const sshPort = Number.parseInt(
+    await prompt.askLine(
+      "SSH port",
+      String(existingRemote?.sshPort ?? 22),
+    ),
+    10,
+  ) || 22;
+  const remoteServerPort = Number.parseInt(
+    await prompt.askLine(
+      "Remote maclaw server port",
+      String(existingRemote?.remoteServerPort ?? defaultServerPort()),
+    ),
+    10,
+  ) || defaultServerPort();
+  const localForwardPort = Number.parseInt(
+    await prompt.askLine(
+      "Local forwarded port",
+      String(existingRemote?.localForwardPort ?? defaultTeleportForwardPort()),
+    ),
+    10,
+  ) || defaultTeleportForwardPort();
+
+  const remoteConfig: TeleportRemoteConfig = {
+    name: remoteName,
+    sshHost,
+    ...(sshUser ? { sshUser } : {}),
+    sshPort,
+    remoteServerPort,
+    localForwardPort,
+  };
+  serverConfig.remotes = [
+    ...(serverConfig.remotes ?? []).filter((remote) => remote.name !== remoteName),
+    remoteConfig,
+  ];
+  return true;
+};
+
 const writeSetupConfig = async (
   homeDir: string,
   serverConfig: ServerConfigData,
@@ -694,6 +779,10 @@ const printExistingConfigStatus = (
     if (configuredChannels.length > 0) {
       prompt.print(`Configured channels: ${configuredChannels.join(", ")}`);
     }
+    const configuredRemotes = (serverConfig.remotes ?? []).map((remote) => remote.name);
+    if (configuredRemotes.length > 0) {
+      prompt.print(`Configured remotes: ${configuredRemotes.join(", ")}`);
+    }
   }
 
   if (existsSync(serverConfigPath)) {
@@ -714,10 +803,22 @@ const printExistingChannelConfig = (
   prompt.print(JSON.stringify(channelConfig, null, 2));
 };
 
+const printExistingRemoteConfig = (
+  prompt: SetupPrompter,
+  remoteConfig: TeleportRemoteConfig | undefined,
+): void => {
+  if (!remoteConfig) {
+    return;
+  }
+
+  prompt.print(`Current remote config for ${remoteConfig.name}:`);
+  prompt.print(JSON.stringify(remoteConfig, null, 2));
+};
+
 const askSetupSection = async (prompt: SetupPrompter): Promise<SetupSection> => {
   return prompt.askChoice<SetupSection>(
     "Where do you want to start?",
-    ["all", "model", "project", "server", "channels"],
+    ["all", "model", "project", "server", "channels", "remotes"],
     "all",
   );
 };
@@ -748,6 +849,7 @@ const runSetupFlow = async (
     prompt.print("  2. Project");
     prompt.print("  3. Channels");
     prompt.print("  4. Server");
+    prompt.print("  5. Remotes");
     prompt.print();
     prompt.print("It should take under 1 minute.");
     prompt.print();
@@ -814,7 +916,12 @@ const runSetupFlow = async (
     && (setupSection === "all" || setupSection === "channels")
     ? await runChannelSetup(prompt, serverConfig, serverSecrets)
     : false;
-  const shouldShowServerCommand = Boolean(defaultProject) || configuredServer || configuredChannels;
+  const configuredRemotes = saveGlobalConfig
+    && (setupSection === "all" || setupSection === "remotes")
+    ? await runRemoteSetup(prompt, serverConfig, setupSection !== "remotes")
+    : false;
+  const shouldShowServerCommand =
+    Boolean(defaultProject) || configuredServer || configuredChannels || configuredRemotes;
 
   if (saveGlobalConfig) {
     await writeSetupConfig(

@@ -52,7 +52,7 @@ const runServer = async (args: string[]): Promise<void> => {
 const runSetupCommand = async (args: string[]): Promise<void> => {
   const startSection = normalizeSetupSection(args[0]);
   if (args[0] && !startSection) {
-    throw new Error("Usage: maclaw setup [all|model|project|server|channels]");
+    throw new Error("Usage: maclaw setup [all|model|project|server|channels|remotes]");
   }
 
   await runSetup({ startSection });

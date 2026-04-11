@@ -185,7 +185,7 @@ Agents and scheduled tasks can override project notifications with JSON options
 - Remote defaults:
   - `sshPort: 22`
   - `remoteServerPort: 4000`
-  - `localForwardPort`: defaults to `remoteServerPort`
+  - `localForwardPort: 4001`
 - WhatsApp defaults currently include:
   - `graphApiVersion: "v23.0"`
   - `port: 3000`

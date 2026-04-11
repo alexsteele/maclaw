@@ -184,53 +184,94 @@ export class RemoteRuntimeClient {
 }
 
 /**
- * Sends a teleport command to either a direct URL or a named SSH remote.
+ * Teleport session that can talk to either a direct URL or a named SSH remote.
  *
- * Named remotes open a short-lived SSH tunnel for the duration of the command
- * and then forward the request through the local tunneled API endpoint.
- * 
- * TODO: Long-lived tunnel with TeleportSession
+ * One-shot teleport commands use this class internally today. It also gives us
+ * a natural place to hang a future long-lived remote REPL or portal session.
  */
-export const sendTeleportCommand = async (
-  target: string,
-  request: RemoteCommandRequest,
-  config?: Pick<ServerConfig, "remotes">,
-  dependencies: TeleportDependencies = {},
-): Promise<RemoteCommandResponse> => {
-  const fetchFn = dependencies.fetchFn ?? fetch;
-  const spawnFn = dependencies.spawnFn ?? spawn;
-  const sleep = dependencies.sleep ?? defaultSleep;
-  const startupDelayMs = dependencies.startupDelayMs ?? 150;
+export class TeleportSession {
+  private readonly target: string;
+  private readonly config?: Pick<ServerConfig, "remotes">;
+  private readonly fetchFn: FetchLike;
+  private readonly spawnFn: SpawnLike;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly startupDelayMs: number;
+  private client?: RemoteRuntimeClient;
+  private tunnel?: SpawnedTunnel;
 
-  if (isTeleportUrl(target)) {
-    const client = new RemoteRuntimeClient(target, { fetchFn });
-    return await client.sendCommand(request);
+  constructor(
+    target: string,
+    config?: Pick<ServerConfig, "remotes">,
+    dependencies: TeleportDependencies = {},
+  ) {
+    this.target = target;
+    this.config = config;
+    this.fetchFn = dependencies.fetchFn ?? fetch;
+    this.spawnFn = dependencies.spawnFn ?? spawn;
+    this.sleep = dependencies.sleep ?? defaultSleep;
+    this.startupDelayMs = dependencies.startupDelayMs ?? 150;
   }
 
-  const remote = findTeleportRemote(config ?? {}, target);
-  if (!remote) {
-    throw new Error(`Unknown remote: ${target}`);
+  /**
+   * Starts the teleport transport if it is not already running.
+   */
+  async start(): Promise<void> {
+    if (this.client) {
+      return;
+    }
+
+    if (isTeleportUrl(this.target)) {
+      this.client = new RemoteRuntimeClient(this.target, { fetchFn: this.fetchFn });
+      return;
+    }
+
+    const remote = findTeleportRemote(this.config ?? {}, this.target);
+    if (!remote) {
+      throw new Error(`Unknown remote: ${this.target}`);
+    }
+
+    const sshArgs = [
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-N",
+      "-L",
+      `${getLocalForwardPort(remote)}:127.0.0.1:${getRemoteServerPort(remote)}`,
+      ...(remote.sshPort ? ["-p", String(remote.sshPort)] : []),
+      describeRemote(remote),
+    ];
+    this.tunnel = this.spawnFn("ssh", sshArgs, {
+      stdio: ["ignore", "ignore", "pipe"],
+    }) as SpawnedTunnel;
+
+    await waitForTunnelStartup(this.tunnel, remote, this.startupDelayMs);
+    this.client = new RemoteRuntimeClient(toRemoteBaseUrl(remote), { fetchFn: this.fetchFn });
   }
 
-  const sshArgs = [
-    "-o",
-    "ExitOnForwardFailure=yes",
-    "-N",
-    "-L",
-    `${getLocalForwardPort(remote)}:127.0.0.1:${getRemoteServerPort(remote)}`,
-    ...(remote.sshPort ? ["-p", String(remote.sshPort)] : []),
-    describeRemote(remote),
-  ];
-  const tunnel = spawnFn("ssh", sshArgs, {
-    stdio: ["ignore", "ignore", "pipe"],
-  }) as SpawnedTunnel;
+  /**
+   * Stops the SSH tunnel for a named remote session.
+   */
+  async stop(): Promise<void> {
+    this.client = undefined;
+    if (!this.tunnel) {
+      return;
+    }
 
-  await waitForTunnelStartup(tunnel, remote, startupDelayMs);
+    const tunnel = this.tunnel;
+    this.tunnel = undefined;
+    await closeTunnel(tunnel);
+  }
 
-  try {
-    const client = new RemoteRuntimeClient(toRemoteBaseUrl(remote), { fetchFn });
+  /**
+   * Sends one command through the current teleport session.
+   */
+  async sendCommand(request: RemoteCommandRequest): Promise<RemoteCommandResponse> {
+    await this.start();
+    const client = this.client;
+    if (!client) {
+      throw new Error("Teleport session failed to start.");
+    }
+
     let lastError: unknown;
-
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await client.sendCommand(request);
@@ -240,12 +281,27 @@ export const sendTeleportCommand = async (
           throw error;
         }
 
-        await sleep(100);
+        await this.sleep(100);
       }
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+}
+
+/**
+ * Sends a teleport command to either a direct URL or a named SSH remote.
+ */
+export const sendTeleportCommand = async (
+  target: string,
+  request: RemoteCommandRequest,
+  config?: Pick<ServerConfig, "remotes">,
+  dependencies: TeleportDependencies = {},
+): Promise<RemoteCommandResponse> => {
+  const session = new TeleportSession(target, config, dependencies);
+  try {
+    return await session.sendCommand(request);
   } finally {
-    await closeTunnel(tunnel);
+    await session.stop();
   }
 };

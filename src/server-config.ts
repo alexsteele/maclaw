@@ -102,6 +102,7 @@ export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string
   process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
 export const defaultServerPort = (): number => 4000;
+export const defaultTeleportForwardPort = (): number => 4001;
 
 export const defaultWhatsAppConfig = (): Omit<WhatsAppConfig, "enabled"> => ({
   graphApiVersion: "v23.0",
@@ -253,7 +254,7 @@ export const loadServerConfig = (
             ),
             localForwardPort: toPositiveInt(
               remote.localForwardPort,
-              toPositiveInt(remote.remoteServerPort, defaultServerPort()),
+              defaultTeleportForwardPort(),
             ),
           }))
         : undefined,

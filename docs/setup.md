@@ -16,6 +16,7 @@ Provide an interactive CLI flow. `maclaw setup` will help the user:
 1. Choose a default project.
 1. Optionally create or initialize that project.
 1. Configure server and connectors. Optional.
+1. Configure named teleport remotes. Optional.
 1. Save the server config in `~/.maclaw`. Confirm with the user.
 
 Steps should ask one question at the time with good defaults and link the user
@@ -117,3 +118,5 @@ Run:
   token live.
 - Later we can add a non-interactive mode such as `maclaw setup --yes` or
   `maclaw setup --model openai/gpt-5.4-mini`.
+- Sections currently include `all`, `model`, `project`, `server`, `channels`,
+  and `remotes`.

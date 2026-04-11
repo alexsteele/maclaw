@@ -208,7 +208,7 @@ test("loadServerConfig applies defaults for teleport remotes", async () => {
         sshUser: undefined,
         sshPort: 22,
         remoteServerPort: 4000,
-        localForwardPort: 4000,
+        localForwardPort: 4001,
       },
     ]);
   } finally {

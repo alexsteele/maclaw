@@ -95,6 +95,8 @@ This is intentionally small. A remote definition should be enough to:
 - know which local port to talk to
 - know which remote server port is expected
 
+You can add or update these entries with `maclaw setup remotes`.
+
 ## Message Flow
 
 Proposed v1 flow:

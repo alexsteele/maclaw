@@ -48,6 +48,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
       "xapp-slack",
       "xoxb-slack",
       "discord-token",
+      "",
     ];
 
     await runSetup({ cwd, homeDir, input, output, answers });
@@ -82,6 +83,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
           webhookPath: string;
         } | undefined;
       };
+      remotes?: Array<{ name: string }>;
     };
     const secrets = JSON.parse(await readFile(secretsPath, "utf8")) as {
       openai: { apiKey?: string };
@@ -98,6 +100,7 @@ test("runSetup writes project, server config, and secrets from a simple guided f
     assert.equal(serverConfig.channels?.discord?.enabled, true);
     assert.equal(serverConfig.channels?.email, undefined);
     assert.equal(serverConfig.channels?.whatsapp, undefined);
+    assert.equal(serverConfig.remotes, undefined);
     assert.equal(secrets.openai.apiKey, "sk-test-openai");
     assert.equal(secrets.email, undefined);
     assert.equal(secrets.slack.appToken, "xapp-slack");
@@ -109,7 +112,8 @@ test("runSetup writes project, server config, and secrets from a simple guided f
     assert.equal((output.toString().match(/  1\. all/g) ?? []).length, 1);
     assert.match(output.toString(), /  4\. server/u);
     assert.match(output.toString(), /  5\. channels/u);
-    assert.match(output.toString(), /  5\. channels\nDefault: all\n> 1/u);
+    assert.match(output.toString(), /  6\. remotes/u);
+    assert.match(output.toString(), /  6\. remotes\nDefault: all\n> 1/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -313,6 +317,62 @@ test("runSetup can jump straight to channels with startSection", async () => {
   }
 });
 
+test("runSetup can jump straight to remotes with startSection", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-remotes-only-"));
+
+  try {
+    const cwd = path.join(rootDir, "cwd");
+    const homeDir = path.join(rootDir, "home");
+    const input = Readable.from([]);
+    const output = new CaptureStream();
+
+    await runSetup({
+      cwd,
+      homeDir,
+      input,
+      output,
+      startSection: "remotes",
+      answers: [
+        "yes",
+        "gpu-box",
+        "gpu.example.com",
+        "alex",
+        "22",
+        "4000",
+        "4100",
+      ],
+    });
+
+    const serverConfigPath = path.join(maclawHomeDir(homeDir), "server.json");
+    const serverConfig = JSON.parse(await readFile(serverConfigPath, "utf8")) as {
+      remotes?: Array<{
+        name: string;
+        sshHost: string;
+        sshUser?: string;
+        sshPort?: number;
+        remoteServerPort?: number;
+        localForwardPort?: number;
+      }>;
+    };
+
+    assert.deepEqual(serverConfig.remotes, [
+      {
+        name: "gpu-box",
+        sshHost: "gpu.example.com",
+        sshUser: "alex",
+        sshPort: 22,
+        remoteServerPort: 4000,
+        localForwardPort: 4100,
+      },
+    ]);
+    assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
+    assert.match(output.toString(), /Remote setup:/u);
+    assert.match(output.toString(), /SSH host/u);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("runSetup can jump straight to server with startSection", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-setup-server-only-"));
 
@@ -483,6 +543,7 @@ test("runSetup notes existing default project config and keeps the current defau
         "",
         "",
         "",
+        "",
       ],
     });
 
@@ -541,6 +602,7 @@ test("runSetup keeps the existing model and project when walking through default
       output,
       answers: [
         "1",
+        "",
         "",
         "",
         "",
