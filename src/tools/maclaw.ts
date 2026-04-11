@@ -1,5 +1,6 @@
 // Maclaw tools expose project-specific read and act capabilities.
 import type {
+  AgentInboxEntry,
   AgentRecord,
   ChatRecord,
   ChatSummary,
@@ -14,6 +15,7 @@ export type MaclawToolContext = {
   defaultTaskTime: string;
   contextMessages: number;
   getCurrentChatId(): string;
+  getChatAgent(): AgentRecord | undefined;
   listTools(): ToolDefinition[];
   listChannels(): string[];
   listChats(): Promise<ChatSummary[]>;
@@ -21,7 +23,12 @@ export type MaclawToolContext = {
   readChat(chatId?: string, limit?: number): Promise<ChatRecord>;
   listAgents(): AgentRecord[];
   findAgent(agentRef: string): AgentRecord | undefined;
+  listAgentInbox(agentRef?: string): Promise<AgentInboxEntry[] | undefined>;
   listTasks(chatId?: string): Promise<ScheduledTask[]>;
+  sendAgentInboxMessage(input: {
+    agentRef: string;
+    text: string;
+  }): Promise<AgentInboxEntry | undefined>;
   createAgent(input: {
     name: string;
     prompt: string;
@@ -70,6 +77,23 @@ const parseShowAgentInput = (input: unknown): { agent: string } => {
   const object = parseObjectInput(input);
   return {
     agent: requiredString(object, "agent"),
+  };
+};
+
+const parseReadAgentInboxInput = (input: unknown): { agent?: string } => {
+  const object = parseObjectInput(input);
+  const agent = object.agent;
+
+  return {
+    ...(agent === undefined ? {} : { agent: requiredString(object, "agent") }),
+  };
+};
+
+const parseSendAgentMessageInput = (input: unknown): { agent: string; text: string } => {
+  const object = parseObjectInput(input);
+  return {
+    agent: requiredString(object, "agent"),
+    text: requiredString(object, "text"),
   };
 };
 
@@ -197,6 +221,20 @@ const formatAgent = (agent: AgentRecord): string =>
     `stepIntervalMs: ${agent.stepIntervalMs ?? 0}`,
     `lastError: ${agent.lastError ?? "(none)"}`,
   ].join("\n");
+
+const formatAgentInbox = (entries: AgentInboxEntry[]): string => {
+  if (entries.length === 0) {
+    return "(empty)";
+  }
+
+  return entries
+    .map((entry) => [
+      `${entry.id} [${entry.sourceType}] ${entry.createdAt}`,
+      `from: ${entry.sourceType} ${entry.sourceName ?? entry.sourceId}`,
+      entry.text,
+    ].join("\n"))
+    .join("\n\n");
+};
 
 const formatTask = (task: ScheduledTask): string =>
   [
@@ -341,6 +379,32 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
       },
     },
     {
+      name: "read_agent_inbox",
+      description: "Read inbox messages for an agent. Defaults to the current agent when called from an agent chat.",
+      permission: "read",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agent: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { agent } = parseReadAgentInboxInput(input);
+        const agentRef = agent ?? context.getChatAgent()?.id;
+        if (!agentRef) {
+          throw new Error('Expected "agent", or run this from an agent chat.');
+        }
+
+        const entries = await context.listAgentInbox(agentRef);
+        if (!entries) {
+          throw new Error(`Agent "${agentRef}" was not found.`);
+        }
+
+        return formatAgentInbox(entries);
+      },
+    },
+    {
       name: "list_tasks",
       description: "List scheduled tasks for the current chat or a specific chat.",
       permission: "read",
@@ -409,6 +473,32 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
         }
 
         return `started agent: ${result.agent.name} (${result.agent.id})`;
+      },
+    },
+    {
+      name: "send_agent_message",
+      description: "Send a durable inbox message to another agent.",
+      permission: "act",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agent: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["agent", "text"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { agent, text } = parseSendAgentMessageInput(input);
+        const entry = await context.sendAgentInboxMessage({
+          agentRef: agent,
+          text,
+        });
+        if (!entry) {
+          throw new Error(`Agent "${agent}" was not found.`);
+        }
+
+        return `sent message to agent: ${agent}`;
       },
     },
     {

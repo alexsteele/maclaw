@@ -166,6 +166,8 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
   defaultTaskTime: harness.config.defaultTaskTime,
   contextMessages: harness.config.contextMessages,
   getCurrentChatId: () => harness.getCurrentChatId(),
+  getChatAgent: () =>
+    findAgentByChatId(harness.listAgents(), harness.getCurrentChatId()),
   listTools: () => harness.listTools(),
   listChannels: () => harness.listChannels(),
   listChats: () => harness.listChats(),
@@ -173,7 +175,25 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
   readChat: (chatId, limit) => harness.readChat(chatId, limit),
   listAgents: () => harness.listAgents(),
   findAgent: (agentRef) => harness.findAgent(agentRef),
+  listAgentInbox: (agentRef) =>
+    harness.listAgentInbox(
+      agentRef ?? findAgentByChatId(harness.listAgents(), harness.getCurrentChatId())?.id ?? "",
+    ),
   listTasks: (chatId) => harness.listTasks(chatId),
+  sendAgentInboxMessage: (input) => {
+    const sourceAgent = findAgentByChatId(
+      harness.listAgents(),
+      harness.getCurrentChatId(),
+    );
+
+    return harness.sendAgentInboxMessage({
+      ...input,
+      sourceType: sourceAgent ? "agent" : "user",
+      sourceId: sourceAgent?.id ?? "user",
+      sourceName: sourceAgent?.name ?? "user",
+      sourceChatId: harness.getCurrentChatId(),
+    });
+  },
   createAgent: (input) =>
     harness.createAgent({
       ...input,
