@@ -55,6 +55,12 @@ Current direct form:
 maclaw teleport <url> [--project <name>] [--chat <id>] <message>
 ```
 
+Interactive clients can also attach with a session command:
+
+```text
+/teleport <url|remote> [--project <name>] [--chat <id>]
+```
+
 Possible future variants:
 
 ```text

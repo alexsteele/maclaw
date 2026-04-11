@@ -13,6 +13,7 @@ import {
   saveHelpText,
   sendHelpText,
   taskScheduleHelpText,
+  teleportHelpText,
   usageHelpText,
 } from "../src/commands.js";
 import { initProjectConfig } from "../src/config.js";
@@ -47,6 +48,156 @@ test("dispatchCommand treats ? as an alias for help", async () => {
     const reply = await dispatchCommand(harness, "?");
 
     assert.equal(reply, helpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows teleport help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    assert.equal(await dispatchCommand(harness, "/help teleport"), teleportHelpText);
+    assert.equal(await dispatchCommand(harness, "/teleport help"), teleportHelpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows teleport help by default", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-status-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/teleport");
+
+    assert.equal(reply, teleportHelpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand lists configured teleport remotes", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-list-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const controller = {
+      async connect() {
+        throw new Error("not used");
+      },
+      async disconnect() {
+        return false;
+      },
+      getConnection() {
+        return undefined;
+      },
+      listRemotes() {
+        return [
+          { name: "local-box", sshHost: "127.0.0.1", sshPort: 22 },
+          { name: "dev-box", sshHost: "dev.example.com", sshPort: 2222 },
+        ];
+      },
+    };
+
+    const reply = await dispatchCommand(harness, "/teleport list", {
+      teleport: controller,
+    });
+
+    assert.equal(reply, "- local-box: 127.0.0.1:22\n- dev-box: dev.example.com:2222");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can connect and disconnect teleport through a controller", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-connect-"));
+  const calls: string[] = [];
+  let connection:
+    | { target: string; project?: string; chatId: string }
+    | undefined;
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const controller = {
+      async connect(target: string, options: { project?: string; chatId: string }) {
+        calls.push(`connect:${target}:${options.project}:${options.chatId}`);
+        connection = {
+          target,
+          project: options.project,
+          chatId: options.chatId,
+        };
+        return connection;
+      },
+      async disconnect() {
+        calls.push("disconnect");
+        connection = undefined;
+        return true;
+      },
+      getConnection() {
+        return connection;
+      },
+    };
+
+    const connectReply = await dispatchCommand(
+      harness,
+      "/teleport remote-box --project work --chat branch-a",
+      { teleport: controller },
+    );
+    const statusReply = await dispatchCommand(harness, "/teleport status", {
+      teleport: controller,
+    });
+    const disconnectReply = await dispatchCommand(harness, "/teleport disconnect", {
+      teleport: controller,
+    });
+
+    assert.equal(
+      connectReply,
+      "attached to remote: remote-box\nteleport: connected\ntarget: remote-box\nproject: work\nchat: branch-a",
+    );
+    assert.equal(
+      statusReply,
+      "teleport: connected\ntarget: remote-box\nproject: work\nchat: branch-a",
+    );
+    assert.equal(disconnectReply, "teleport: disconnected");
+    assert.deepEqual(calls, [
+      "connect:remote-box:work:branch-a",
+      "disconnect",
+    ]);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand prints teleport connection errors cleanly", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-error-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const controller = {
+      async connect() {
+        throw new Error("Unknown remote: missing-box");
+      },
+      async disconnect() {
+        return false;
+      },
+      getConnection() {
+        return undefined;
+      },
+      listRemotes() {
+        return [];
+      },
+    };
+
+    const reply = await dispatchCommand(harness, "/teleport missing-box", {
+      teleport: controller,
+    });
+
+    assert.equal(reply, "Unknown remote: missing-box");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

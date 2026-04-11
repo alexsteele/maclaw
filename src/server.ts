@@ -19,6 +19,7 @@ import {
 } from "./server-config.js";
 import type { Message, Origin, ScheduledTask } from "./types.js";
 import type { RemoteCommandRequest, RemoteCommandResponse } from "./teleport.js";
+import { TeleportController } from "./teleport.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
 import { WebChannel } from "./channels/web.js";
@@ -82,6 +83,7 @@ export class MaclawServer {
   private readonly webChannel = new WebChannel();
   private readonly _router: ChannelRouter;
   private readonly activeProjects = new Map<ChannelUser, ProjectName>();
+  private readonly teleports = new Map<ChannelUser, TeleportController>();
   private httpServer?: http.Server;
   private portalPort?: number;
   private started = false;
@@ -117,6 +119,7 @@ export class MaclawServer {
     this.channels.clear();
     this.projects.clear();
     this.activeProjects.clear();
+    this.teleports.clear();
     this.started = false;
   }
 
@@ -211,6 +214,10 @@ export class MaclawServer {
   }
 
   async stop(): Promise<void> {
+    for (const teleport of this.teleports.values()) {
+      await teleport.disconnect();
+    }
+
     for (const channel of [...this.channels.values()].reverse()) {
       await channel.stop();
     }
@@ -257,6 +264,19 @@ export class MaclawServer {
     projectName: ProjectName,
   ): void {
     this.activeProjects.set(this.getRouteKey(message), projectName);
+  }
+
+  private getTeleportController(
+    message: Pick<ChannelMessage, "channel" | "userId">,
+  ): TeleportController {
+    const key = this.getRouteKey(message);
+    let controller = this.teleports.get(key);
+    if (!controller) {
+      controller = new TeleportController(this.config);
+      this.teleports.set(key, controller);
+    }
+
+    return controller;
   }
 
   private handleProjectSwitch(
@@ -649,9 +669,25 @@ export class MaclawServer {
       userId: message.userId,
       threadId: message.threadId,
     };
+    const teleport = this.getTeleportController(message);
+    if (message.text.startsWith("/teleport")) {
+      const commandReply = await dispatchCommand(harness, message.text, {
+        chatId: message.userId,
+        origin,
+        teleport,
+      });
+      return commandReply;
+    }
+
+    if (teleport.isConnected()) {
+      const remoteReply = await teleport.sendMessage(message.text);
+      return remoteReply?.reply ?? "teleport: disconnected";
+    }
+
     const commandReply = await dispatchCommand(harness, message.text, {
       chatId: message.userId,
       origin,
+      teleport,
     });
     if (commandReply !== null) {
       return commandReply;

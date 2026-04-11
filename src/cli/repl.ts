@@ -17,6 +17,8 @@ import {
   type ServerConfig,
   type ServerSecrets,
 } from "../server-config.js";
+import { TeleportController } from "../teleport.js";
+import type { TeleportConnectionState } from "../teleport.js";
 import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
 const replHelpText = [
@@ -50,6 +52,13 @@ const replOrigin: Origin = {
   channel: "repl",
   userId: "local",
 };
+
+export const formatReplPrompt = (
+  connection?: TeleportConnectionState,
+): string =>
+  !connection
+    ? "> "
+    : `[teleport ${connection.target}${connection.project ? ` ${connection.project}` : ""}:${connection.chatId}] > `;
 
 export const wrapReplLine = (line: string, width: number): string => {
   if (line.length <= width || line.trim().length === 0) {
@@ -145,9 +154,11 @@ export const loadReplChannels = (
 class ReplChannel implements Channel {
   readonly name = "repl";
   private readonly formatForDisplay: (text: string) => string;
+  private readonly getPrompt: () => string;
 
-  constructor(formatForDisplay: (text: string) => string) {
+  constructor(formatForDisplay: (text: string) => string, getPrompt: () => string) {
     this.formatForDisplay = formatForDisplay;
+    this.getPrompt = getPrompt;
   }
 
   async start(): Promise<void> {
@@ -155,7 +166,7 @@ class ReplChannel implements Channel {
   }
 
   async send(_origin: Origin, text: string): Promise<void> {
-    output.write(`\n${this.formatForDisplay(`[notification] ${text}`)}\n\n> `);
+    output.write(`\n${this.formatForDisplay(`[notification] ${text}`)}\n\n${this.getPrompt()}`);
   }
 
   async stop(): Promise<void> {
@@ -170,15 +181,19 @@ class Repl {
   private _router?: ChannelRouter;
   private serverConfig: ServerConfig | undefined;
   private serverSecrets: ServerSecrets;
+  private teleport: TeleportController;
   private verbose = false;
   private wrapWidth = 100;
   private readonly onTaskMessage = async (task: ScheduledTask, message: Message): Promise<void> => {
-    output.write(`\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n> `);
+    output.write(
+      `\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n${this.getPrompt()}`,
+    );
   };
 
   constructor() {
     this.serverConfig = loadReplServerConfig();
     this.serverSecrets = loadServerSecrets(defaultServerSecretsFile());
+    this.teleport = new TeleportController(this.serverConfig);
     this.refreshChannels();
     this.harness = loadReplHarness(process.cwd(), {
       onTaskMessage: this.onTaskMessage,
@@ -194,9 +209,10 @@ class Repl {
     while (true) {
       let line: string;
       try {
-        line = (await this.rl.question("> ")).trim();
+        line = (await this.rl.question(this.getPrompt())).trim();
       } catch {
         output.write("\n");
+        await this.teleport.disconnect();
         this.harness.teardown();
         await this.stopChannels();
         this.rl.close();
@@ -209,6 +225,7 @@ class Repl {
 
       const shouldExit = await this.handleLine(line);
       if (shouldExit) {
+        await this.teleport.disconnect();
         this.harness.teardown();
         await this.stopChannels();
         this.rl.close();
@@ -233,6 +250,10 @@ class Repl {
 
   private writeLine(text: string): void {
     output.write(`${this.formatForDisplay(text)}\n\n`);
+  }
+
+  private getPrompt(): string {
+    return formatReplPrompt(this.teleport.getConnection());
   }
 
   private formatForDisplay(text: string): string {
@@ -280,9 +301,11 @@ class Repl {
     );
 
     this.harness.teardown();
+    await this.teleport.disconnect();
     await this.stopChannels();
     this.serverConfig = loadReplServerConfig();
     this.serverSecrets = loadServerSecrets(defaultServerSecretsFile());
+    this.teleport = new TeleportController(this.serverConfig);
     this.refreshChannels();
     this.harness = Harness.load(nextFolder, {
       onTaskMessage: this.onTaskMessage,
@@ -372,8 +395,29 @@ class Repl {
       return false;
     }
 
+    if (line.startsWith("/teleport")) {
+      const commandReply = await dispatchCommand(this.harness, line, {
+        origin: replOrigin,
+        teleport: this.teleport,
+      });
+      this.writeLine(commandReply ?? "");
+      return false;
+    }
+
+    if (this.teleport.isConnected()) {
+      const reply = await this.teleport.sendMessage(line);
+      if (!reply) {
+        this.writeLine("teleport: disconnected");
+        return false;
+      }
+
+      this.writeLine(reply.reply);
+      return false;
+    }
+
     const commandReply = await dispatchCommand(this.harness, line, {
       origin: replOrigin,
+      teleport: this.teleport,
     });
     if (commandReply !== null) {
       this.writeLine(commandReply);
@@ -390,7 +434,10 @@ class Repl {
 
   private refreshChannels(): void {
     this.channels.clear();
-    this.channels.set("repl", new ReplChannel(this.formatForDisplay.bind(this)));
+    this.channels.set(
+      "repl",
+      new ReplChannel(this.formatForDisplay.bind(this), this.getPrompt.bind(this)),
+    );
     for (const [name, channel] of loadReplChannels(this.serverConfig, this.serverSecrets)) {
       this.channels.set(name, channel);
     }

@@ -93,18 +93,23 @@ const runTeleportCommand = async (args: string[]): Promise<void> => {
     throw new Error("Usage: maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>");
   }
 
-  const serverConfig = isTeleportUrl(target) ? undefined : loadServerConfig();
-  const result = await sendTeleportCommand(
-    target,
-    {
-      project,
-      chatId,
-      text,
-    },
-    serverConfig,
-  );
+  try {
+    const serverConfig = isTeleportUrl(target) ? undefined : loadServerConfig();
+    const result = await sendTeleportCommand(
+      target,
+      {
+        project,
+        chatId,
+        text,
+      },
+      serverConfig,
+    );
 
-  process.stdout.write(`${result.reply}\n`);
+    process.stdout.write(`${result.reply}\n`);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
 };
 
 const main = async (): Promise<void> => {
