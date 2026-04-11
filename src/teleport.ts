@@ -66,6 +66,35 @@ const getLocalForwardPort = (remote: TeleportRemoteConfig): number =>
 const toRemoteBaseUrl = (remote: TeleportRemoteConfig): string =>
   `http://127.0.0.1:${getLocalForwardPort(remote)}`;
 
+const buildTeleportOriginMetadata = (
+  target: string,
+  config?: Pick<ServerConfig, "remotes">,
+): Record<string, string> => {
+  if (isTeleportUrl(target)) {
+    const url = new URL(target);
+    return {
+      teleportMode: "direct",
+      teleportTarget: target,
+      teleportHost: url.hostname,
+    };
+  }
+
+  const remote = findTeleportRemote(config ?? {}, target);
+  if (!remote) {
+    return {
+      teleportMode: "ssh",
+      teleportTarget: target,
+    };
+  }
+
+  return {
+    teleportMode: "ssh",
+    teleportTarget: target,
+    teleportRemote: remote.name,
+    teleportHost: remote.sshHost,
+  };
+};
+
 const isRetryableError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
   return /ECONNREFUSED|ECONNRESET|fetch failed|socket hang up|UND_ERR/u.test(message);
@@ -296,10 +325,26 @@ export class TeleportSession {
       throw new Error("Teleport session failed to start.");
     }
 
+    const requestWithOrigin: RemoteCommandRequest = {
+      ...request,
+      origin: {
+        channel: request.origin?.channel ?? "teleport",
+        userId: request.origin?.userId ?? (request.chatId?.trim() || "teleport"),
+        conversationId:
+          request.origin?.conversationId
+          ?? (request.project ? `teleport:${request.project}` : undefined),
+        threadId: request.origin?.threadId,
+        metadata: {
+          ...buildTeleportOriginMetadata(this.target, this.config),
+          ...(request.origin?.metadata ?? {}),
+        },
+      },
+    };
+
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await client.sendCommand(request);
+        return await client.sendCommand(requestWithOrigin);
       } catch (error) {
         lastError = error;
         if (!isRetryableError(error) || attempt === 2) {

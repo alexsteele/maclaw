@@ -289,6 +289,7 @@ test("TeleportSession reuses one SSH tunnel across multiple commands", async () 
   assert.equal(spawnCalls.length, 1);
   assert.equal(fetchBodies.length, 2);
   assert.match(fetchBodies[0] ?? "", /"text":"\/project"/u);
+  assert.match(fetchBodies[0] ?? "", /"teleportHost":"gpu\.example\.com"/u);
   assert.match(fetchBodies[1] ?? "", /"text":"\/help"/u);
 });
 
@@ -354,6 +355,7 @@ test("TeleportController tracks an attached session and sends messages with stor
     assert.match(fetchBodies[0] ?? "", /"project":"home"/u);
     assert.match(fetchBodies[0] ?? "", /"chatId":"remote-chat"/u);
     assert.match(fetchBodies[0] ?? "", /"text":"hello remote"/u);
+    assert.match(fetchBodies[0] ?? "", /"teleportRemote":"gpu-box"/u);
   } finally {
     await controller.disconnect();
   }

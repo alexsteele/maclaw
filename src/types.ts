@@ -35,6 +35,7 @@ export type ChannelTarget = {
   userId: string;
   conversationId?: string;
   threadId?: string;
+  metadata?: Record<string, string>;
 };
 
 export type Origin = ChannelTarget;
