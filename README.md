@@ -97,6 +97,10 @@ $ maclaw server
 Web portal listening on http://localhost:4000/
 ```
 
+Portal screenshot:
+
+![maclaw portal](screenshots/portal.png)
+
 ## Teleport
 
 `maclaw teleport` supports remote control over SSH tunnels. The easiest flow is

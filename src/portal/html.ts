@@ -44,6 +44,60 @@ const domPurifyBundle = readFileSync(
   "utf8",
 );
 
+type PortalKeybinding = {
+  action: string;
+  key: string;
+  label: string;
+  shortcut: string;
+  description?: string;
+};
+
+const portalKeybindings: PortalKeybinding[] = [
+  {
+    action: "scrollUp",
+    key: "u",
+    label: "Scroll up",
+    shortcut: "Ctrl+U",
+    description: "Move up about half a page.",
+  },
+  {
+    action: "scrollDown",
+    key: "d",
+    label: "Scroll down",
+    shortcut: "Ctrl+D",
+    description: "Move down about half a page.",
+  },
+  {
+    action: "previousReply",
+    key: "k",
+    label: "Previous reply",
+    shortcut: "Ctrl+K",
+    description: "Jump to the prior assistant response.",
+  },
+  {
+    action: "nextReply",
+    key: "j",
+    label: "Next reply",
+    shortcut: "Ctrl+J",
+    description: "Jump to the next assistant response.",
+  },
+];
+
+const renderShortcutList = (keybindings: PortalKeybinding[]): string =>
+  keybindings
+    .map(
+      (binding) => `
+              <div class="shortcut-row">
+                <span>${escapeHtml(binding.label)}${
+                  binding.description
+                    ? `<br /><span class="shortcut-description">${escapeHtml(binding.description)}</span>`
+                    : ""
+                }</span>
+                <span class="shortcut-key">${escapeHtml(binding.shortcut)}</span>
+              </div>`,
+    )
+    .join("");
+
 export const renderPortalHtml = ({
   channels,
   currentProject,
@@ -624,6 +678,43 @@ export const renderPortalHtml = ({
         font-size: 12px;
       }
 
+      .shortcut-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .shortcut-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12px;
+      }
+
+      .shortcut-row span {
+        color: var(--muted);
+      }
+
+      .shortcut-description {
+        display: inline-block;
+        margin-top: 2px;
+        font-size: 11px;
+      }
+
+      .shortcut-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
       *::-webkit-scrollbar {
         width: 12px;
         height: 12px;
@@ -766,6 +857,10 @@ export const renderPortalHtml = ({
                     .join("")}</div>`
             }
           </section>
+          <section class="card">
+            <h3>Shortcuts</h3>
+            <div class="shortcut-list">${renderShortcutList(portalKeybindings)}</div>
+          </section>
         </div>
         <div class="theme-spacer"></div>
         <div class="theme-footer">
@@ -777,6 +872,7 @@ export const renderPortalHtml = ({
     <script>${domPurifyBundle}</script>
     <script>
       const portalState = ${serializeForScript({
+        keybindings: portalKeybindings,
         currentProject,
         projects,
       })};
@@ -867,6 +963,49 @@ export const renderPortalHtml = ({
         window.localStorage.setItem(chatStorageKey(project), currentChatId);
       };
 
+      const scrollTranscriptBy = (amount) => {
+        transcript.scrollBy({
+          top: amount,
+          behavior: 'smooth',
+        });
+      };
+
+      const jumpToAssistantMessage = (direction) => {
+        const assistantMessages = Array.from(
+          transcript.querySelectorAll('[data-role="assistant"]'),
+        );
+        if (assistantMessages.length === 0) {
+          return;
+        }
+
+        const transcriptRect = transcript.getBoundingClientRect();
+        const topThreshold = transcriptRect.top + 24;
+        const bottomThreshold = transcriptRect.bottom - 24;
+
+        if (direction > 0) {
+          const nextMessage = assistantMessages.find((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.top >= bottomThreshold;
+          }) ?? assistantMessages[assistantMessages.length - 1];
+
+          nextMessage.scrollIntoView({
+            block: 'start',
+            behavior: 'smooth',
+          });
+          return;
+        }
+
+        const previousMessages = assistantMessages.filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.top <= topThreshold && rect.bottom <= topThreshold;
+        });
+        const previousMessage = previousMessages[previousMessages.length - 1] ?? assistantMessages[0];
+        previousMessage.scrollIntoView({
+          block: 'start',
+          behavior: 'smooth',
+        });
+      };
+
       const renderMessages = () => {
         if (displayMessages.length === 0) {
           transcript.innerHTML = '<div class="empty-state">No messages yet. Start the conversation here.</div>';
@@ -876,7 +1015,7 @@ export const renderPortalHtml = ({
         transcript.innerHTML = displayMessages.map((message) => {
           const roleClass = message.role === "user" ? " message-user" : " message-assistant";
           return [
-            '<article class="message' + roleClass + '">',
+            '<article class="message' + roleClass + '" data-role="' + escapeHtml(message.role) + '">',
             '<strong>' + escapeHtml(message.role) + '</strong>',
             renderMessageContent(message),
             '</article>',
@@ -1119,6 +1258,40 @@ export const renderPortalHtml = ({
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           void sendMessage();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (!event.ctrlKey || event.metaKey || event.altKey) {
+          return;
+        }
+
+        const binding = portalState.keybindings.find((entry) => (
+          typeof entry?.key === 'string'
+          && entry.key.toLowerCase() === event.key.toLowerCase()
+        ));
+        if (!binding) {
+          return;
+        }
+
+        event.preventDefault();
+        if (binding.action === 'scrollUp') {
+          scrollTranscriptBy(-Math.max(transcript.clientHeight * 0.5, 180));
+          return;
+        }
+
+        if (binding.action === 'scrollDown') {
+          scrollTranscriptBy(Math.max(transcript.clientHeight * 0.5, 180));
+          return;
+        }
+
+        if (binding.action === 'previousReply') {
+          jumpToAssistantMessage(-1);
+          return;
+        }
+
+        if (binding.action === 'nextReply') {
+          jumpToAssistantMessage(1);
         }
       });
 
