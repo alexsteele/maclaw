@@ -1508,9 +1508,13 @@ const handleSkillsCommand: CommandHandler = async (harness, input) => {
 const handleToolsCommand: CommandHandler = async (harness, input) => {
   if (input === "/tools") {
     const tools = harness.listTools();
+    const permissions = harness.config.tools.join(", ");
     return tools.length === 0
-      ? "No tools found."
-      : tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n");
+      ? `permissions: ${permissions}\nNo tools found.`
+      : [
+          `permissions: ${permissions}`,
+          ...tools.map((tool) => `- ${tool.name}: ${tool.description}`),
+        ].join("\n");
   }
 
   if (input === "/tools help" || input.startsWith("/tools ")) {

@@ -912,6 +912,7 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     const helpReply = await dispatchCommand(harness, "/tools help");
     const sharedHelpReply = await dispatchCommand(harness, "/help tools");
 
+    assert.match(reply ?? "", /^permissions: read$/mu);
     assert.match(reply ?? "", /list_chats/u);
     assert.match(reply ?? "", /show_chat/u);
     assert.match(reply ?? "", /list_agents/u);
@@ -982,11 +983,13 @@ test("dispatchCommand refreshes the live tool list after /config set tools", asy
     const harness = Harness.load(projectDir);
 
     const beforeReply = await dispatchCommand(harness, "/tools");
-    const setReply = await dispatchCommand(harness, '/config set tools ["read","act"]');
+    const setReply = await dispatchCommand(harness, "/config set tools read act");
     const afterReply = await dispatchCommand(harness, "/tools");
 
+    assert.match(beforeReply ?? "", /^permissions: read$/mu);
     assert.doesNotMatch(beforeReply ?? "", /create_agent/u);
     assert.equal(setReply, 'tools = read,act');
+    assert.match(afterReply ?? "", /^permissions: read, act$/mu);
     assert.match(afterReply ?? "", /create_agent/u);
     assert.match(afterReply ?? "", /create_task/u);
   } finally {

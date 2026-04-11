@@ -86,12 +86,23 @@ export const parseProjectConfigValue = (
   }
 
   if (key === "tools") {
-    if (value === "read" || value === "act" || value === "dangerous") {
-      return { tools: normalizeToolPermissions(value) };
+    const trimmed = value.trim();
+    const parsedList = trimmed
+      .split(/[,\s]+/u)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    if (
+      parsedList.length > 0 &&
+      parsedList.every(
+        (entry) => entry === "read" || entry === "act" || entry === "dangerous",
+      )
+    ) {
+      return { tools: normalizeToolPermissions(parsedList) };
     }
 
     try {
-      const parsed = JSON.parse(value);
+      const parsed = JSON.parse(trimmed);
       if (
         !Array.isArray(parsed) ||
         parsed.length === 0 ||
@@ -99,12 +110,12 @@ export const parseProjectConfigValue = (
           (entry) => entry !== "read" && entry !== "act" && entry !== "dangerous",
         )
       ) {
-        return "tools must be 'read', 'act', 'dangerous', or a JSON array of those values";
+        return "tools must be a list like 'read act' or a JSON array of tool permissions";
       }
 
       return { tools: normalizeToolPermissions(parsed) };
     } catch {
-      return "tools must be 'read', 'act', 'dangerous', or a JSON array of those values";
+      return "tools must be a list like 'read act' or a JSON array of tool permissions";
     }
   }
 
