@@ -80,6 +80,7 @@ Commands:
   /skills            List local skills
   /agent             Agent management commands
   /task              Task scheduling commands
+  /teleport          Attach this session to a remote maclaw runtime
   /verbose <on|off>  Toggle verbose reply metadata
   /quit              Exit the REPL
 ```

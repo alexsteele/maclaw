@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import {
+  formatReplPrompt,
   loadReplChannels,
   loadReplServerConfig,
   loadReplHarness,
@@ -15,6 +16,18 @@ test("wrapReplLine wraps long lines and preserves indentation", () => {
   const wrapped = wrapReplLine("  alpha beta gamma delta", 12);
 
   assert.equal(wrapped, "  alpha beta\n  gamma\n  delta");
+});
+
+test("formatReplPrompt shows teleport target when attached", () => {
+  assert.equal(formatReplPrompt(), "> ");
+  assert.equal(
+    formatReplPrompt({
+      target: "local-box",
+      project: "home",
+      chatId: "default",
+    }),
+    "[teleport local-box home:default] > ",
+  );
 });
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {

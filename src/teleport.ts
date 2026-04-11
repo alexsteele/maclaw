@@ -23,6 +23,12 @@ export type RemoteCommandResponse = {
   handledAsCommand: boolean;
 };
 
+export type TeleportConnectionState = {
+  chatId: string;
+  project?: string;
+  target: string;
+};
+
 type FetchLike = typeof fetch;
 type SpawnLike = typeof spawn;
 
@@ -286,6 +292,79 @@ export class TeleportSession {
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+}
+
+/**
+ * High-level attached teleport controller for interactive clients such as the
+ * REPL or server-backed chat channels.
+ */
+export class TeleportController {
+  private readonly config?: Pick<ServerConfig, "remotes">;
+  private readonly dependencies: TeleportDependencies;
+  private connection?: TeleportConnectionState;
+  private session?: TeleportSession;
+
+  constructor(
+    config?: Pick<ServerConfig, "remotes">,
+    dependencies: TeleportDependencies = {},
+  ) {
+    this.config = config;
+    this.dependencies = dependencies;
+  }
+
+  isConnected(): boolean {
+    return this.connection !== undefined;
+  }
+
+  getConnection(): TeleportConnectionState | undefined {
+    return this.connection;
+  }
+
+  listRemotes(): TeleportRemoteConfig[] {
+    return [...(this.config?.remotes ?? [])];
+  }
+
+  async connect(
+    target: string,
+    options: Pick<TeleportConnectionState, "chatId" | "project">,
+  ): Promise<TeleportConnectionState> {
+    await this.disconnect();
+
+    const session = new TeleportSession(target, this.config, this.dependencies);
+    await session.start();
+
+    this.session = session;
+    this.connection = {
+      target,
+      project: options.project,
+      chatId: options.chatId,
+    };
+    return this.connection;
+  }
+
+  async disconnect(): Promise<boolean> {
+    this.connection = undefined;
+    if (!this.session) {
+      return false;
+    }
+
+    const session = this.session;
+    this.session = undefined;
+    await session.stop();
+    return true;
+  }
+
+  async sendMessage(text: string): Promise<RemoteCommandResponse | null> {
+    if (!this.session || !this.connection) {
+      return null;
+    }
+
+    return await this.session.sendCommand({
+      project: this.connection.project,
+      chatId: this.connection.chatId,
+      text,
+    });
   }
 }
 

@@ -26,9 +26,37 @@ import type {
   UsageSummary,
 } from "./types.js";
 
+type TeleportCommandOptions = {
+  chatId: string;
+  project?: string;
+};
+
+type TeleportControl = {
+  connect(target: string, options: TeleportCommandOptions): Promise<{
+    chatId: string;
+    project?: string;
+    target: string;
+  }>;
+  disconnect(): Promise<boolean>;
+  getConnection(): {
+    chatId: string;
+    project?: string;
+    target: string;
+  } | undefined;
+  listRemotes(): Array<{
+    name: string;
+    sshHost: string;
+    sshPort?: number;
+  }>;
+};
+
 type DispatchOptions = {
   chatId?: string;
   origin?: Origin;
+  // Optional teleport context supplied by interactive clients such as the REPL
+  // or server-backed channels. When present, shared /teleport commands can
+  // attach, list, inspect, and disconnect remote sessions.
+  teleport?: TeleportControl;
 };
 
 export const helpText = [
@@ -53,6 +81,7 @@ export const helpText = [
   "  /task              Task scheduling commands",
   "  /send              Send a test notification",
   "  /inbox             Show saved notifications",
+  "  /teleport          Attach this session to a remote maclaw runtime",
 ].join("\n");
 
 export const projectHelpText = [
@@ -185,6 +214,18 @@ export const usageHelpText = [
   "  /usage             Show token usage for the current chat",
   "  /usage <chat>      Show token usage for a named chat",
   "  /usage project     Show token usage for the project",
+].join("\n");
+
+export const teleportHelpText = [
+  "Command: /teleport",
+  "  /teleport                                  Show teleport help",
+  "  /teleport list                             List configured remotes",
+  "  /teleport status                           Show current teleport status",
+  "  /teleport connect <url|remote> [--project <name>] [--chat <id>]",
+  "  /teleport <url|remote>                     Alias for /teleport connect",
+  "  /teleport disconnect                       Disconnect the active teleport session",
+  "",
+  "While teleport is connected, normal REPL or channel messages are sent to the remote runtime.",
 ].join("\n");
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -720,6 +761,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
 
   if (input === "/help tools") {
     return toolsHelpText;
+  }
+
+  if (input === "/help teleport") {
+    return teleportHelpText;
   }
 
   if (input.startsWith("/help")) {
@@ -1487,6 +1532,108 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
   return "Usage: /history";
 };
 
+const parseTeleportFlagValue = (value: string, name: string): string | undefined => {
+  const index = value.indexOf(name);
+  if (index < 0) {
+    return undefined;
+  }
+
+  const remainder = value.slice(index + name.length).trimStart();
+  if (remainder.length === 0) {
+    return undefined;
+  }
+
+  const nextSpace = remainder.indexOf(" ");
+  return (nextSpace < 0 ? remainder : remainder.slice(0, nextSpace)).trim();
+};
+
+const removeTeleportFlag = (value: string, name: string): string => {
+  const pattern = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s+\\S+`, "u");
+  return value.replace(pattern, "").trim();
+};
+
+const renderTeleportStatus = (connection: ReturnType<TeleportControl["getConnection"]>): string =>
+  !connection
+    ? "teleport: disconnected"
+    : [
+        "teleport: connected",
+        `target: ${connection.target}`,
+        `project: ${connection.project ?? "(default)"}`,
+        `chat: ${connection.chatId}`,
+      ].join("\n");
+
+const renderTeleportRemotes = (remotes: ReturnType<TeleportControl["listRemotes"]>): string =>
+  remotes.length === 0
+    ? "No remotes configured."
+    : remotes
+      .map((remote) => `- ${remote.name}: ${remote.sshHost}${remote.sshPort ? `:${remote.sshPort}` : ""}`)
+      .join("\n");
+
+const handleTeleportCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/teleport") {
+    return teleportHelpText;
+  }
+
+  if (input === "/teleport status") {
+    return renderTeleportStatus(options.teleport?.getConnection());
+  }
+
+  if (input === "/teleport help") {
+    return teleportHelpText;
+  }
+
+  if (input === "/teleport list") {
+    return options.teleport
+      ? renderTeleportRemotes(options.teleport.listRemotes())
+      : "Teleport is not supported in this interface yet.";
+  }
+
+  if (input === "/teleport disconnect") {
+    if (!options.teleport) {
+      return "Teleport is not supported in this interface yet.";
+    }
+
+    await options.teleport.disconnect();
+    return "teleport: disconnected";
+  }
+
+  if (input.startsWith("/teleport ")) {
+    if (!options.teleport) {
+      return "Teleport is not supported in this interface yet.";
+    }
+
+    const body = input.startsWith("/teleport connect ")
+      ? input.slice("/teleport connect ".length).trim()
+      : input.slice("/teleport ".length).trim();
+    const requestedProject = parseTeleportFlagValue(body, "--project");
+    const requestedChatId = parseTeleportFlagValue(body, "--chat");
+    const target = removeTeleportFlag(
+      removeTeleportFlag(body, "--project"),
+      "--chat",
+    ).trim();
+    if (!target) {
+      return teleportHelpText;
+    }
+
+    let connection;
+    try {
+      connection = await options.teleport.connect(target, {
+        project: requestedProject ?? harness.config.name,
+        chatId: requestedChatId ?? getScopedChatId(harness, options),
+      });
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    return `attached to remote: ${connection.target}\n${renderTeleportStatus(connection)}`;
+  }
+
+  if (input.startsWith("/teleport")) {
+    return teleportHelpText;
+  }
+
+  return teleportHelpText;
+};
+
 const handleNewCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/new") {
     return handleChatCommand(harness, "/chat new", options);
@@ -1559,6 +1706,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   tools: handleToolsCommand,
   skills: handleSkillsCommand,
   history: handleHistoryCommand,
+  teleport: handleTeleportCommand,
 };
 
 // Parses user input and dispatches it to a project.
