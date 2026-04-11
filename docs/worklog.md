@@ -9,10 +9,12 @@ Derived from local git history.
 | 2026-04-06 |        41 |                          3.6 | +5,451 / -1,079 |
 | 2026-04-08 |        22 |                          1.9 | +2,055 / -100   |
 | 2026-04-09 |         6 |                          1.5 | +1,630 / -329   |
+| 2026-04-10 |        10 |                          1.8 | +2,107 / -589   |
 
 Current code size:
-- `src/`: `10,830` lines
-- `test/`: `5,245` lines
+
+- `src/`: `11,596` lines
+- `test/`: `5,726` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -74,3 +76,13 @@ Current code size:
 - Added `notify`, `read_chat`, and `list_channels` tools.
 - Extended inbox provenance with source chat tracking for tool and lifecycle
   notifications.
+
+## 2026-04-10 Notes
+
+- setup streamline. `setup [section]`
+- storage migration. `config set storage` snapshot/restore via `ProjectStorage`
+- split storage backends
+- `Harness` method grouping
+- added `/chats` as an alias for `/chat list`
+- fixed REPL `/switch` to chats not projects
+- documented remote-runtime ideas in `docs/teleport.md`
