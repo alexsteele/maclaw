@@ -184,3 +184,35 @@ test("Agent waits between steps when stepIntervalMs is set", async () => {
   assert.equal(timestamps.length, 2);
   assert.ok(timestamps[1]! - timestamps[0]! >= 15);
 });
+
+test("Agent restore resumes a running agent without resetting startedAt", async () => {
+  const store = new MemoryAgentStore();
+  const startedAt = new Date().toISOString();
+  const record = {
+    ...createRecord(),
+    status: "running" as const,
+    stepCount: 1,
+    startedAt,
+    maxSteps: 2,
+  };
+  store.saveAgent(record);
+
+  const agent = new Agent(
+    record,
+    store,
+    async (): Promise<Message> => ({
+      id: "msg-restored",
+      role: "assistant",
+      content: "Still working",
+      createdAt: new Date().toISOString(),
+    }),
+  );
+
+  const restored = agent.restore();
+  const result = await waitForAgentToSettle(store, record.id);
+
+  assert.equal(restored.status, "running");
+  assert.equal(result.status, "stopped");
+  assert.equal(result.stepCount, 2);
+  assert.equal(result.startedAt, startedAt);
+});

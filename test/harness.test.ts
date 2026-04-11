@@ -5,8 +5,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
-import { defaultInboxFile } from "../src/config.js";
-import { JsonFileInboxStore } from "../src/storage/json.js";
+import { defaultAgentsFile, defaultInboxFile, initProjectConfig } from "../src/config.js";
+import { JsonFileAgentStore, JsonFileInboxStore } from "../src/storage/json.js";
 import type { AgentRecord } from "../src/types.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 
@@ -438,6 +438,59 @@ test("harness stores agents and inbox entries in sqlite when configured", async 
     assert.equal(inbox.length, 1);
     assert.equal(inbox[0]?.kind, "agentFailed");
     assert.match(inbox[0]?.text ?? "", /sqlite-agent failed: boom/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness start restores persisted running and paused agents", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-restore-agents-"));
+
+  try {
+    const startedAt = new Date().toISOString();
+    await initProjectConfig(projectDir, {
+      name: "restore-agents-project",
+      model: "dummy/test-model",
+      storage: "json",
+    });
+
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    agentStore.saveAgent({
+      id: "agent_running",
+      name: "running-agent",
+      prompt: "Continue work",
+      chatId: "agent_running",
+      status: "running",
+      maxSteps: 2,
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: "2026-04-11T07:00:00.000Z",
+      startedAt,
+    });
+    agentStore.saveAgent({
+      id: "agent_paused",
+      name: "paused-agent",
+      prompt: "Wait here",
+      chatId: "agent_paused",
+      status: "paused",
+      maxSteps: 5,
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: "2026-04-11T07:00:00.000Z",
+      startedAt,
+    });
+
+    const harness = Harness.load(projectDir);
+    await harness.start();
+
+    const restoredRunning = await waitForAgentToSettle(harness, "agent_running");
+    const restoredPaused = harness.getAgent("agent_paused");
+
+    assert.equal(restoredRunning.status, "stopped");
+    assert.equal(restoredRunning.stepCount, 2);
+    assert.equal(restoredRunning.startedAt, startedAt);
+    assert.equal(restoredPaused?.status, "paused");
+    assert.equal(restoredPaused?.stepCount, 1);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

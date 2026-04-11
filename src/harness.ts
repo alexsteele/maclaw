@@ -312,6 +312,7 @@ export class Harness {
   start(): Promise<void> {
     const onTaskMessage = this._taskListener ?? (async () => {});
     return this.pruneExpiredChats().then(() => {
+      this.restorePersistedAgents();
       this._scheduler.start(
         this._config.schedulerPollMs,
         this.executeScheduledTask.bind(this, onTaskMessage),
@@ -908,6 +909,23 @@ export class Harness {
     return this._agentStore
       .listAgents()
       .find((agent) => agent.name === name && this.isLiveAgentStatus(agent.status));
+  }
+
+  private restorePersistedAgents(): void {
+    for (const record of this._agentStore.listAgents()) {
+      if (!this.isLiveAgentStatus(record.status) || this._runningAgents.has(record.id)) {
+        continue;
+      }
+
+      const agent = new Agent(
+        record,
+        this._agentStore,
+        this.promptChat.bind(this),
+        this.handleAgentStopped.bind(this, record.id),
+      );
+      this._runningAgents.set(record.id, agent);
+      agent.restore();
+    }
   }
 
   private handleAgentStopped(agentId: string): void {

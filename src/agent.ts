@@ -33,9 +33,6 @@ export class MemoryAgentStore implements AgentStore {
   }
 }
 
-// TODO:
-// - Resume interrupted agents from storage on harness/server startup.
-
 // Agent runs tasks autonomously in a loop.
 // An agent runs in a single project with its own chat (or user provided chat ID).
 // An agent can be "steered" by sending it prompts which are inserted in the loop.
@@ -120,6 +117,19 @@ export class Agent {
     record.startedAt = new Date().toISOString();
     this.saveRecord(record);
     this.scheduleIteration();
+    return structuredClone(record);
+  }
+
+  restore(): AgentRecord {
+    const record = this.getRecord();
+    if (record.status === "pending") {
+      return this.start();
+    }
+
+    if (record.status === "running") {
+      this.scheduleIteration();
+    }
+
     return structuredClone(record);
   }
 
