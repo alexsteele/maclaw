@@ -19,6 +19,17 @@ const cliHelpText = [
   "  -h, --help      Show this help",
 ].join("\n");
 
+const serverHelpText = [
+  "Usage: maclaw server [options]",
+  "",
+  "Options:",
+  "  --port <port>    Bind the local server to a specific port",
+  "  --api-only       Serve the command API without the portal UI",
+  "  --no-portal      Alias for --api-only",
+  "  --log-stderr     Mirror server logs to stderr in addition to the log file",
+  "  -h, --help       Show this help",
+].join("\n");
+
 const runReplCommand = async (): Promise<void> => {
   await runRepl();
 };
@@ -41,6 +52,11 @@ const parsePortFlag = (args: string[]): number | undefined => {
 const hasFlag = (args: string[], name: string): boolean => args.includes(name);
 
 const runServer = async (args: string[]): Promise<void> => {
+  if (args.includes("help") || hasFlag(args, "-h") || hasFlag(args, "--help")) {
+    process.stdout.write(`${serverHelpText}\n`);
+    return;
+  }
+
   const server = MaclawServer.load({
     port: parsePortFlag(args),
     logStderr: hasFlag(args, "--log-stderr"),
