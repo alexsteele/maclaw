@@ -10,11 +10,12 @@ Derived from local git history.
 | 2026-04-08 |        22 |                          1.9 | +2,055 / -100   |
 | 2026-04-09 |         6 |                          1.5 | +1,630 / -329   |
 | 2026-04-10 |        10 |                          1.8 | +2,107 / -589   |
+| 2026-04-11 |        24 |                          6.3 | +5,491 / -323   |
 
 Current code size:
 
-- `src/`: `11,596` lines
-- `test/`: `5,726` lines
+- `src/`: `14,804` lines
+- `test/`: `7,075` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -86,3 +87,14 @@ Current code size:
 - added `/chats` as an alias for `/chat list`
 - fixed REPL `/switch` to chats not projects
 - documented remote-runtime ideas in `docs/teleport.md`
+
+## 2026-04-11 Notes
+
+- Agent inbox persistence and shared inbox type cleanup.
+- Continued work on remote runtime and teleport flows.
+- Added terminal markdown rendering with `marked` and `marked-terminal`.
+- Threaded interface display instructions through the chat prompt path.
+- Portal markdown rendering with sanitization.
+- Portal polish: channels panel, reply-focused navigation shortcuts, cleaner
+  assistant transcript layout, composer cleanup, and README screenshot.
+- Kept command output plain in the portal for help/list alignment.
