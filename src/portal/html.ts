@@ -45,6 +45,7 @@ const domPurifyBundle = readFileSync(
 );
 
 export const renderPortalHtml = ({
+  channels,
   currentProject,
   projects,
 }: PortalRenderOptions): string => `<!doctype html>
@@ -345,15 +346,22 @@ export const renderPortalHtml = ({
       }
 
       .message {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 12px 14px;
-        background: var(--panel-2);
-        max-width: 46rem;
+        width: 100%;
+        max-width: none;
+        padding: 2px 0;
+      }
+
+      .message-assistant {
+        justify-self: stretch;
       }
 
       .message-user {
         justify-self: end;
+        width: auto;
+        max-width: min(38rem, 85%);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 12px 14px;
         background: var(--accent-soft);
         border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
       }
@@ -367,12 +375,22 @@ export const renderPortalHtml = ({
         letter-spacing: 0.08em;
       }
 
+      .message-assistant strong {
+        margin-bottom: 10px;
+      }
+
+      .message-user strong {
+        margin-bottom: 4px;
+      }
+
       .message-text {
         white-space: pre-wrap;
       }
 
       .message-body {
         color: var(--text);
+        max-width: 52rem;
+        padding-right: 18px;
       }
 
       .message-body > :first-child,
@@ -448,6 +466,10 @@ export const renderPortalHtml = ({
         border: 0;
         border-top: 1px solid var(--border);
         margin: 12px 0;
+      }
+
+      .message-user .message-text {
+        white-space: pre-wrap;
       }
 
       .empty-state {
@@ -571,9 +593,44 @@ export const renderPortalHtml = ({
         justify-content: flex-end;
       }
 
+      .channel-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .channel-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel-2);
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .channel-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+        flex: 0 0 auto;
+      }
+
+      .channel-empty {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
       *::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
+        width: 12px;
+        height: 12px;
+      }
+
+      .transcript::-webkit-scrollbar {
+        width: 25px;
       }
 
       *::-webkit-scrollbar-track {
@@ -695,6 +752,21 @@ export const renderPortalHtml = ({
       </main>
       <aside class="inspector">
         <h2>Appearance</h2>
+        <div class="stack">
+          <section class="card">
+            <h3>Channels</h3>
+            ${
+              channels.length === 0
+                ? '<div class="channel-empty">No channels connected.</div>'
+                : `<div class="channel-list">${channels
+                    .map(
+                      (channel) =>
+                        `<div class="channel-item"><span class="channel-dot"></span><span>${escapeHtml(channel)}</span></div>`,
+                    )
+                    .join("")}</div>`
+            }
+          </section>
+        </div>
         <div class="theme-spacer"></div>
         <div class="theme-footer">
           <button type="button" class="theme-toggle" id="theme-toggle">Dark mode</button>
@@ -802,9 +874,9 @@ export const renderPortalHtml = ({
         }
 
         transcript.innerHTML = displayMessages.map((message) => {
-          const userClass = message.role === "user" ? " message-user" : "";
+          const roleClass = message.role === "user" ? " message-user" : " message-assistant";
           return [
-            '<article class="message' + userClass + '">',
+            '<article class="message' + roleClass + '">',
             '<strong>' + escapeHtml(message.role) + '</strong>',
             renderMessageContent(message),
             '</article>',

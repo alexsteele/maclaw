@@ -9,4 +9,5 @@ export type PortalProjectSummary = {
 export type PortalRenderOptions = {
   currentProject?: string;
   projects: PortalProjectSummary[];
+  channels: string[];
 };

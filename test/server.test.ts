@@ -364,6 +364,8 @@ test("server renders the portal shell", async () => {
 
     assert.match(html, /maclaw/u);
     assert.match(html, /web channel/u);
+    assert.match(html, /Channels/u);
+    assert.match(html, /web/u);
     assert.match(html, />home</u);
     assert.match(html, /\/events/u);
     assert.match(html, /Recent chats/u);

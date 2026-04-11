@@ -160,9 +160,32 @@ export class MaclawServer {
 
   renderPortal(): string {
     return renderPortalHtml({
+      channels: this.getPortalChannels(),
       currentProject: this.getDefaultProjectName(),
       projects: this.getPortalProjects(),
     });
+  }
+
+  private getPortalChannels(): string[] {
+    if (this.channels.size > 0) {
+      return Array.from(this.channels.keys()).sort();
+    }
+
+    const configured = ["web"];
+    if (this.config.channels?.discord) {
+      configured.push("discord");
+    }
+    if (this.config.channels?.email) {
+      configured.push("email");
+    }
+    if (this.config.channels?.slack) {
+      configured.push("slack");
+    }
+    if (this.config.channels?.whatsapp) {
+      configured.push("whatsapp");
+    }
+
+    return configured.sort();
   }
 
   async start(): Promise<void> {
