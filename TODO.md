@@ -3,7 +3,9 @@
 - More models
 - MCP
 - Prettier terminal output
-- Render markdown in portal
+- Portal asset packaging
+  - Stop depending on `node_modules` paths at runtime for browser markdown bundles
+  - Decide whether to bundle portal assets into `dist/`, embed generated assets, or serve a packaged static directory
 - Tool roadmap
   - More read tools first
   - Web read tools with domain controls and robots.txt compliance

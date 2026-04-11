@@ -1,5 +1,8 @@
 // Renders the minimal browser portal shell served by `maclaw server`.
 // See `docs/web-portal.md`.
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { PortalRenderOptions } from "./types.js";
 
 const escapeHtml = (value: string): string =>
@@ -28,6 +31,18 @@ const renderProjectOptions = (
 
 const serializeForScript = (value: unknown): string =>
   JSON.stringify(value).replaceAll("<", "\\u003c");
+
+const portalDir = path.dirname(fileURLToPath(import.meta.url));
+// TODO: package these browser assets explicitly for distribution instead of
+// resolving them from node_modules at runtime.
+const markedBundle = readFileSync(
+  path.resolve(portalDir, "../../node_modules/marked/lib/marked.umd.js"),
+  "utf8",
+);
+const domPurifyBundle = readFileSync(
+  path.resolve(portalDir, "../../node_modules/dompurify/dist/purify.min.js"),
+  "utf8",
+);
 
 export const renderPortalHtml = ({
   currentProject,
@@ -97,6 +112,12 @@ export const renderPortalHtml = ({
           linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
         color: var(--text);
         font: 14px/1.5 var(--font-ui);
+        scrollbar-color: color-mix(in srgb, var(--border-strong) 85%, var(--panel)) transparent;
+      }
+
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--border-strong) 85%, var(--panel)) transparent;
       }
 
       .shell {
@@ -111,6 +132,7 @@ export const renderPortalHtml = ({
         padding: 20px 18px;
         background: color-mix(in srgb, var(--panel) 84%, transparent);
         backdrop-filter: blur(10px);
+        overflow: auto;
       }
 
       .brand {
@@ -328,7 +350,6 @@ export const renderPortalHtml = ({
         padding: 12px 14px;
         background: var(--panel-2);
         max-width: 46rem;
-        white-space: pre-wrap;
       }
 
       .message-user {
@@ -344,6 +365,89 @@ export const renderPortalHtml = ({
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.08em;
+      }
+
+      .message-text {
+        white-space: pre-wrap;
+      }
+
+      .message-body {
+        color: var(--text);
+      }
+
+      .message-body > :first-child,
+      .message-text > :first-child {
+        margin-top: 0;
+      }
+
+      .message-body > :last-child,
+      .message-text > :last-child {
+        margin-bottom: 0;
+      }
+
+      .message-body p,
+      .message-body ul,
+      .message-body ol,
+      .message-body pre,
+      .message-body blockquote,
+      .message-body table,
+      .message-body h1,
+      .message-body h2,
+      .message-body h3,
+      .message-body h4 {
+        margin: 0 0 10px;
+      }
+
+      .message-body ul,
+      .message-body ol {
+        padding-left: 20px;
+      }
+
+      .message-body li + li {
+        margin-top: 4px;
+      }
+
+      .message-body a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .message-body a:hover {
+        text-decoration: underline;
+      }
+
+      .message-body code {
+        font-family: var(--font-mono);
+        font-size: 0.92em;
+        padding: 0.15em 0.35em;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--panel) 60%, var(--bg-soft));
+      }
+
+      .message-body pre {
+        overflow-x: auto;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--panel) 70%, var(--bg-soft));
+      }
+
+      .message-body pre code {
+        display: block;
+        padding: 0;
+        background: transparent;
+      }
+
+      .message-body blockquote {
+        padding-left: 12px;
+        border-left: 3px solid var(--border-strong);
+        color: var(--muted);
+      }
+
+      .message-body hr {
+        border: 0;
+        border-top: 1px solid var(--border);
+        margin: 12px 0;
       }
 
       .empty-state {
@@ -467,6 +571,31 @@ export const renderPortalHtml = ({
         justify-content: flex-end;
       }
 
+      *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+
+      *::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      *::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--border-strong) 82%, var(--panel));
+        background-clip: padding-box;
+      }
+
+      *::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in srgb, var(--muted) 72%, var(--panel));
+        background-clip: padding-box;
+      }
+
+      *::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
       @media (max-width: 900px) {
         .shell {
           grid-template-columns: 1fr;
@@ -572,6 +701,8 @@ export const renderPortalHtml = ({
         </div>
       </aside>
     </div>
+    <script>${markedBundle}</script>
+    <script>${domPurifyBundle}</script>
     <script>
       const portalState = ${serializeForScript({
         currentProject,
@@ -605,6 +736,47 @@ export const renderPortalHtml = ({
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;");
 
+      if (window.marked?.setOptions) {
+        window.marked.setOptions({
+          gfm: true,
+          breaks: false,
+        });
+      }
+
+      const sanitizeHtml = (value) => {
+        if (!window.DOMPurify?.sanitize) {
+          return escapeHtml(value);
+        }
+
+        return window.DOMPurify.sanitize(value);
+      };
+
+      const renderMarkdownHtml = (value) => {
+        if (!window.marked?.parse) {
+          return '<div class="message-text">' + escapeHtml(value) + '</div>';
+        }
+
+        const rawHtml = window.marked.parse(value);
+        const safeHtml = sanitizeHtml(typeof rawHtml === 'string' ? rawHtml : String(rawHtml));
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = safeHtml;
+
+        for (const link of wrapper.querySelectorAll('a')) {
+          link.setAttribute('target', '_blank');
+          link.setAttribute('rel', 'noopener noreferrer');
+        }
+
+        return '<div class="message-body">' + wrapper.innerHTML + '</div>';
+      };
+
+      const renderMessageContent = (message) => {
+        if (message.role === 'assistant') {
+          return renderMarkdownHtml(message.content);
+        }
+
+        return '<div class="message-text">' + escapeHtml(message.content) + '</div>';
+      };
+
       const readStoredChatId = (project) => {
         if (!project) {
           return "";
@@ -634,7 +806,7 @@ export const renderPortalHtml = ({
           return [
             '<article class="message' + userClass + '">',
             '<strong>' + escapeHtml(message.role) + '</strong>',
-            escapeHtml(message.content),
+            renderMessageContent(message),
             '</article>',
           ].join("");
         }).join("");
