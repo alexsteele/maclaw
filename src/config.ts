@@ -37,6 +37,9 @@ export const defaultAgentMemoryFile = (projectFolder: string): string =>
 export const defaultSqliteFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "maclaw.db");
 
+export const defaultSandboxDir = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "sandboxes");
+
 export type ModelProvider = "dummy" | "openai";
 
 export type ProjectConfig = {
