@@ -605,6 +605,12 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     });
     assert.ok(agentInboxEntry);
 
+    const memoryWritten = await harness.writeAgentMemory(
+      created.agent.id,
+      "Remember to summarize the findings before finishing.",
+    );
+    assert.equal(memoryWritten, true);
+
     const nextConfig = await harness.updateProjectConfig({ storage: "sqlite" });
 
     assert.equal(nextConfig.storage, "sqlite");
@@ -630,6 +636,10 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     assert.equal(agentInbox?.length, 1);
     assert.equal(agentInbox?.[0]?.text, "Stored agent inbox message");
     assert.equal(agentInbox?.[0]?.sourceName, "Alex");
+    assert.equal(
+      await harness.readAgentMemory(created.agent.id),
+      "Remember to summarize the findings before finishing.",
+    );
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

@@ -31,6 +31,9 @@ export const defaultInboxFile = (projectFolder: string): string =>
 export const defaultAgentInboxFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "agent-inbox.jsonl");
 
+export const defaultAgentMemoryFile = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "agent-memory.json");
+
 export const defaultSqliteFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "maclaw.db");
 

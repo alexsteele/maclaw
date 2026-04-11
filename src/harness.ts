@@ -16,6 +16,8 @@ import {
   type ProjectConfig,
 } from "./config.js";
 import { Agent, type AgentStore } from "./agent.js";
+import { createAgentMemoryEntry } from "./agent-memory-entry.js";
+import type { AgentMemoryStore } from "./agent-memory.js";
 import { createAgentInboxEntry, type AgentInboxStore } from "./agent-inbox.js";
 import { ensureDir } from "./fs-utils.js";
 import {
@@ -179,6 +181,10 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
     harness.listAgentInbox(
       agentRef ?? findAgentByChatId(harness.listAgents(), harness.getCurrentChatId())?.id ?? "",
     ),
+  readAgentMemory: (agentRef) =>
+    harness.readAgentMemory(
+      agentRef ?? findAgentByChatId(harness.listAgents(), harness.getCurrentChatId())?.id ?? "",
+    ),
   listTasks: (chatId) => harness.listTasks(chatId),
   sendAgentInboxMessage: (input) => {
     const sourceAgent = findAgentByChatId(
@@ -194,6 +200,8 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
       sourceChatId: harness.getCurrentChatId(),
     });
   },
+  writeAgentMemory: (input) =>
+    harness.writeAgentMemory(input.agentRef, input.text),
   createAgent: (input) =>
     harness.createAgent({
       ...input,
@@ -275,6 +283,7 @@ export class Harness {
   private _chatRuntime: ChatRuntime;
   private _agentStore: AgentStore;
   private _agentInboxStore: AgentInboxStore;
+  private _agentMemoryStore: AgentMemoryStore;
   private _inboxStore: InboxStore;
   private _runningAgents = new Map<string, Agent>();
   private _taskListener?: TaskMessageHandler;
@@ -291,6 +300,7 @@ export class Harness {
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
+    this._agentMemoryStore = this._storage.agentMemory;
     this._inboxStore = this._storage.inbox;
     this._taskListener = options.onTaskMessage;
     this._router = options.router ?? new NoopRouter();
@@ -348,6 +358,7 @@ export class Harness {
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = nextStorage.agents;
     const nextAgentInboxStore = nextStorage.agentInbox;
+    const nextAgentMemoryStore = nextStorage.agentMemory;
 
     const activeChat = await this.loadCurrentChat();
     await nextChatStore.saveChat(activeChat);
@@ -374,6 +385,7 @@ export class Harness {
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
     this._agentInboxStore = nextAgentInboxStore;
+    this._agentMemoryStore = nextAgentMemoryStore;
     this._inboxStore = nextStorage.inbox;
 
     if (this._taskListener) {
@@ -411,6 +423,7 @@ export class Harness {
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
+    this._agentMemoryStore = this._storage.agentMemory;
     this._inboxStore = this._storage.inbox;
 
     if (this._taskListener) {
@@ -1007,6 +1020,31 @@ export class Harness {
     }
 
     return this._agentInboxStore.clearEntries(agent.id);
+  }
+
+  async readAgentMemory(agentRef: string): Promise<string | undefined> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return undefined;
+    }
+
+    return (await this._agentMemoryStore.loadEntry(agent.id))?.text;
+  }
+
+  async writeAgentMemory(agentRef: string, text: string): Promise<boolean> {
+    const agent = this.findAgent(agentRef);
+    const trimmed = text.trim();
+    if (!agent || trimmed.length === 0) {
+      return false;
+    }
+
+    await this._agentMemoryStore.saveEntry(
+      createAgentMemoryEntry({
+        agentId: agent.id,
+        text: trimmed,
+      }),
+    );
+    return true;
   }
 
   async deleteInboxEntry(entryId: string): Promise<boolean> {

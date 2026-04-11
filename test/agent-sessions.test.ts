@@ -184,7 +184,7 @@ test("ChatRuntime includes the compressed chat summary in the system prompt", as
   }
 });
 
-test("ChatRuntime mentions agent inbox availability in the system prompt", async () => {
+test("ChatRuntime mentions agent inbox and memory availability in the system prompt", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-agent-inbox-prompt-"));
   const originalFetch = globalThis.fetch;
   const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
@@ -230,6 +230,7 @@ test("ChatRuntime mentions agent inbox availability in the system prompt", async
 
     assert.match(systemPrompt, /Agent inbox messages may contain relevant work context or requests\./u);
     assert.match(systemPrompt, /Review them when they seem important to your current work\./u);
+    assert.match(systemPrompt, /Agent memory can be useful for keeping concise durable notes/u);
   } finally {
     globalThis.fetch = originalFetch;
     await rm(projectDir, { recursive: true, force: true });

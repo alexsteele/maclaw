@@ -24,11 +24,16 @@ export type MaclawToolContext = {
   listAgents(): AgentRecord[];
   findAgent(agentRef: string): AgentRecord | undefined;
   listAgentInbox(agentRef?: string): Promise<AgentInboxEntry[] | undefined>;
+  readAgentMemory(agentRef?: string): Promise<string | undefined>;
   listTasks(chatId?: string): Promise<ScheduledTask[]>;
   sendAgentInboxMessage(input: {
     agentRef: string;
     text: string;
   }): Promise<AgentInboxEntry | undefined>;
+  writeAgentMemory(input: {
+    agentRef: string;
+    text: string;
+  }): Promise<boolean>;
   createAgent(input: {
     name: string;
     prompt: string;
@@ -93,6 +98,27 @@ const parseSendAgentMessageInput = (input: unknown): { agent: string; text: stri
   const object = parseObjectInput(input);
   return {
     agent: requiredString(object, "agent"),
+    text: requiredString(object, "text"),
+  };
+};
+
+const parseReadAgentMemoryInput = (input: unknown): { agent?: string } => {
+  const object = parseObjectInput(input);
+  const agent = object.agent;
+
+  return {
+    ...(agent === undefined ? {} : { agent: requiredString(object, "agent") }),
+  };
+};
+
+const parseWriteAgentMemoryInput = (
+  input: unknown,
+): { agent?: string; text: string } => {
+  const object = parseObjectInput(input);
+  const agent = object.agent;
+
+  return {
+    ...(agent === undefined ? {} : { agent: requiredString(object, "agent") }),
     text: requiredString(object, "text"),
   };
 };
@@ -235,6 +261,9 @@ const formatAgentInbox = (entries: AgentInboxEntry[]): string => {
     ].join("\n"))
     .join("\n\n");
 };
+
+const formatAgentMemory = (text: string | undefined): string =>
+  text && text.trim().length > 0 ? text : "(empty)";
 
 const formatTask = (task: ScheduledTask): string =>
   [
@@ -405,6 +434,27 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
       },
     },
     {
+      name: "read_agent_memory",
+      description: "Read the durable working memory note for an agent. Defaults to the current agent when called from an agent chat.",
+      permission: "read",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agent: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { agent } = parseReadAgentMemoryInput(input);
+        const agentRef = agent ?? context.getChatAgent()?.id;
+        if (!agentRef) {
+          throw new Error('Expected "agent", or run this from an agent chat.');
+        }
+
+        return formatAgentMemory(await context.readAgentMemory(agentRef));
+      },
+    },
+    {
       name: "list_tasks",
       description: "List scheduled tasks for the current chat or a specific chat.",
       permission: "read",
@@ -499,6 +549,37 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
         }
 
         return `sent message to agent: ${agent}`;
+      },
+    },
+    {
+      name: "write_agent_memory",
+      description: "Write a concise durable working memory note for an agent. Defaults to the current agent when called from an agent chat.",
+      permission: "act",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agent: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        const { agent, text } = parseWriteAgentMemoryInput(input);
+        const agentRef = agent ?? context.getChatAgent()?.id;
+        if (!agentRef) {
+          throw new Error('Expected "agent", or run this from an agent chat.');
+        }
+
+        const written = await context.writeAgentMemory({
+          agentRef,
+          text,
+        });
+        if (!written) {
+          throw new Error(`Agent "${agentRef}" was not found.`);
+        }
+
+        return `updated agent memory: ${agentRef}`;
       },
     },
     {

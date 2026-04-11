@@ -95,6 +95,7 @@ const buildSystemPrompt = async (
     "Keep answers concise and practical.",
     "Use tools when needed.",
     "Agent inbox messages may contain relevant work context or requests. Review them when they seem important to your current work.",
+    "Agent memory can be useful for keeping concise durable notes that support your current work.",
     "Local skills are available as user-authored task descriptions. Read them when useful.",
     `Project initialized: ${existsSync(config.projectConfigFile) ? "yes" : "no"}.`,
     `Chat retention: ${config.retentionDays} days.`,

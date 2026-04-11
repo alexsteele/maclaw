@@ -129,6 +129,7 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     const listAgents = tools.find((tool) => tool.name === "list_agents");
     const showAgent = tools.find((tool) => tool.name === "show_agent");
     const readAgentInbox = tools.find((tool) => tool.name === "read_agent_inbox");
+    const readAgentMemory = tools.find((tool) => tool.name === "read_agent_memory");
     const listTasks = tools.find((tool) => tool.name === "list_tasks");
     const showTask = tools.find((tool) => tool.name === "show_task");
 
@@ -140,6 +141,7 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.ok(listAgents);
     assert.ok(showAgent);
     assert.ok(readAgentInbox);
+    assert.ok(readAgentMemory);
     assert.ok(listTasks);
     assert.ok(showTask);
     assert.equal(listTools.permission, "read");
@@ -148,6 +150,7 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.equal(readChat.permission, "read");
     assert.equal(showAgent.permission, "read");
     assert.equal(readAgentInbox.permission, "read");
+    assert.equal(readAgentMemory.permission, "read");
     assert.equal(showTask.permission, "read");
 
     assert.match(await listTools.execute({}), /list_chats \[read\]/u);
@@ -155,6 +158,7 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.match(await listTools.execute({}), /read_chat \[read\]/u);
     assert.match(await listTools.execute({}), /show_agent \[read\]/u);
     assert.match(await listTools.execute({}), /read_agent_inbox \[read\]/u);
+    assert.match(await listTools.execute({}), /read_agent_memory \[read\]/u);
     assert.match(await listChats.execute({}), /default/u);
     assert.match(await listChats.execute({}), /branch-a/u);
     assert.match(await listChannels.execute({}), /- inbox/u);
@@ -168,6 +172,8 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.match(await showAgent.execute({ agent: "planner" }), /^name: planner$/mu);
     assert.match(await readAgentInbox.execute({ agent: "planner" }), /Please review the latest plan/u);
     assert.match(await readAgentInbox.execute({ agent: "planner" }), /from: user Alex/u);
+    assert.equal(await harness.writeAgentMemory("planner", "Track follow-up questions."), true);
+    assert.match(await readAgentMemory.execute({ agent: "planner" }), /Track follow-up questions\./u);
     assert.match(await listTasks.execute({}), /Daily Brief/u);
     assert.match(await showTask.execute({ taskId: task.id }), new RegExp(`^id: ${task.id}$`, "mu"));
   } finally {
@@ -190,20 +196,26 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     const listTools = tools.find((tool) => tool.name === "list_tools");
     const createAgent = tools.find((tool) => tool.name === "create_agent");
     const sendAgentMessage = tools.find((tool) => tool.name === "send_agent_message");
+    const writeAgentMemory = tools.find((tool) => tool.name === "write_agent_memory");
+    const readAgentMemory = tools.find((tool) => tool.name === "read_agent_memory");
     const createTask = tools.find((tool) => tool.name === "create_task");
     const notify = tools.find((tool) => tool.name === "notify");
 
     assert.ok(listTools);
     assert.ok(createAgent);
     assert.ok(sendAgentMessage);
+    assert.ok(writeAgentMemory);
+    assert.ok(readAgentMemory);
     assert.ok(createTask);
     assert.ok(notify);
     assert.equal(createAgent.permission, "act");
     assert.equal(sendAgentMessage.permission, "act");
+    assert.equal(writeAgentMemory.permission, "act");
     assert.equal(createTask.permission, "act");
     assert.equal(notify.permission, "act");
     assert.match(await listTools.execute({}), /create_agent \[act\]/u);
     assert.match(await listTools.execute({}), /send_agent_message \[act\]/u);
+    assert.match(await listTools.execute({}), /write_agent_memory \[act\]/u);
     assert.match(await listTools.execute({}), /create_task \[act\]/u);
     assert.match(await listTools.execute({}), /notify \[act\]/u);
 
@@ -277,6 +289,11 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
 
     await harness.switchChat(childAgent.chatId);
 
+    const writeMemoryReply = await writeAgentMemory.execute({
+      text: "Child agent is ready to report back.",
+    });
+    const readMemoryReply = await readAgentMemory.execute({});
+
     const sendAgentMessageReply = await sendAgentMessage.execute({
       agent: "planner",
       text: "I finished the child plan",
@@ -284,6 +301,8 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     const plannerInbox = await harness.listAgentInbox("planner");
     const childMessage = plannerInbox?.find((entry) => entry.text === "I finished the child plan");
 
+    assert.equal(writeMemoryReply, `updated agent memory: ${childAgent.id}`);
+    assert.equal(readMemoryReply, "Child agent is ready to report back.");
     assert.equal(sendAgentMessageReply, "sent message to agent: planner");
     assert.ok(childMessage);
     assert.equal(childMessage.sourceType, "agent");

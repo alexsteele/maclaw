@@ -6,12 +6,14 @@ import { readdir, rm, writeFile } from "node:fs/promises";
 import {
   defaultAgentsFile,
   defaultAgentInboxFile,
+  defaultAgentMemoryFile,
   defaultInboxFile,
   defaultTaskRunsFile,
   defaultTasksFile,
   type ProjectConfig,
 } from "../config.js";
 import type { AgentStore } from "../agent.js";
+import type { AgentMemoryStore } from "../agent-memory.js";
 import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
 import {
@@ -32,6 +34,7 @@ import {
 import type {
   AgentRecord,
   AgentInboxEntry,
+  AgentMemoryEntry,
   ChatRecord,
   ChatSummary,
   InboxEntry,
@@ -170,6 +173,43 @@ export class JsonFileAgentInboxStore implements AgentInboxStore {
     const nextEntries = entries.filter((entry) => entry.agentId !== agentId);
     await writeJsonFile(this.filePath, nextEntries);
     return entries.length - nextEntries.length;
+  }
+}
+
+export class JsonFileAgentMemoryStore implements AgentMemoryStore {
+  private readonly filePath: string;
+
+  constructor(filePath: string) {
+    this.filePath = filePath;
+  }
+
+  async loadEntry(agentId: string): Promise<AgentMemoryEntry | undefined> {
+    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
+    const entry = entries[agentId];
+    return entry ? structuredClone(entry) : undefined;
+  }
+
+  async saveEntry(entry: AgentMemoryEntry): Promise<void> {
+    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
+    entries[entry.agentId] = structuredClone(entry);
+    await writeJsonFile(this.filePath, entries);
+  }
+
+  async deleteEntry(agentId: string): Promise<boolean> {
+    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
+    if (!(agentId in entries)) {
+      return false;
+    }
+
+    delete entries[agentId];
+    await writeJsonFile(this.filePath, entries);
+    return true;
+  }
+
+  async clearEntries(): Promise<number> {
+    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
+    await writeJsonFile(this.filePath, {});
+    return Object.keys(entries).length;
   }
 }
 
@@ -351,12 +391,14 @@ export class JsonProjectStorage implements ProjectStorage {
   readonly agents: AgentStore;
   readonly inbox: InboxStore;
   readonly agentInbox: AgentInboxStore;
+  readonly agentMemory: AgentMemoryStore;
   private readonly chatsDir: string;
   private readonly tasksFile: string;
   private readonly taskRunsFile: string;
   private readonly agentsFile: string;
   private readonly inboxFile: string;
   private readonly agentInboxFile: string;
+  private readonly agentMemoryFile: string;
   private readonly chatOptions: ChatLoadOptions;
 
   constructor(
@@ -365,12 +407,14 @@ export class JsonProjectStorage implements ProjectStorage {
     agents: AgentStore,
     inbox: InboxStore,
     agentInbox: AgentInboxStore,
+    agentMemory: AgentMemoryStore,
     chatsDir: string,
     tasksFile: string,
     taskRunsFile: string,
     agentsFile: string,
     inboxFile: string,
     agentInboxFile: string,
+    agentMemoryFile: string,
     chatOptions: ChatLoadOptions,
   ) {
     this.chats = chats;
@@ -378,12 +422,14 @@ export class JsonProjectStorage implements ProjectStorage {
     this.agents = agents;
     this.inbox = inbox;
     this.agentInbox = agentInbox;
+    this.agentMemory = agentMemory;
     this.chatsDir = chatsDir;
     this.tasksFile = tasksFile;
     this.taskRunsFile = taskRunsFile;
     this.agentsFile = agentsFile;
     this.inboxFile = inboxFile;
     this.agentInboxFile = agentInboxFile;
+    this.agentMemoryFile = agentMemoryFile;
     this.chatOptions = chatOptions;
   }
 
@@ -399,6 +445,7 @@ export class JsonProjectStorage implements ProjectStorage {
     await rm(this.agentsFile, { force: true });
     await rm(this.inboxFile, { force: true });
     await rm(this.agentInboxFile, { force: true });
+    await rm(this.agentMemoryFile, { force: true });
     await rm(this.tasksFile, { force: true });
     await rm(this.taskRunsFile, { force: true });
 
@@ -435,12 +482,14 @@ export const createJsonProjectStorage = (config: ProjectConfig): ProjectStorage 
     new JsonFileAgentStore(defaultAgentsFile(config.projectFolder)),
     new JsonFileInboxStore(defaultInboxFile(config.projectFolder)),
     new JsonFileAgentInboxStore(defaultAgentInboxFile(config.projectFolder)),
+    new JsonFileAgentMemoryStore(defaultAgentMemoryFile(config.projectFolder)),
     config.chatsDir,
     defaultTasksFile(config.projectFolder),
     defaultTaskRunsFile(config.projectFolder),
     defaultAgentsFile(config.projectFolder),
     defaultInboxFile(config.projectFolder),
     defaultAgentInboxFile(config.projectFolder),
+    defaultAgentMemoryFile(config.projectFolder),
     {
       retentionDays: config.retentionDays,
       compressionMode: config.compressionMode,

@@ -6,6 +6,7 @@
  */
 import { type ProjectConfig } from "../config.js";
 import { MemoryAgentStore, type AgentStore } from "../agent.js";
+import { MemoryAgentMemoryStore, type AgentMemoryStore } from "../agent-memory.js";
 import { MemoryAgentInboxStore, type AgentInboxStore } from "../agent-inbox.js";
 import { MemoryChatStore, type ChatStore } from "../chats.js";
 import { MemoryInboxStore, type InboxStore } from "../inbox.js";
@@ -23,6 +24,7 @@ export class MemoryProjectStorage implements ProjectStorage {
   readonly agents: AgentStore;
   readonly inbox: InboxStore;
   readonly agentInbox: AgentInboxStore;
+  readonly agentMemory: AgentMemoryStore;
   private readonly config: ProjectConfig;
 
   constructor(config: ProjectConfig) {
@@ -32,6 +34,7 @@ export class MemoryProjectStorage implements ProjectStorage {
     this.agents = new MemoryAgentStore();
     this.inbox = new MemoryInboxStore();
     this.agentInbox = new MemoryAgentInboxStore();
+    this.agentMemory = new MemoryAgentMemoryStore();
   }
 
   async loadSnapshot(activeChatId: string): Promise<ProjectSnapshot> {
@@ -52,6 +55,7 @@ export class MemoryProjectStorage implements ProjectStorage {
     for (const agent of this.agents.listAgents()) {
       await this.agentInbox.clearEntries(agent.id);
     }
+    await this.agentMemory.clearEntries();
   }
 
   // Fully remove backend-managed project persistence when supported.

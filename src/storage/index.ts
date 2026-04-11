@@ -7,12 +7,14 @@
  */
 import { type ProjectConfig } from "../config.js";
 import type { AgentStore } from "../agent.js";
+import type { AgentMemoryStore } from "../agent-memory.js";
 import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatStore } from "../chats.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
 import type {
   AgentInboxEntry,
+  AgentMemoryEntry,
   AgentRecord,
   ChatRecord,
   InboxEntry,
@@ -28,6 +30,7 @@ export type ProjectSnapshot = {
   agents: AgentRecord[];
   inbox: InboxEntry[];
   agentInbox: AgentInboxEntry[];
+  agentMemory: AgentMemoryEntry[];
 };
 
 export interface ProjectStorage {
@@ -36,6 +39,7 @@ export interface ProjectStorage {
   agents: AgentStore;
   inbox: InboxStore;
   agentInbox: AgentInboxStore;
+  agentMemory: AgentMemoryStore;
   // Load/restore a snapshot of all project data.
   loadSnapshot(activeChatId: string): Promise<ProjectSnapshot>;
   restoreSnapshot(snapshot: ProjectSnapshot): Promise<void>;
@@ -66,6 +70,11 @@ export const loadProjectSnapshot = async (
         storage.agents.listAgents().map((agent) => storage.agentInbox.loadEntries(agent.id)),
       )
     ).flat(),
+    agentMemory: (
+      await Promise.all(
+        storage.agents.listAgents().map((agent) => storage.agentMemory.loadEntry(agent.id)),
+      )
+    ).flatMap((entry) => (entry ? [entry] : [])),
   };
 };
 
@@ -94,6 +103,11 @@ export const restoreProjectSnapshot = async (
   }
   for (const entry of snapshot.agentInbox) {
     await storage.agentInbox.saveEntry(structuredClone(entry));
+  }
+
+  await storage.agentMemory.clearEntries();
+  for (const entry of snapshot.agentMemory) {
+    await storage.agentMemory.saveEntry(structuredClone(entry));
   }
 };
 
