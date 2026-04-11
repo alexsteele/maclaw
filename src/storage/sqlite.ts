@@ -1,14 +1,21 @@
 // SQLite-backed project stores.
-// This starts with agents and inbox to prove the storage seam cleanly.
+// Note that chat transcripts are still stored in .jsonl.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { rm, writeFile } from "node:fs/promises";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
+import { defaultSqliteFile, type ProjectConfig } from "../config.js";
 import type { AgentStore } from "../agent.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
 import { appendJsonLine, ensureDir, readJsonLines } from "../fs-utils.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
+import {
+  loadProjectSnapshot,
+  restoreProjectSnapshot,
+  type ProjectSnapshot,
+  type ProjectStorage,
+} from "./index.js";
 import type {
   AgentRecord,
   ChatRecord,
@@ -527,3 +534,89 @@ export class SqliteChatStore implements ChatStore {
     return staleRows.length;
   }
 }
+
+/**
+ * SQLite-backed project storage with project-level snapshot and reset helpers.
+ *
+ * SQLite owns the metadata tables while chat transcripts still live on disk, so
+ * the project storage wrapper coordinates both halves together.
+ */
+export class SqliteProjectStorage implements ProjectStorage {
+  readonly chats: ChatStore;
+  readonly tasks: TaskStore;
+  readonly agents: AgentStore;
+  readonly inbox: InboxStore;
+  private readonly sqliteFile: string;
+  private readonly chatsDir: string;
+  private readonly chatOptions: ChatLoadOptions;
+
+  constructor(
+    chats: ChatStore,
+    tasks: TaskStore,
+    agents: AgentStore,
+    inbox: InboxStore,
+    sqliteFile: string,
+    chatsDir: string,
+    chatOptions: ChatLoadOptions,
+  ) {
+    this.chats = chats;
+    this.tasks = tasks;
+    this.agents = agents;
+    this.inbox = inbox;
+    this.sqliteFile = sqliteFile;
+    this.chatsDir = chatsDir;
+    this.chatOptions = chatOptions;
+  }
+
+  async loadSnapshot(activeChatId: string): Promise<ProjectSnapshot> {
+    return loadProjectSnapshot(this, activeChatId, this.chatOptions);
+  }
+
+  async restoreSnapshot(snapshot: ProjectSnapshot): Promise<void> {
+    await restoreProjectSnapshot(this, snapshot);
+  }
+
+  async clear(): Promise<void> {
+    const database = openDatabase(this.sqliteFile);
+    database.exec(`
+      delete from chats;
+      delete from agents;
+      delete from inbox;
+      delete from tasks;
+      delete from task_runs;
+    `);
+    database.close();
+
+    await ensureDir(this.chatsDir);
+    const entries = await readdir(this.chatsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
+        continue;
+      }
+
+      await rm(path.join(this.chatsDir, entry.name), { force: true });
+    }
+  }
+
+  // SQLite wipe removes the database file after clearing tables and transcripts.
+  async wipe(): Promise<void> {
+    await this.clear();
+    await rm(this.sqliteFile, { force: true });
+  }
+}
+
+export const createSqliteProjectStorage = (config: ProjectConfig): ProjectStorage => {
+  const sqliteFile = defaultSqliteFile(config.projectFolder);
+  return new SqliteProjectStorage(
+    new SqliteChatStore(sqliteFile, config.chatsDir),
+    new SqliteTaskStore(sqliteFile),
+    new SqliteAgentStore(sqliteFile),
+    new SqliteInboxStore(sqliteFile),
+    sqliteFile,
+    config.chatsDir,
+    {
+      retentionDays: config.retentionDays,
+      compressionMode: config.compressionMode,
+    },
+  );
+};

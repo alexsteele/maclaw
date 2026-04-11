@@ -3,6 +3,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
+import {
+  defaultAgentsFile,
+  defaultInboxFile,
+  defaultTaskRunsFile,
+  defaultTasksFile,
+  type ProjectConfig,
+} from "../config.js";
 import type { AgentStore } from "../agent.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
 import {
@@ -14,6 +21,12 @@ import {
 } from "../fs-utils.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
+import {
+  loadProjectSnapshot,
+  restoreProjectSnapshot,
+  type ProjectSnapshot,
+  type ProjectStorage,
+} from "./index.js";
 import type {
   AgentRecord,
   ChatRecord,
@@ -285,3 +298,102 @@ export class JsonFileChatStore implements ChatStore {
     return removed;
   }
 }
+
+/**
+ * JSON-backed project storage with project-level snapshot and reset helpers.
+ *
+ * This keeps migration behavior close to the backend that owns the underlying
+ * file layout.
+ */
+export class JsonProjectStorage implements ProjectStorage {
+  readonly chats: ChatStore;
+  readonly tasks: TaskStore;
+  readonly agents: AgentStore;
+  readonly inbox: InboxStore;
+  private readonly chatsDir: string;
+  private readonly tasksFile: string;
+  private readonly taskRunsFile: string;
+  private readonly agentsFile: string;
+  private readonly inboxFile: string;
+  private readonly chatOptions: ChatLoadOptions;
+
+  constructor(
+    chats: ChatStore,
+    tasks: TaskStore,
+    agents: AgentStore,
+    inbox: InboxStore,
+    chatsDir: string,
+    tasksFile: string,
+    taskRunsFile: string,
+    agentsFile: string,
+    inboxFile: string,
+    chatOptions: ChatLoadOptions,
+  ) {
+    this.chats = chats;
+    this.tasks = tasks;
+    this.agents = agents;
+    this.inbox = inbox;
+    this.chatsDir = chatsDir;
+    this.tasksFile = tasksFile;
+    this.taskRunsFile = taskRunsFile;
+    this.agentsFile = agentsFile;
+    this.inboxFile = inboxFile;
+    this.chatOptions = chatOptions;
+  }
+
+  async loadSnapshot(activeChatId: string): Promise<ProjectSnapshot> {
+    return loadProjectSnapshot(this, activeChatId, this.chatOptions);
+  }
+
+  async restoreSnapshot(snapshot: ProjectSnapshot): Promise<void> {
+    await restoreProjectSnapshot(this, snapshot);
+  }
+
+  async clear(): Promise<void> {
+    await rm(this.agentsFile, { force: true });
+    await rm(this.inboxFile, { force: true });
+    await rm(this.tasksFile, { force: true });
+    await rm(this.taskRunsFile, { force: true });
+
+    if (!existsSync(this.chatsDir)) {
+      return;
+    }
+
+    const entries = await readdir(this.chatsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        !entry.isFile() ||
+        (!entry.name.endsWith(".json") && !entry.name.endsWith(".jsonl"))
+      ) {
+        continue;
+      }
+
+      await rm(path.join(this.chatsDir, entry.name), { force: true });
+    }
+  }
+
+  // JSON storage clears by deleting the backend files in place.
+  async wipe(): Promise<void> {
+    await this.clear();
+  }
+}
+
+export const createJsonProjectStorage = (config: ProjectConfig): ProjectStorage =>
+  new JsonProjectStorage(
+    new JsonFileChatStore(config.chatsDir),
+    new JsonFileTaskStore(
+      defaultTasksFile(config.projectFolder),
+      defaultTaskRunsFile(config.projectFolder),
+    ),
+    new JsonFileAgentStore(defaultAgentsFile(config.projectFolder)),
+    new JsonFileInboxStore(defaultInboxFile(config.projectFolder)),
+    config.chatsDir,
+    defaultTasksFile(config.projectFolder),
+    defaultTaskRunsFile(config.projectFolder),
+    defaultAgentsFile(config.projectFolder),
+    defaultInboxFile(config.projectFolder),
+    {
+      retentionDays: config.retentionDays,
+      compressionMode: config.compressionMode,
+    },
+  );

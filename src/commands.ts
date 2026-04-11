@@ -1,5 +1,12 @@
+/**
+ * Shared slash-command parsing and dispatch for maclaw.
+ *
+ * This module defines the common command surface used by the REPL, CLI wrappers,
+ * and portal/server chat entrypoints so command behavior stays consistent across
+ * interfaces. See `docs/design.md` for the higher-level message flow.
+ */
 import { Harness, type AgentCreateOptions } from "./harness.js";
-import { initProjectConfig, loadConfig, parseConfiguredModel } from "./config.js";
+import { loadConfig, parseConfiguredModel } from "./config.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -974,8 +981,13 @@ const handleConfigCommand: CommandHandler = async (harness, input) => {
       return parsedValue;
     }
 
-    await initProjectConfig(harness.config.projectFolder, parsedValue);
-    const config = await harness.reloadConfig();
+    let config;
+    try {
+      config = await harness.updateProjectConfig(parsedValue);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+
     return `${key} = ${String(config[key as keyof typeof config])}`;
   }
 

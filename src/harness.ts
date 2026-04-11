@@ -11,45 +11,27 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import {
   defaultProjectDataDir,
-  defaultAgentsFile,
-  defaultInboxFile,
-  defaultSqliteFile,
-  defaultTaskRunsFile,
-  defaultTasksFile,
   initProjectConfig,
   loadConfig,
   type ProjectConfig,
 } from "./config.js";
-import { Agent, MemoryAgentStore, type AgentStore } from "./agent.js";
+import { Agent, type AgentStore } from "./agent.js";
 import { ensureDir } from "./fs-utils.js";
 import {
   createInboxEntry,
-  MemoryInboxStore,
   type InboxStore,
 } from "./inbox.js";
 import { NoopRouter, type NotificationRouter } from "./router.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
-import {
-  SqliteAgentStore,
-  SqliteChatStore,
-  SqliteInboxStore,
-  SqliteTaskStore,
-} from "./storage/sqlite.js";
-import {
-  JsonFileAgentStore,
-  JsonFileChatStore,
-  JsonFileInboxStore,
-  JsonFileTaskStore,
-} from "./storage/json.js";
+import { createProjectStorage, type ProjectStorage } from "./storage/index.js";
 import { createTools } from "./tools/index.js";
 import type { MaclawToolContext } from "./tools/maclaw.js";
-import { MemoryTaskStore, TaskScheduler } from "./scheduler.js";
+import { TaskScheduler } from "./scheduler.js";
 import {
   ChatRuntime,
   type ChatReply,
-  MemoryChatStore,
   type ChatLoadOptions,
   type ChatStore,
 } from "./chats.js";
@@ -162,51 +144,6 @@ const isOriginTarget = (value: NotificationTarget): value is Origin => {
   return typeof value === "object" && "userId" in value;
 };
 
-const createChatStore = (config: ProjectConfig): ChatStore => {
-  if (config.storage === "sqlite") {
-    return new SqliteChatStore(defaultSqliteFile(config.projectFolder), config.chatsDir);
-  }
-
-  return config.storage === "json"
-    ? new JsonFileChatStore(config.chatsDir)
-    : new MemoryChatStore();
-};
-
-const createScheduler = (config: ProjectConfig): TaskScheduler => {
-  if (config.storage === "sqlite") {
-    return new TaskScheduler(new SqliteTaskStore(defaultSqliteFile(config.projectFolder)));
-  }
-
-  return config.storage === "json"
-    ? new TaskScheduler(
-        new JsonFileTaskStore(
-          defaultTasksFile(config.projectFolder),
-          defaultTaskRunsFile(config.projectFolder),
-        ),
-      )
-    : new TaskScheduler(new MemoryTaskStore());
-};
-
-const createAgentStore = (config: ProjectConfig): AgentStore => {
-  if (config.storage === "sqlite") {
-    return new SqliteAgentStore(defaultSqliteFile(config.projectFolder));
-  }
-
-  return config.storage === "json"
-    ? new JsonFileAgentStore(defaultAgentsFile(config.projectFolder))
-    : new MemoryAgentStore();
-};
-
-const createInboxStore = (config: ProjectConfig): InboxStore => {
-  if (config.storage === "sqlite") {
-    return new SqliteInboxStore(defaultSqliteFile(config.projectFolder));
-  }
-
-  return config.storage === "json"
-    ? new JsonFileInboxStore(defaultInboxFile(config.projectFolder))
-    : new MemoryInboxStore();
-};
-
 const createFilteredTools = (config: ProjectConfig, harness: Harness): ToolDefinition[] =>
   filterTools(createTools(config, createToolContext(harness)), config.tools);
 
@@ -301,10 +238,14 @@ const resolveOutputPath = (projectFolder: string, chatId: string, outputPath?: s
     : path.resolve(projectFolder, expandedPath);
 };
 
+const hasLiveAgentStatus = (status: AgentRecord["status"]): boolean =>
+  status === "pending" || status === "running" || status === "paused";
+
 // Harness orchestrates user interactions with a project.
 // A default harness has no project. initProject() creates one.
 export class Harness {
   private _config: ProjectConfig;
+  private _storage: ProjectStorage;
   private _allowedNotifications: Set<NotificationKind>;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
@@ -319,13 +260,14 @@ export class Harness {
 
   constructor(config: ProjectConfig, options: HarnessOptions = {}) {
     this._config = config;
+    this._storage = createProjectStorage(config);
     this._allowedNotifications = expandNotificationPolicy(config.notifications);
-    this._scheduler = createScheduler(config);
-    this._chatStore = createChatStore(config);
+    this._scheduler = new TaskScheduler(this._storage.tasks);
+    this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(config, this);
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
-    this._agentStore = createAgentStore(config);
-    this._inboxStore = createInboxStore(config);
+    this._agentStore = this._storage.agents;
+    this._inboxStore = this._storage.inbox;
     this._taskListener = options.onTaskMessage;
     this._router = options.router ?? new NoopRouter();
     this._origin = options.origin;
@@ -374,11 +316,12 @@ export class Harness {
       ...loadConfig(this._config.projectFolder),
       chatId: this.getCurrentChatId(),
     };
-    const nextChatStore = createChatStore(nextConfig);
-    const nextScheduler = createScheduler(nextConfig);
+    const nextStorage = createProjectStorage(nextConfig);
+    const nextChatStore = nextStorage.chats;
+    const nextScheduler = new TaskScheduler(nextStorage.tasks);
     const nextTools = createFilteredTools(nextConfig, this);
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
-    const nextAgentStore = createAgentStore(nextConfig);
+    const nextAgentStore = nextStorage.agents;
 
     const activeChat = await this.loadCurrentChat();
     await nextChatStore.saveChat(activeChat);
@@ -397,13 +340,14 @@ export class Harness {
     }
 
     this._config = nextConfig;
+    this._storage = nextStorage;
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
     this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
     this._tools = nextTools;
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
-    this._inboxStore = createInboxStore(nextConfig);
+    this._inboxStore = nextStorage.inbox;
 
     if (this._taskListener) {
       await this.start();
@@ -418,26 +362,32 @@ export class Harness {
     }
 
     this.teardown();
+    await this._storage.wipe();
     await rm(defaultProjectDataDir(this._config.projectFolder), {
       recursive: true,
       force: true,
     });
 
     const nextConfig = loadConfig(this._config.projectFolder);
+    await this.applyConfig(nextConfig);
+
+    return true;
+  }
+
+  private async applyConfig(nextConfig: ProjectConfig): Promise<void> {
     this._config = nextConfig;
+    this._storage = createProjectStorage(nextConfig);
     this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
-    this._scheduler = createScheduler(nextConfig);
-    this._chatStore = createChatStore(nextConfig);
+    this._scheduler = new TaskScheduler(this._storage.tasks);
+    this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(nextConfig, this);
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
-    this._agentStore = createAgentStore(nextConfig);
-    this._inboxStore = createInboxStore(nextConfig);
+    this._agentStore = this._storage.agents;
+    this._inboxStore = this._storage.inbox;
 
     if (this._taskListener) {
       await this.start();
     }
-
-    return true;
   }
 
   async reloadConfig(): Promise<ProjectConfig> {
@@ -447,23 +397,59 @@ export class Harness {
     };
 
     this._scheduler.stop();
-
-    this._config = nextConfig;
-    this._allowedNotifications = expandNotificationPolicy(nextConfig.notifications);
-    this._scheduler = createScheduler(nextConfig);
-    this._chatStore = createChatStore(nextConfig);
-    this._tools = createFilteredTools(nextConfig, this);
-    this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
-    this._agentStore = createAgentStore(nextConfig);
-    this._inboxStore = createInboxStore(nextConfig);
-
-    if (this._taskListener) {
-      await this.start();
-    }
+    await this.applyConfig(nextConfig);
 
     return this._config;
   }
 
+  async updateProjectConfig(configPatch: Partial<ProjectConfig>): Promise<ProjectConfig> {
+    const nextStorage = configPatch.storage;
+    if (
+      !nextStorage ||
+      nextStorage === this._config.storage ||
+      !this.isProjectInitialized()
+    ) {
+      await initProjectConfig(this._config.projectFolder, configPatch);
+      return this.reloadConfig();
+    }
+
+    if (this.listAgents().some((agent) => hasLiveAgentStatus(agent.status))) {
+      throw new Error("Cannot change storage while agents are running.");
+    }
+
+    const snapshot = await this._storage.loadSnapshot(this.getCurrentChatId());
+
+    await initProjectConfig(this._config.projectFolder, configPatch);
+    const config = await this.reloadConfig();
+    await this._storage.clear();
+    await this._storage.restoreSnapshot(snapshot);
+    return config;
+  }
+
+  async listSkills(): Promise<Skill[]> {
+    return loadSkills(this._config.skillsDir);
+  }
+
+  // Project tools and metadata
+  listTools() {
+    return this._tools;
+  }
+
+  listChannels(): string[] {
+    return this._router.listChannels(this._origin);
+  }
+
+  async getProjectUsage(): Promise<UsageSummary> {
+    const summary = createUsageSummary();
+    const chats = await this.listChats();
+    for (const chat of chats) {
+      addUsage(summary, await this.loadChat(chat.id));
+    }
+
+    return summary;
+  }
+
+  // Chats
   getCurrentChatId(): string {
     return this._chatRuntime.getCurrentChatId();
   }
@@ -479,24 +465,20 @@ export class Harness {
     };
   }
 
-  async pruneExpiredChats(): Promise<number> {
-    return this._chatStore.pruneExpiredChats(this._config.retentionDays);
+  async loadCurrentChat(): Promise<ChatRecord> {
+    return this._chatRuntime.loadActiveChat();
+  }
+
+  async loadChat(chatId: string): Promise<ChatRecord> {
+    return this._chatStore.loadChat(chatId, this.getChatOptions());
   }
 
   async listChats(): Promise<ChatSummary[]> {
     return this._chatRuntime.listChats();
   }
 
-  async listSkills(): Promise<Skill[]> {
-    return loadSkills(this._config.skillsDir);
-  }
-
-  listTools() {
-    return this._tools;
-  }
-
-  listChannels(): string[] {
-    return this._router.listChannels(this._origin);
+  async pruneExpiredChats(): Promise<number> {
+    return this._chatStore.pruneExpiredChats(this._config.retentionDays);
   }
 
   async readChat(chatId?: string, limit = this.config.contextMessages): Promise<ChatRecord> {
@@ -509,6 +491,63 @@ export class Harness {
 
   async switchChat(chatId: string): Promise<ChatRecord> {
     return this._chatRuntime.switchChat(chatId);
+  }
+
+  async createChat(requestedId?: string): Promise<ForkChatResult> {
+    const chatId = await this.buildNewChatId(requestedId);
+    if (!chatId) {
+      return { error: "Could not create a valid chat id." };
+    }
+
+    return this._chatRuntime.createChat(chatId);
+  }
+
+  async forkChat(requestedId?: string): Promise<ForkChatResult> {
+    const newChatId = await this.buildForkChatId(requestedId);
+    if (!newChatId) {
+      return { error: "Could not create a valid chat id for the fork." };
+    }
+
+    const existingChats = await this.listChats();
+    if (existingChats.some((chat) => chat.id === newChatId)) {
+      return { error: `chat already exists: ${newChatId}` };
+    }
+
+    return { chat: await this._chatRuntime.forkChat(newChatId) };
+  }
+
+  async forkChatFrom(sourceChatId: string, requestedId?: string): Promise<ForkChatResult> {
+    const newChatId = await this.buildForkChatId(requestedId);
+    if (!newChatId) {
+      return { error: "Could not create a valid chat id for the fork." };
+    }
+
+    return this._chatRuntime.forkChatFrom(sourceChatId, newChatId);
+  }
+
+  async getCurrentChatTranscript(): Promise<string> {
+    return this.getChatTranscript();
+  }
+
+  async getChatTranscript(chatId?: string): Promise<string> {
+    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
+    return chat.messages.length === 0
+      ? "No history yet."
+      : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+  }
+
+  async saveChatTranscript(outputPath?: string, chatId?: string): Promise<string> {
+    const requestedChatId = chatId ?? this.getCurrentChatId();
+    const resolvedPath = resolveOutputPath(this.config.projectFolder, requestedChatId, outputPath);
+    const transcript = await this.getChatTranscript(requestedChatId);
+    await ensureDir(path.dirname(resolvedPath));
+    await writeFile(resolvedPath, `${transcript}\n`, "utf8");
+    return resolvedPath;
+  }
+
+  async getChatUsage(chatId?: string): Promise<UsageSummary> {
+    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
+    return addUsage(createUsageSummary(), chat);
   }
 
   private parseRequestedChatId(value: string): string | null {
@@ -562,81 +601,7 @@ export class Harness {
     return null;
   }
 
-  async createChat(requestedId?: string): Promise<ForkChatResult> {
-    const chatId = await this.buildNewChatId(requestedId);
-    if (!chatId) {
-      return { error: "Could not create a valid chat id." };
-    }
-
-    return this._chatRuntime.createChat(chatId);
-  }
-
-  async forkChat(requestedId?: string): Promise<ForkChatResult> {
-    const newChatId = await this.buildForkChatId(requestedId);
-    if (!newChatId) {
-      return { error: "Could not create a valid chat id for the fork." };
-    }
-
-    const existingChats = await this.listChats();
-    if (existingChats.some((chat) => chat.id === newChatId)) {
-      return { error: `chat already exists: ${newChatId}` };
-    }
-
-    return { chat: await this._chatRuntime.forkChat(newChatId) };
-  }
-
-  async forkChatFrom(sourceChatId: string, requestedId?: string): Promise<ForkChatResult> {
-    const newChatId = await this.buildForkChatId(requestedId);
-    if (!newChatId) {
-      return { error: "Could not create a valid chat id for the fork." };
-    }
-
-    return this._chatRuntime.forkChatFrom(sourceChatId, newChatId);
-  }
-
-  async loadCurrentChat(): Promise<ChatRecord> {
-    return this._chatRuntime.loadActiveChat();
-  }
-
-  async getCurrentChatTranscript(): Promise<string> {
-    return this.getChatTranscript();
-  }
-
-  async getChatTranscript(chatId?: string): Promise<string> {
-    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
-    return chat.messages.length === 0
-      ? "No history yet."
-      : chat.messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
-  }
-
-  async saveChatTranscript(outputPath?: string, chatId?: string): Promise<string> {
-    const requestedChatId = chatId ?? this.getCurrentChatId();
-    const resolvedPath = resolveOutputPath(this.config.projectFolder, requestedChatId, outputPath);
-    const transcript = await this.getChatTranscript(requestedChatId);
-    await ensureDir(path.dirname(resolvedPath));
-    await writeFile(resolvedPath, `${transcript}\n`, "utf8");
-    return resolvedPath;
-  }
-
-  async getChatUsage(chatId?: string): Promise<UsageSummary> {
-    const chat = chatId ? await this.loadChat(chatId) : await this.loadCurrentChat();
-    return addUsage(createUsageSummary(), chat);
-  }
-
-  async getProjectUsage(): Promise<UsageSummary> {
-    const summary = createUsageSummary();
-    const chats = await this.listChats();
-    for (const chat of chats) {
-      addUsage(summary, await this.loadChat(chat.id));
-    }
-
-    return summary;
-  }
-
-  async loadChat(chatId: string): Promise<ChatRecord> {
-    return this._chatStore.loadChat(chatId, this.getChatOptions());
-  }
-
+  // Tasks
   async listTasks(chatId?: string): Promise<ScheduledTask[]> {
     return this._scheduler.listTasks(chatId);
   }
@@ -673,143 +638,12 @@ export class Harness {
     });
   }
 
-  private async executeScheduledTask(
-    onTaskMessage: ((task: ScheduledTask, message: Message) => void | Promise<void>) | undefined,
-    task: ScheduledTask,
-  ): Promise<void> {
-    try {
-      const message = await this.handleScheduledTask(
-        task.chatId,
-        task.prompt,
-        task.origin ? { origin: task.origin } : undefined,
-      );
-      await onTaskMessage?.(task, message);
-      await this.emitTaskNotification(task, "taskCompleted", `Task ${task.title} completed.`);
-    } catch (error) {
-      await this.emitTaskNotification(
-        task,
-        "taskFailed",
-        error instanceof Error
-          ? `Task ${task.title} failed: ${error.message}`
-          : `Task ${task.title} failed: ${String(error)}`,
-      );
-
-      throw error;
-    }
-  }
-
   async deleteTask(taskId: string, chatId?: string): Promise<boolean> {
     return this._scheduler.deleteTask(taskId, chatId);
   }
 
   async deleteTaskForCurrentChat(taskId: string): Promise<boolean> {
     return this.deleteTask(taskId, this.getCurrentChatId());
-  }
-
-  private async emitNotification(notification: HarnessNotification): Promise<void> {
-    if (!this._allowedNotifications.has(notification.kind)) {
-      return;
-    }
-
-    const result = await this._router.send({
-      target: notification.origin,
-      origin: notification.origin,
-      kind: notification.kind,
-      text: notification.text,
-    });
-    if (result.delivered && result.target) {
-      await this.saveNotificationToInbox({
-        ...notification,
-        origin: result.target,
-      });
-    }
-  }
-
-  private async saveNotificationToInbox(
-    notification: HarnessNotification,
-  ): Promise<void> {
-    await this._inboxStore.saveEntry(
-      createInboxEntry({
-        kind: notification.kind,
-        text: notification.text,
-        origin: notification.origin,
-        sourceType: notification.sourceType,
-        sourceId: notification.sourceId,
-        sourceName: notification.sourceName,
-        sourceChatId: notification.sourceChatId,
-      }),
-    );
-  }
-
-  private resolveNotificationTarget(
-    origin: Origin | undefined,
-    notifyTarget: NotificationTarget | undefined,
-  ): Origin | undefined {
-    if (!notifyTarget || notifyTarget === "origin") {
-      return origin;
-    }
-
-    if (notifyTarget === "inbox") {
-      return localInboxOrigin;
-    }
-
-    if (isOriginTarget(notifyTarget)) {
-      return notifyTarget;
-    }
-
-    return origin?.channel === notifyTarget.channel ? origin : undefined;
-  }
-
-  private async emitTaskNotification(
-    task: ScheduledTask,
-    kind: NotificationKind,
-    text: string,
-  ): Promise<void> {
-    const allowed = expandNotificationPolicy(task.notify ?? this._config.notifications);
-    if (!allowed.has(kind)) {
-      return;
-    }
-
-    const target = this.resolveNotificationTarget(task.origin, task.notifyTarget);
-    if (!target) {
-      return;
-    }
-
-    await this.emitNotification({
-      kind,
-      origin: target,
-      text,
-      sourceType: "task",
-      sourceId: task.id,
-      sourceName: task.title,
-      sourceChatId: task.chatId,
-    });
-  }
-
-  private emitAgentNotification(
-    agent: AgentRecord,
-    kind: NotificationKind,
-    text: string,
-  ): void {
-    const allowed = expandNotificationPolicy(agent.notify ?? this._config.notifications);
-    if (!allowed.has(kind)) {
-      return;
-    }
-
-    const target = this.resolveNotificationTarget(agent.origin, agent.notifyTarget);
-    if (!target) {
-      return;
-    }
-
-    void this.emitNotification({
-      kind,
-      origin: target,
-      text,
-      sourceType: "agent",
-      sourceId: agent.id,
-      sourceName: agent.name,
-      sourceChatId: agent.chatId,
-    });
   }
 
   async deleteChat(chatId: string): Promise<boolean> {
@@ -860,27 +694,73 @@ export class Harness {
     return this._chatRuntime.handleScheduledTask(chatId, prompt, context);
   }
 
-  private createAgentId(): string {
-    const existingIds = new Set(this._agentStore.listAgents().map((agent) => agent.id));
+  async runDueTasks(
+    onTask: (task: ScheduledTask) => Promise<void>,
+  ): Promise<void> {
+    return this._scheduler.runDueTasks(async (task) => {
+      await this.executeScheduledTask(undefined, task);
+      await onTask(task);
+    });
+  }
 
-    for (let attempt = 0; attempt < 10_000; attempt += 1) {
-      const candidate = `agent_${createShortAgentId()}`;
-      if (!existingIds.has(candidate)) {
-        return candidate;
-      }
+  private async executeScheduledTask(
+    onTaskMessage: ((task: ScheduledTask, message: Message) => void | Promise<void>) | undefined,
+    task: ScheduledTask,
+  ): Promise<void> {
+    try {
+      const message = await this.handleScheduledTask(
+        task.chatId,
+        task.prompt,
+        task.origin ? { origin: task.origin } : undefined,
+      );
+      await onTaskMessage?.(task, message);
+      await this.emitTaskNotification(task, "taskCompleted", `Task ${task.title} completed.`);
+    } catch (error) {
+      await this.emitTaskNotification(
+        task,
+        "taskFailed",
+        error instanceof Error
+          ? `Task ${task.title} failed: ${error.message}`
+          : `Task ${task.title} failed: ${String(error)}`,
+      );
+
+      throw error;
+    }
+  }
+
+  private async emitTaskNotification(
+    task: ScheduledTask,
+    kind: NotificationKind,
+    text: string,
+  ): Promise<void> {
+    const allowed = expandNotificationPolicy(task.notify ?? this._config.notifications);
+    if (!allowed.has(kind)) {
+      return;
     }
 
-    throw new Error("Could not create a unique agent id.");
+    const target = this.resolveNotificationTarget(task.origin, task.notifyTarget);
+    if (!target) {
+      return;
+    }
+
+    await this.emitNotification({
+      kind,
+      origin: target,
+      text,
+      sourceType: "task",
+      sourceId: task.id,
+      sourceName: task.title,
+      sourceChatId: task.chatId,
+    });
   }
 
-  private isLiveAgentStatus(status: AgentRecord["status"]): boolean {
-    return status === "pending" || status === "running" || status === "paused";
+  // Agents
+  listAgents(): AgentRecord[] {
+    return this._agentStore.listAgents();
   }
 
-  private findLiveAgentByName(name: string): AgentRecord | undefined {
-    return this._agentStore
-      .listAgents()
-      .find((agent) => agent.name === name && this.isLiveAgentStatus(agent.status));
+  getAgent(agentId: string): AgentRecord | undefined {
+    return this._agentStore.getAgent(agentId);
   }
 
   findAgent(agentRef: string): AgentRecord | undefined {
@@ -889,56 +769,6 @@ export class Harness {
         .listAgents()
         .find((agent) => agent.name === agentRef) ?? this._agentStore.getAgent(agentRef)
     );
-  }
-
-  async attachAgentChat(agentRef: string): Promise<AgentChatResult> {
-    const agent = this.findAgent(agentRef);
-    if (!agent) {
-      return { error: `agent not found: ${agentRef}` };
-    }
-
-    this.pauseAgent(agentRef);
-    await this.switchChat(agent.chatId);
-    return { agent: this.findAgent(agent.id) ?? agent, chatId: agent.chatId };
-  }
-
-  async returnAgentChat(agentRef: string): Promise<AgentChatResult> {
-    const agent = this.findAgent(agentRef);
-    if (!agent) {
-      return { error: `agent not found: ${agentRef}` };
-    }
-
-    const returnChatId = this.getPreviousChatId();
-    if (!returnChatId) {
-      return { error: `no return chat recorded for agent: ${agent.name}` };
-    }
-
-    await this.switchChat(returnChatId);
-    const resumed = this.resumeAgent(agentRef);
-    return { agent: resumed ?? agent, chatId: returnChatId };
-  }
-
-  private handleAgentStopped(agentId: string): void {
-    this._runningAgents.delete(agentId);
-    const latest = this._agentStore.getAgent(agentId);
-    if (!latest) {
-      return;
-    }
-
-    if (latest.status === "completed") {
-      this.emitAgentNotification(latest, "agentCompleted", `Agent ${latest.name} completed.`);
-      return;
-    }
-
-    if (latest.status === "failed") {
-      this.emitAgentNotification(
-        latest,
-        "agentFailed",
-        latest.lastError
-          ? `Agent ${latest.name} failed: ${latest.lastError}`
-          : `Agent ${latest.name} failed.`,
-      );
-    }
   }
 
   async createAgent(input: AgentCreateOptions): Promise<AgentCreateResult> {
@@ -978,10 +808,105 @@ export class Harness {
     return { agent: agent.start() };
   }
 
-  listAgents(): AgentRecord[] {
-    return this._agentStore.listAgents();
+  async attachAgentChat(agentRef: string): Promise<AgentChatResult> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return { error: `agent not found: ${agentRef}` };
+    }
+
+    this.pauseAgent(agentRef);
+    await this.switchChat(agent.chatId);
+    return { agent: this.findAgent(agent.id) ?? agent, chatId: agent.chatId };
   }
 
+  async returnAgentChat(agentRef: string): Promise<AgentChatResult> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return { error: `agent not found: ${agentRef}` };
+    }
+
+    const returnChatId = this.getPreviousChatId();
+    if (!returnChatId) {
+      return { error: `no return chat recorded for agent: ${agent.name}` };
+    }
+
+    await this.switchChat(returnChatId);
+    const resumed = this.resumeAgent(agentRef);
+    return { agent: resumed ?? agent, chatId: returnChatId };
+  }
+
+  cancelAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.cancel() : undefined;
+  }
+
+  pauseAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.pause() : undefined;
+  }
+
+  resumeAgent(agentRef: string): AgentRecord | undefined {
+    const agent = this.findAgent(agentRef);
+    return agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
+  }
+
+  async steerAgent(agentRef: string, prompt: string): Promise<AgentRecord | undefined> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return undefined;
+    }
+
+    const resolvedPrompt = await resolvePromptText(this.config.projectFolder, prompt);
+    return this._runningAgents.get(agent.id)?.steer(resolvedPrompt);
+  }
+
+  private createAgentId(): string {
+    const existingIds = new Set(this._agentStore.listAgents().map((agent) => agent.id));
+
+    for (let attempt = 0; attempt < 10_000; attempt += 1) {
+      const candidate = `agent_${createShortAgentId()}`;
+      if (!existingIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new Error("Could not create a unique agent id.");
+  }
+
+  private isLiveAgentStatus(status: AgentRecord["status"]): boolean {
+    return hasLiveAgentStatus(status);
+  }
+
+  private findLiveAgentByName(name: string): AgentRecord | undefined {
+    return this._agentStore
+      .listAgents()
+      .find((agent) => agent.name === name && this.isLiveAgentStatus(agent.status));
+  }
+
+  private handleAgentStopped(agentId: string): void {
+    this._runningAgents.delete(agentId);
+    const latest = this._agentStore.getAgent(agentId);
+    if (!latest) {
+      return;
+    }
+
+    if (latest.status === "completed") {
+      this.emitAgentNotification(latest, "agentCompleted", `Agent ${latest.name} completed.`);
+      return;
+    }
+
+    if (latest.status === "failed") {
+      this.emitAgentNotification(
+        latest,
+        "agentFailed",
+        latest.lastError
+          ? `Agent ${latest.name} failed: ${latest.lastError}`
+          : `Agent ${latest.name} failed.`,
+      );
+    }
+  }
+
+  // Notifications
   async listInbox(): Promise<InboxEntry[]> {
     return this._inboxStore.loadEntries();
   }
@@ -1038,41 +963,83 @@ export class Harness {
     };
   }
 
-  getAgent(agentId: string): AgentRecord | undefined {
-    return this._agentStore.getAgent(agentId);
-  }
-
-  cancelAgent(agentRef: string): AgentRecord | undefined {
-    const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.cancel() : undefined;
-  }
-
-  pauseAgent(agentRef: string): AgentRecord | undefined {
-    const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.pause() : undefined;
-  }
-
-  resumeAgent(agentRef: string): AgentRecord | undefined {
-    const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
-  }
-
-  async steerAgent(agentRef: string, prompt: string): Promise<AgentRecord | undefined> {
-    const agent = this.findAgent(agentRef);
-    if (!agent) {
-      return undefined;
+  private async emitNotification(notification: HarnessNotification): Promise<void> {
+    if (!this._allowedNotifications.has(notification.kind)) {
+      return;
     }
 
-    const resolvedPrompt = await resolvePromptText(this.config.projectFolder, prompt);
-    return this._runningAgents.get(agent.id)?.steer(resolvedPrompt);
+    const result = await this._router.send({
+      target: notification.origin,
+      origin: notification.origin,
+      kind: notification.kind,
+      text: notification.text,
+    });
+    if (result.delivered && result.target) {
+      await this.saveNotificationToInbox({
+        ...notification,
+        origin: result.target,
+      });
+    }
   }
 
-  async runDueTasks(
-    onTask: (task: ScheduledTask) => Promise<void>,
+  private async saveNotificationToInbox(
+    notification: HarnessNotification,
   ): Promise<void> {
-    return this._scheduler.runDueTasks(async (task) => {
-      await this.executeScheduledTask(undefined, task);
-      await onTask(task);
+    await this._inboxStore.saveEntry(
+      createInboxEntry({
+        kind: notification.kind,
+        text: notification.text,
+        origin: notification.origin,
+        sourceType: notification.sourceType,
+        sourceId: notification.sourceId,
+        sourceName: notification.sourceName,
+        sourceChatId: notification.sourceChatId,
+      }),
+    );
+  }
+
+  private resolveNotificationTarget(
+    origin: Origin | undefined,
+    notifyTarget: NotificationTarget | undefined,
+  ): Origin | undefined {
+    if (!notifyTarget || notifyTarget === "origin") {
+      return origin;
+    }
+
+    if (notifyTarget === "inbox") {
+      return localInboxOrigin;
+    }
+
+    if (isOriginTarget(notifyTarget)) {
+      return notifyTarget;
+    }
+
+    return origin?.channel === notifyTarget.channel ? origin : undefined;
+  }
+
+  private emitAgentNotification(
+    agent: AgentRecord,
+    kind: NotificationKind,
+    text: string,
+  ): void {
+    const allowed = expandNotificationPolicy(agent.notify ?? this._config.notifications);
+    if (!allowed.has(kind)) {
+      return;
+    }
+
+    const target = this.resolveNotificationTarget(agent.origin, agent.notifyTarget);
+    if (!target) {
+      return;
+    }
+
+    void this.emitNotification({
+      kind,
+      origin: target,
+      text,
+      sourceType: "agent",
+      sourceId: agent.id,
+      sourceName: agent.name,
+      sourceChatId: agent.chatId,
     });
   }
 }

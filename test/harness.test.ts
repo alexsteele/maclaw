@@ -470,6 +470,65 @@ test("harness stores tasks in sqlite when configured", async () => {
   }
 });
 
+test("updateProjectConfig migrates project data when storage changes", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-storage-migrate-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "storage-migrate-project",
+      model: "dummy/test-model",
+      storage: "json",
+    });
+
+    await harness.prompt("remember this");
+    const task = await harness.createTask({
+      title: "Follow up",
+      prompt: "Check back later",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    const created = await harness.createAgent({
+      name: "stored-agent",
+      prompt: "Wait here",
+      maxSteps: 50,
+    });
+    assert.ok(created.agent);
+    const cancelled = harness.cancelAgent(created.agent.id);
+    assert.equal(cancelled?.status, "cancelled");
+
+    const notification = await harness.notify({
+      destination: "inbox",
+      text: "Stored inbox message",
+      saveToInbox: true,
+    });
+    assert.equal(notification.saved, true);
+
+    const nextConfig = await harness.updateProjectConfig({ storage: "sqlite" });
+
+    assert.equal(nextConfig.storage, "sqlite");
+    assert.equal(harness.config.storage, "sqlite");
+
+    const transcript = await harness.getCurrentChatTranscript();
+    assert.match(transcript, /remember this/u);
+
+    const tasks = await harness.listCurrentChatTasks();
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0]?.id, task.id);
+
+    const agents = harness.listAgents();
+    assert.equal(agents.length, 1);
+    assert.equal(agents[0]?.name, "stored-agent");
+    assert.equal(agents[0]?.status, "cancelled");
+
+    const inbox = await harness.listInbox();
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.text, "Stored inbox message");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("harness emits a notification when an origin-backed task completes", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-task-notify-"));
 

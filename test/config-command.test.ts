@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import { runConfigCommand } from "../src/cli/config.js";
+import { Harness } from "../src/harness.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 
 useDummyProviderEnv();
@@ -142,6 +143,49 @@ test("runConfigCommand writes command errors to stderr", async () => {
     process.chdir(previousCwd);
     process.exitCode = previousExitCode;
     process.stderr.write = originalStderrWrite;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("runConfigCommand auto-migrates project data when storage changes", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-config-command-migrate-"));
+  const previousCwd = process.cwd();
+  const stdoutWrites: string[] = [];
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "config-migrate-project",
+      model: "dummy/test-model",
+      storage: "json",
+    });
+    await harness.prompt("remember this");
+    await harness.createTask({
+      title: "Follow up",
+      prompt: "Check back later",
+      runAt: "2026-04-05T09:00:00-07:00",
+    });
+
+    process.chdir(projectDir);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutWrites.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      return true;
+    }) as typeof process.stdout.write;
+
+    await runConfigCommand(["set", "storage", "sqlite"]);
+
+    const reloaded = Harness.load(projectDir);
+    const transcript = await reloaded.getCurrentChatTranscript();
+    const tasks = await reloaded.listCurrentChatTasks();
+
+    assert.equal(reloaded.config.storage, "sqlite");
+    assert.match(transcript, /remember this/u);
+    assert.equal(tasks.length, 1);
+    assert.match(stdoutWrites.join(""), /storage = sqlite/);
+  } finally {
+    process.chdir(previousCwd);
+    process.stdout.write = originalStdoutWrite;
     await rm(projectDir, { recursive: true, force: true });
   }
 });
