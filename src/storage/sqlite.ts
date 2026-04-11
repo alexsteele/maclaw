@@ -126,6 +126,11 @@ const parseJsonField = <T>(value: unknown): T | undefined => {
 const stringifyJsonField = (value: unknown): string | null =>
   value === undefined ? null : JSON.stringify(value);
 
+const toText = (value: unknown): string => String(value);
+
+const toNullableText = (value: unknown): string | null =>
+  value === undefined || value === null ? null : String(value);
+
 const openDatabase = (filePath: string): DatabaseSync => {
   mkdirSync(path.dirname(filePath), { recursive: true });
   const database = new DatabaseSync(filePath);
@@ -278,26 +283,26 @@ export class SqliteAgentStore implements AgentStore {
           last_error = excluded.last_error
       `)
       .run(
-        record.id,
-        record.name,
-        record.prompt,
-        record.chatId,
-        record.sourceChatId ?? null,
-        record.createdBy ?? null,
-        record.createdByAgentId ?? null,
+        toText(record.id),
+        toText(record.name),
+        toText(record.prompt),
+        toText(record.chatId),
+        toNullableText(record.sourceChatId),
+        toNullableText(record.createdBy),
+        toNullableText(record.createdByAgentId),
         stringifyJsonField(record.origin),
         stringifyJsonField(record.notify),
         stringifyJsonField(record.notifyTarget),
-        record.status,
+        toText(record.status),
         record.maxSteps ?? null,
         record.timeoutMs,
         record.stepIntervalMs ?? null,
         record.stepCount,
-        record.createdAt,
-        record.startedAt ?? null,
-        record.finishedAt ?? null,
-        record.lastMessage ?? null,
-        record.lastError ?? null,
+        toText(record.createdAt),
+        toNullableText(record.startedAt),
+        toNullableText(record.finishedAt),
+        toNullableText(record.lastMessage),
+        toNullableText(record.lastError),
       );
   }
 
@@ -332,17 +337,17 @@ export class SqliteInboxStore implements InboxStore {
         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
-        entry.id,
-        entry.kind,
-        entry.text,
+        toText(entry.id),
+        toText(entry.kind),
+        toText(entry.text),
         JSON.stringify(entry.origin),
-        entry.sourceType,
-        entry.sourceId,
-        entry.sourceName ?? null,
-        entry.sourceChatId ?? null,
-        entry.createdAt,
-        entry.sentAt ?? null,
-        entry.readAt ?? null,
+        toText(entry.sourceType),
+        toText(entry.sourceId),
+        toNullableText(entry.sourceName),
+        toNullableText(entry.sourceChatId),
+        toText(entry.createdAt),
+        toNullableText(entry.sentAt),
+        toNullableText(entry.readAt),
       );
   }
 
@@ -390,23 +395,23 @@ export class SqliteTaskStore implements TaskStore {
 
       for (const task of tasks) {
         insertTask.run(
-          task.id,
-          task.chatId,
-          task.sourceChatId ?? null,
-          task.createdBy ?? null,
-          task.createdByAgentId ?? null,
+          toText(task.id),
+          toText(task.chatId),
+          toNullableText(task.sourceChatId),
+          toNullableText(task.createdBy),
+          toNullableText(task.createdByAgentId),
           stringifyJsonField(task.origin),
           stringifyJsonField(task.notify),
           stringifyJsonField(task.notifyTarget),
-          task.title,
-          task.prompt,
+          toText(task.title),
+          toText(task.prompt),
           JSON.stringify(task.schedule),
-          task.nextRunAt,
-          task.status,
-          task.createdAt,
-          task.updatedAt,
-          task.lastRunAt ?? null,
-          task.lastError ?? null,
+          toText(task.nextRunAt),
+          toText(task.status),
+          toText(task.createdAt),
+          toText(task.updatedAt),
+          toNullableText(task.lastRunAt),
+          toNullableText(task.lastError),
         );
       }
 
@@ -426,17 +431,17 @@ export class SqliteTaskStore implements TaskStore {
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
-        entry.timestamp,
-        entry.taskId,
-        entry.chatId,
-        entry.title,
-        entry.prompt,
+        toText(entry.timestamp),
+        toText(entry.taskId),
+        toText(entry.chatId),
+        toText(entry.title),
+        toText(entry.prompt),
         JSON.stringify(entry.schedule),
-        entry.scheduledFor,
-        entry.startedAt,
-        entry.finishedAt,
-        entry.status,
-        entry.error ?? null,
+        toText(entry.scheduledFor),
+        toText(entry.startedAt),
+        toText(entry.finishedAt),
+        toText(entry.status),
+        toNullableText(entry.error),
       );
   }
 }
@@ -492,12 +497,12 @@ export class SqliteChatStore implements ChatStore {
         ) values (?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
-        chat.id,
-        chat.createdAt,
-        chat.updatedAt,
+        toText(chat.id),
+        toText(chat.createdAt),
+        toText(chat.updatedAt),
         chat.retentionDays,
-        chat.compressionMode,
-        chat.summary ?? null,
+        toText(chat.compressionMode),
+        toNullableText(chat.summary),
         chat.messages.length,
       );
   }
