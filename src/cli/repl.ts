@@ -8,6 +8,8 @@ import { EmailChannel } from "../channels/email.js";
 import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
 import { Harness, type HarnessOptions } from "../harness.js";
 import { ChannelRouter } from "../router.js";
+import { REPL_DISPLAY_INSTRUCTIONS } from "../prompt.js";
+import { renderMarkdownForTerminal } from "./render.js";
 import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
@@ -252,6 +254,14 @@ class Repl {
     output.write(`${this.formatForDisplay(text)}\n\n`);
   }
 
+  private writeAssistantReply(text: string, result?: ProviderResult): void {
+    const body = renderMarkdownForTerminal(text, this.wrapWidth);
+    const verboseFooter = this.verbose ? this.formatVerboseFooter(result) : null;
+    output.write(
+      `${body}${verboseFooter ? `\n${this.formatForDisplay(verboseFooter)}` : ""}\n\n`,
+    );
+  }
+
   private getPrompt(): string {
     return formatReplPrompt(this.teleport.getConnection());
   }
@@ -425,10 +435,10 @@ class Repl {
     }
 
     const reply = await this.harness.promptDetailed(line, {
+      displayInstructions: REPL_DISPLAY_INSTRUCTIONS,
       origin: replOrigin,
     });
-    const verboseFooter = this.verbose ? this.formatVerboseFooter(reply.providerResult) : null;
-    this.writeLine(verboseFooter ? `${reply.message.content}\n${verboseFooter}` : reply.message.content);
+    this.writeAssistantReply(reply.message.content, reply.providerResult);
     return false;
   }
 

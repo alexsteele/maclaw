@@ -78,6 +78,7 @@ const getLocalTimeZone = (): string => {
 const buildSystemPrompt = async (
   config: ProjectConfig,
   chat: ChatRecord,
+  context?: MessageContext,
 ): Promise<string> => {
   const now = new Date();
   const skills = await loadSkills(config.skillsDir);
@@ -121,6 +122,13 @@ const buildSystemPrompt = async (
           "",
           "Base project prompt:",
           basePrompt,
+        ]
+      : []),
+    ...(context?.displayInstructions
+      ? [
+          "",
+          "Display instructions:",
+          context.displayInstructions,
         ]
       : []),
   ].join("\n");
@@ -452,30 +460,31 @@ export class ChatRuntime {
 
   async prompt(userInput: string, _context?: MessageContext): Promise<Message> {
     const chat = await this.loadActiveChat();
-    const reply = await this.promptChatDetailed(chat.id, userInput);
+    const reply = await this.promptChatDetailed(chat.id, userInput, _context);
     return reply.message;
   }
 
   async promptChat(
     chatId: string,
     userInput: string,
-    _context?: MessageContext,
+    context?: MessageContext,
   ): Promise<Message> {
-    const reply = await this.promptChatDetailed(chatId, userInput);
+    const reply = await this.promptChatDetailed(chatId, userInput, context);
     return reply.message;
   }
 
   async promptDetailed(
     userInput: string,
-    _context?: MessageContext,
+    context?: MessageContext,
   ): Promise<ChatReply> {
     const chat = await this.loadActiveChat();
-    return this.promptChatDetailed(chat.id, userInput);
+    return this.promptChatDetailed(chat.id, userInput, context);
   }
 
   async promptChatDetailed(
     chatId: string,
     userInput: string,
+    context?: MessageContext,
   ): Promise<ChatReply> {
     const chat =
       chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
@@ -486,7 +495,7 @@ export class ChatRuntime {
     let assistantMessage: Message;
     let providerResult: ProviderResult | undefined;
     try {
-      const systemPrompt = await buildSystemPrompt(this.config, chat);
+      const systemPrompt = await buildSystemPrompt(this.config, chat, context);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       const measured = await measureProviderCall(() =>
         this.provider.generate({
@@ -531,7 +540,7 @@ export class ChatRuntime {
   async handleScheduledTask(
     chatId: string,
     prompt: string,
-    _context?: MessageContext,
+    context?: MessageContext,
   ): Promise<Message> {
     const chat = await this.loadChat(chatId);
 
@@ -540,7 +549,7 @@ export class ChatRuntime {
 
     let assistantMessage: Message;
     try {
-      const systemPrompt = await buildSystemPrompt(this.config, chat);
+      const systemPrompt = await buildSystemPrompt(this.config, chat, context);
       const promptChat = buildPromptChat(chat, this.config.contextMessages);
       const measured = await measureProviderCall(() =>
         this.provider.generate({

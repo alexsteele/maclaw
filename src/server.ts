@@ -10,6 +10,7 @@ import { EmailChannel } from "./channels/email.js";
 import { dispatchCommand } from "./commands.js";
 import { Harness } from "./harness.js";
 import { logger } from "./logger.js";
+import { PORTAL_DISPLAY_INSTRUCTIONS } from "./prompt.js";
 import { ChannelRouter } from "./router.js";
 import {
   defaultServerLogFile,
@@ -530,6 +531,7 @@ export class MaclawServer {
     }
 
     await harness.promptChat(chatId, userInput, {
+      displayInstructions: PORTAL_DISPLAY_INSTRUCTIONS,
       origin,
     });
 
@@ -736,6 +738,7 @@ export class MaclawServer {
     }
 
     const reply = await harness.promptChat(message.userId, message.text, {
+      displayInstructions: PORTAL_DISPLAY_INSTRUCTIONS,
       origin,
     });
     return reply.content;

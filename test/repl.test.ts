@@ -11,6 +11,7 @@ import {
   loadReplHarness,
   wrapReplLine,
 } from "../src/cli/repl.js";
+import { renderMarkdownForTerminal } from "../src/cli/render.js";
 
 test("wrapReplLine wraps long lines and preserves indentation", () => {
   const wrapped = wrapReplLine("  alpha beta gamma delta", 12);
@@ -28,6 +29,18 @@ test("formatReplPrompt shows teleport target when attached", () => {
     }),
     "[teleport local-box home:default] > ",
   );
+});
+
+test("renderMarkdownForTerminal preserves markdown structure for lists", () => {
+  const rendered = renderMarkdownForTerminal(
+    "# Title\n\n- alpha\n- beta\n",
+    80,
+  );
+
+  assert.match(rendered, /Title/u);
+  assert.match(rendered, /alpha/u);
+  assert.match(rendered, /beta/u);
+  assert.match(rendered, /\n/u);
 });
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {

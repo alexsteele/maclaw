@@ -237,6 +237,59 @@ test("ChatRuntime mentions agent inbox and memory availability in the system pro
   }
 });
 
+test("ChatRuntime includes interface display instructions in the system prompt", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-display-prompt-"));
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
+
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as { input?: Array<Record<string, unknown>> });
+      return {
+        ok: true,
+        json: async () => ({ output_text: "ok" }),
+      } as Response;
+    }) as typeof fetch;
+
+    const config: ProjectConfig = {
+      name: path.basename(projectDir),
+      createdAt: undefined,
+      model: "openai/gpt-4.1-mini",
+      storage: "json",
+      notifications: "all",
+      defaultTaskTime: "9:00 AM",
+      contextMessages: 2,
+      maxToolIterations: 8,
+      retentionDays: 30,
+      skillsDir: path.join(projectDir, ".maclaw", "skills"),
+      compressionMode: "none",
+      schedulerPollMs: 1_000,
+      projectFolder: projectDir,
+      projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+      chatId: "default",
+      chatsDir: path.join(projectDir, ".maclaw", "chats"),
+      openAiApiKey: "test-key",
+    };
+
+    const chatStore = new JsonFileChatStore(config.chatsDir);
+    const runtime = new ChatRuntime(config, chatStore, createTools(config));
+
+    await runtime.prompt("hello", {
+      displayInstructions: "Format responses for a terminal-first chat interface.",
+    });
+
+    const input = requestBodies[0]?.input ?? [];
+    const systemMessage = input[0] as { content?: Array<{ text?: string }> };
+    const systemPrompt = systemMessage.content?.[0]?.text ?? "";
+
+    assert.match(systemPrompt, /Display instructions:/u);
+    assert.match(systemPrompt, /terminal-first chat interface/u);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("ChatRuntime logs tool calls in the chat transcript without storing tool output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-tools-"));
   const originalFetch = globalThis.fetch;

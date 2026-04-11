@@ -42,6 +42,7 @@ export type Origin = ChannelTarget;
 
 export type MessageContext = {
   origin?: Origin;
+  displayInstructions?: string;
 };
 
 export type NotificationKind =

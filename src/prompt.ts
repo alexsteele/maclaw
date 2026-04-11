@@ -2,6 +2,20 @@ import os from "node:os";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
+export const REPL_DISPLAY_INSTRUCTIONS = [
+  "Format responses for a terminal-first chat interface.",
+  "Use short paragraphs and simple markdown when helpful.",
+  "Use bullets for lists, fenced code blocks for code, and inline backticks for commands, paths, and identifiers.",
+  "Avoid raw HTML, avoid unnecessary tables, and do not put normal prose inside code fences.",
+].join("\n");
+
+export const PORTAL_DISPLAY_INSTRUCTIONS = [
+  "Format responses for a chat-style browser interface.",
+  "Use short paragraphs and simple markdown when helpful.",
+  "Use bullets for lists, fenced code blocks for code, and inline backticks for commands, paths, and identifiers.",
+  "Avoid raw HTML and avoid unnecessary tables.",
+].join("\n");
+
 const expandHome = (value: string): string => {
   if (value === "~") {
     return os.homedir();
