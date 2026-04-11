@@ -209,6 +209,7 @@ export type ToolPermission = "read" | "act" | "dangerous";
 export type ToolDefinition = {
   name: string;
   description: string;
+  category?: string;
   permission: ToolPermission;
   inputSchema: Record<string, unknown>;
   execute: (input: unknown) => Promise<string>;

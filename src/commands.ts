@@ -1505,16 +1505,60 @@ const handleSkillsCommand: CommandHandler = async (harness, input) => {
   return "Usage: /skills";
 };
 
+const toolCategoryOrder = [
+  "Project",
+  "Chats",
+  "Agents",
+  "Tasks",
+  "Notifications",
+  "Skills",
+  "Utilities",
+] as const;
+
+const defaultToolCategory = "Utilities";
+
+const renderTools = (
+  permissions: string,
+  tools: ReturnType<Harness["listTools"]>,
+): string => {
+  if (tools.length === 0) {
+    return `permissions: ${permissions}\nNo tools found.`;
+  }
+
+  const grouped = new Map<string, typeof tools>();
+  for (const category of toolCategoryOrder) {
+    grouped.set(category, []);
+  }
+
+  for (const tool of tools) {
+    const category = tool.category ?? defaultToolCategory;
+    if (!grouped.has(category)) {
+      grouped.set(category, []);
+    }
+    grouped.get(category)?.push(tool);
+  }
+
+  return [
+    `permissions: ${permissions}`,
+    ...Array.from(grouped.entries()).flatMap(([category, entries]) => {
+      if (entries.length === 0) {
+        return [];
+      }
+
+      return [
+        "",
+        `${category}:`,
+        ...entries.map((tool) => `- ${tool.name} [${tool.permission}]: ${tool.description}`),
+      ];
+    }),
+  ].join("\n");
+};
+
 const handleToolsCommand: CommandHandler = async (harness, input) => {
   if (input === "/tools") {
     const tools = harness.listTools();
     const permissions = harness.config.tools.join(", ");
-    return tools.length === 0
-      ? `permissions: ${permissions}\nNo tools found.`
-      : [
-          `permissions: ${permissions}`,
-          ...tools.map((tool) => `- ${tool.name}: ${tool.description}`),
-        ].join("\n");
+    return renderTools(permissions, tools);
   }
 
   if (input === "/tools help" || input.startsWith("/tools ")) {

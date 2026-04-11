@@ -286,6 +286,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_tools",
       description: "List the currently enabled tools, including their permission level.",
+      category: "Project",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -300,6 +301,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_chats",
       description: "List saved chats in the current project.",
+      category: "Chats",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -319,6 +321,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_channels",
       description: "List the available notification destination channels like origin, inbox, email, repl, or web.",
+      category: "Notifications",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -334,6 +337,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_chat",
       description: "Show metadata for a saved chat. Defaults to the current chat.",
+      category: "Chats",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -351,6 +355,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "read_chat",
       description: "Read the recent chat context, including the compressed summary when present. Defaults to the current chat and the project's context limit.",
+      category: "Chats",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -369,6 +374,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_agents",
       description: "List agents in the current project.",
+      category: "Agents",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -388,6 +394,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_agent",
       description: "Show details for an agent by name or id.",
+      category: "Agents",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -410,6 +417,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "read_agent_inbox",
       description: "Read inbox messages for an agent. Defaults to the current agent when called from an agent chat.",
+      category: "Agents",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -436,6 +444,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "read_agent_memory",
       description: "Read the durable working memory note for an agent. Defaults to the current agent when called from an agent chat.",
+      category: "Agents",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -457,6 +466,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "list_tasks",
       description: "List scheduled tasks for the current chat or a specific chat.",
+      category: "Tasks",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -478,6 +488,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "show_task",
       description: "Show details for a task by id.",
+      category: "Tasks",
       permission: "read",
       inputSchema: {
         type: "object",
@@ -502,6 +513,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "create_agent",
       description: "Start a new agent with its own dedicated chat.",
+      category: "Agents",
       permission: "act",
       inputSchema: {
         type: "object",
@@ -528,6 +540,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "send_agent_message",
       description: "Send a durable inbox message to another agent.",
+      category: "Agents",
       permission: "act",
       inputSchema: {
         type: "object",
@@ -554,6 +567,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "write_agent_memory",
       description: "Write a concise durable working memory note for an agent. Defaults to the current agent when called from an agent chat.",
+      category: "Agents",
       permission: "act",
       inputSchema: {
         type: "object",
@@ -586,6 +600,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
       name: "create_task",
       description:
         "Schedule a task using a when string like 'once now', 'once today', 'once tomorrow', 'once 4/9/2026', 'once 4/9/2026 2:30 PM', 'daily 9:00 AM', or 'weekly monday 10:00 AM'. If a one-time date omits a time, maclaw uses the project's default task time.",
+      category: "Tasks",
       permission: "act",
       inputSchema: {
         type: "object",
@@ -618,6 +633,7 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
     {
       name: "notify",
       description: 'Send a notification to the current origin by default, or to a named channel like "inbox", "email", "repl", or "web".',
+      category: "Notifications",
       permission: "act",
       inputSchema: {
         type: "object",

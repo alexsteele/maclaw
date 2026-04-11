@@ -913,6 +913,12 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     const sharedHelpReply = await dispatchCommand(harness, "/help tools");
 
     assert.match(reply ?? "", /^permissions: read$/mu);
+    assert.match(reply ?? "", /^Project:$/mu);
+    assert.match(reply ?? "", /^Chats:$/mu);
+    assert.match(reply ?? "", /^Agents:$/mu);
+    assert.match(reply ?? "", /^Tasks:$/mu);
+    assert.match(reply ?? "", /^Skills:$/mu);
+    assert.match(reply ?? "", /^Utilities:$/mu);
     assert.match(reply ?? "", /list_chats/u);
     assert.match(reply ?? "", /show_chat/u);
     assert.match(reply ?? "", /list_agents/u);
