@@ -5,8 +5,7 @@ import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { defaultSqliteFile, type ProjectConfig } from "../config.js";
-import type { AgentStore } from "../agent.js";
-import type { AgentMemoryStore } from "../agent-memory.js";
+import type { AgentMemoryEntry, AgentMemoryStore, AgentStore } from "../agent.js";
 import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
 import { appendJsonLine, ensureDir, readJsonLines } from "../fs-utils.js";
@@ -20,7 +19,6 @@ import {
 } from "./index.js";
 import type {
   AgentInboxEntry,
-  AgentMemoryEntry,
   AgentRecord,
   ChatRecord,
   ChatSummary,

@@ -15,9 +15,12 @@ import {
   loadConfig,
   type ProjectConfig,
 } from "./config.js";
-import { Agent, type AgentStore } from "./agent.js";
-import { createAgentMemoryEntry } from "./agent-memory-entry.js";
-import type { AgentMemoryStore } from "./agent-memory.js";
+import {
+  Agent,
+  createAgentMemoryEntry,
+  type AgentMemoryStore,
+  type AgentStore,
+} from "./agent.js";
 import { createAgentInboxEntry, type AgentInboxStore } from "./agent-inbox.js";
 import { ensureDir } from "./fs-utils.js";
 import {

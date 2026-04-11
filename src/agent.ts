@@ -10,10 +10,23 @@ const isDoneMessage = (content: string): boolean => {
 
 type RunStep = (chatId: string, input: string) => Promise<Message>;
 
+export type AgentMemoryEntry = {
+  agentId: string;
+  text: string;
+  updatedAt: string;
+};
+
 export interface AgentStore {
   getAgent(agentId: string): AgentRecord | undefined;
   saveAgent(record: AgentRecord): void;
   listAgents(): AgentRecord[];
+}
+
+export interface AgentMemoryStore {
+  loadEntry(agentId: string): Promise<AgentMemoryEntry | undefined>;
+  saveEntry(entry: AgentMemoryEntry): Promise<void>;
+  deleteEntry(agentId: string): Promise<boolean>;
+  clearEntries(): Promise<number>;
 }
 
 export class MemoryAgentStore implements AgentStore {
@@ -32,6 +45,38 @@ export class MemoryAgentStore implements AgentStore {
     return Array.from(this.agents.values()).map((record) => structuredClone(record));
   }
 }
+
+export class MemoryAgentMemoryStore implements AgentMemoryStore {
+  private readonly entries = new Map<string, AgentMemoryEntry>();
+
+  async loadEntry(agentId: string): Promise<AgentMemoryEntry | undefined> {
+    const entry = this.entries.get(agentId);
+    return entry ? structuredClone(entry) : undefined;
+  }
+
+  async saveEntry(entry: AgentMemoryEntry): Promise<void> {
+    this.entries.set(entry.agentId, structuredClone(entry));
+  }
+
+  async deleteEntry(agentId: string): Promise<boolean> {
+    return this.entries.delete(agentId);
+  }
+
+  async clearEntries(): Promise<number> {
+    const count = this.entries.size;
+    this.entries.clear();
+    return count;
+  }
+}
+
+export const createAgentMemoryEntry = (input: {
+  agentId: string;
+  text: string;
+}): AgentMemoryEntry => ({
+  agentId: input.agentId,
+  text: input.text,
+  updatedAt: new Date().toISOString(),
+});
 
 // Agent runs tasks autonomously in a loop.
 // An agent runs in a single project with its own chat (or user provided chat ID).

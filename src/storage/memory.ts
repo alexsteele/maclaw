@@ -5,8 +5,12 @@
  * project-level snapshot operations as the persistent backends.
  */
 import { type ProjectConfig } from "../config.js";
-import { MemoryAgentStore, type AgentStore } from "../agent.js";
-import { MemoryAgentMemoryStore, type AgentMemoryStore } from "../agent-memory.js";
+import {
+  MemoryAgentMemoryStore,
+  MemoryAgentStore,
+  type AgentMemoryStore,
+  type AgentStore,
+} from "../agent.js";
 import { MemoryAgentInboxStore, type AgentInboxStore } from "../agent-inbox.js";
 import { MemoryChatStore, type ChatStore } from "../chats.js";
 import { MemoryInboxStore, type InboxStore } from "../inbox.js";

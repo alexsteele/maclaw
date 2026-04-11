@@ -6,15 +6,13 @@
  * file layouts. See `docs/design.md` for the higher-level architecture.
  */
 import { type ProjectConfig } from "../config.js";
-import type { AgentStore } from "../agent.js";
-import type { AgentMemoryStore } from "../agent-memory.js";
+import type { AgentMemoryEntry, AgentMemoryStore, AgentStore } from "../agent.js";
 import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatStore } from "../chats.js";
 import type { InboxStore } from "../inbox.js";
 import type { TaskStore } from "../scheduler.js";
 import type {
   AgentInboxEntry,
-  AgentMemoryEntry,
   AgentRecord,
   ChatRecord,
   InboxEntry,

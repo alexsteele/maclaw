@@ -105,12 +105,6 @@ export type AgentInboxEntry = {
   readAt?: string;
 };
 
-export type AgentMemoryEntry = {
-  agentId: string;
-  text: string;
-  updatedAt: string;
-};
-
 export type AgentStatus =
   | "pending"
   | "running"
