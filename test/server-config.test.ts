@@ -24,6 +24,16 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
             { name: "home", folder: projectA },
             { name: "work", folder: projectB },
           ],
+          remotes: [
+            {
+              name: "gpu-box",
+              sshHost: "gpu.example.com",
+              sshUser: "alex",
+              sshPort: 2222,
+              remoteServerPort: 4400,
+              localForwardPort: 4100,
+            },
+          ],
           defaultProject: "home",
           channels: {
             discord: {
@@ -63,6 +73,16 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
     ]);
     assert.equal(config.port, 4100);
     assert.equal(config.defaultProject, "home");
+    assert.deepEqual(config.remotes, [
+      {
+        name: "gpu-box",
+        sshHost: "gpu.example.com",
+        sshUser: "alex",
+        sshPort: 2222,
+        remoteServerPort: 4400,
+        localForwardPort: 4100,
+      },
+    ]);
     assert.equal(config.channels.discord.enabled, true);
     assert.equal(config.channels.email.enabled, true);
     assert.equal(config.channels.email.from, "maclaw@example.com");
@@ -148,6 +168,49 @@ test("loadServerConfig keeps channels optional when none are configured", async 
     const config = loadServerConfig(configPath);
     assert.equal(config.port, 4000);
     assert.equal(config.channels, undefined);
+    assert.equal(config.remotes, undefined);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadServerConfig applies defaults for teleport remotes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-remotes-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+          remotes: [
+            {
+              name: "gpu-box",
+              sshHost: "gpu.example.com",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadServerConfig(configPath);
+    assert.deepEqual(config.remotes, [
+      {
+        name: "gpu-box",
+        sshHost: "gpu.example.com",
+        sshUser: undefined,
+        sshPort: 22,
+        remoteServerPort: 4000,
+        localForwardPort: 4000,
+      },
+    ]);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

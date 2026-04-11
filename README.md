@@ -96,6 +96,21 @@ $ maclaw server
 Web portal listening on http://localhost:4000/
 ```
 
+## Teleport
+
+`/teleport` supports remote control over SSH tunnels. Start the remote server in
+API-only mode, forward the port over SSH, and send commands through the
+forwarded local URL:
+
+```shell
+remote$ maclaw server --api-only --port 4000
+local$ ssh -L 4100:127.0.0.1:4000 alex@gpu.example.com
+local$ maclaw teleport http://127.0.0.1:4100 --project home "/help"
+```
+
+If you define named remotes in `~/.maclaw/server.json`, `maclaw teleport` can
+also open the SSH tunnel for a single command itself.
+
 See [docs/config.md](docs/config.md) for the full server config and secrets
 shape.
 
@@ -188,7 +203,8 @@ See [docs/config.md](docs/config.md) for the full config shape.
 
 ## Channels
 
-Channels are how you talk to maclaw. maclaw supports:
+Channels are how you talk to maclaw. Configure them with `maclaw setup channel`.
+maclaw supports:
 
 - REPL (no server needed)
 - Portal webapp
@@ -204,7 +220,7 @@ Channels are how you talk to maclaw. maclaw supports:
 
 ## Notifications
 
-maclaw server can send notifications to the user over channels.
+maclaw can send notifications to the user over channels.
 
 Current notifications:
 
@@ -215,6 +231,8 @@ Current notifications:
 
 By default, notifications go back to the originating channel when available,
 such as your slack channel or REPL session.
+
+Send a manual notification with `/send <channel> | message`.
 
 You can control notifications with a policy (ex: `notifications: "none"`).
 
