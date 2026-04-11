@@ -5,6 +5,7 @@
  * short-lived SSH tunnel management in one place. See `docs/teleport.md`.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { logger } from "./logger.js";
 import type { ServerConfig, TeleportRemoteConfig } from "./server-config.js";
 import { defaultServerPort } from "./server-config.js";
 import type { Origin } from "./types.js";
@@ -228,6 +229,10 @@ export class TeleportSession {
 
     if (isTeleportUrl(this.target)) {
       this.client = new RemoteRuntimeClient(this.target, { fetchFn: this.fetchFn });
+      logger.info("teleport", "connected", {
+        target: this.target,
+        mode: "direct",
+      });
       return;
     }
 
@@ -251,20 +256,34 @@ export class TeleportSession {
 
     await waitForTunnelStartup(this.tunnel, remote, this.startupDelayMs);
     this.client = new RemoteRuntimeClient(toRemoteBaseUrl(remote), { fetchFn: this.fetchFn });
+    logger.info("teleport", "connected", {
+      target: remote.name,
+      mode: "ssh",
+      remote: describeRemote(remote),
+      localPort: getLocalForwardPort(remote),
+      remotePort: getRemoteServerPort(remote),
+    });
   }
 
   /**
    * Stops the SSH tunnel for a named remote session.
    */
   async stop(): Promise<void> {
+    const target = this.target;
     this.client = undefined;
     if (!this.tunnel) {
+      logger.info("teleport", "disconnected", {
+        target,
+      });
       return;
     }
 
     const tunnel = this.tunnel;
     this.tunnel = undefined;
     await closeTunnel(tunnel);
+    logger.info("teleport", "disconnected", {
+      target,
+    });
   }
 
   /**
@@ -340,10 +359,16 @@ export class TeleportController {
       project: options.project,
       chatId: options.chatId,
     };
+    logger.info("teleport", "attached", {
+      target,
+      project: options.project ?? "(default)",
+      chatId: options.chatId,
+    });
     return this.connection;
   }
 
   async disconnect(): Promise<boolean> {
+    const target = this.connection?.target;
     this.connection = undefined;
     if (!this.session) {
       return false;
@@ -352,6 +377,9 @@ export class TeleportController {
     const session = this.session;
     this.session = undefined;
     await session.stop();
+    logger.info("teleport", "detached", {
+      target,
+    });
     return true;
   }
 

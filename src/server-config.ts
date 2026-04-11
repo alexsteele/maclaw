@@ -54,9 +54,16 @@ export type EmailConfig = {
   startTls: boolean;
 };
 
+export type ServerLoggingConfig = {
+  file: string;
+  maxBytes: number;
+  maxFiles: number;
+};
+
 export type ServerConfig = {
   configFile: string;
   defaultProject?: string;
+  logging: ServerLoggingConfig;
   port?: number;
   projects: ServerProjectConfig[];
   remotes?: TeleportRemoteConfig[];
@@ -102,7 +109,11 @@ export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string
   process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
 export const defaultServerLogFile = (homeDir: string = os.homedir()): string =>
-  process.env.MACLAW_SERVER_LOG_FILE ?? path.join(maclawHomeDir(homeDir), "logs", "server.log");
+  path.join(maclawHomeDir(homeDir), "logs", "server.log");
+
+export const defaultServerLogMaxBytes = (): number => 5 * 1024 * 1024;
+
+export const defaultServerLogMaxFiles = (): number => 5;
 
 export const defaultServerPort = (): number => 4000;
 export const defaultTeleportForwardPort = (): number => 4001;
@@ -145,6 +156,7 @@ export const loadServerConfig = (
   const raw = readFileSync(resolvedConfigFile, "utf8");
   const parsed = JSON.parse(raw) as {
     defaultProject?: string;
+    logging?: Partial<ServerLoggingConfig>;
     port?: number;
     remotes?: Partial<TeleportRemoteConfig>[];
     channels?: {
@@ -174,6 +186,7 @@ export const loadServerConfig = (
   const slack = parsed.channels?.slack;
   const discord = parsed.channels?.discord;
   const email = parsed.channels?.email;
+  const logging = parsed.logging;
   const remotes = Array.isArray(parsed.remotes) ? parsed.remotes : [];
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
@@ -239,6 +252,14 @@ export const loadServerConfig = (
   return {
     configFile: resolvedConfigFile,
     defaultProject: parsed.defaultProject,
+    logging: {
+      file:
+        typeof logging?.file === "string" && logging.file.trim().length > 0
+          ? path.resolve(path.dirname(resolvedConfigFile), logging.file)
+          : defaultServerLogFile(),
+      maxBytes: toPositiveInt(logging?.maxBytes, defaultServerLogMaxBytes()),
+      maxFiles: toPositiveInt(logging?.maxFiles, defaultServerLogMaxFiles()),
+    },
     port: toPositiveInt(parsed.port, defaultServerPort()),
     projects: projects.map((project) => ({
       name: project.name,

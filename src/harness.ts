@@ -421,6 +421,12 @@ export class Harness {
       await this.start();
     }
 
+    logger.info("project", "initialized", {
+      project: this._config.name,
+      storage: this._config.storage,
+      model: this._config.model,
+    });
+
     return this;
   }
 
@@ -429,6 +435,10 @@ export class Harness {
       return false;
     }
 
+    logger.warn("project", "wipe", {
+      project: this._config.name,
+      folder: this._config.projectFolder,
+    });
     await this.teardown();
     await this._storage.wipe();
     await rm(defaultProjectDataDir(this._config.projectFolder), {
@@ -623,6 +633,11 @@ export class Harness {
     const transcript = await this.getChatTranscript(requestedChatId);
     await ensureDir(path.dirname(resolvedPath));
     await writeFile(resolvedPath, `${transcript}\n`, "utf8");
+    logger.info("chat", "saved-transcript", {
+      project: this._config.name,
+      chatId: requestedChatId,
+      path: resolvedPath,
+    });
     return resolvedPath;
   }
 
@@ -709,7 +724,7 @@ export class Harness {
     runAt?: string;
   }): Promise<ScheduledTask> {
     const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
-    return this._scheduler.createTask({
+    const task = await this._scheduler.createTask({
       ...input,
       chatId: input.chatId ?? this.getCurrentChatId(),
       sourceChatId: input.sourceChatId ?? input.chatId ?? this.getCurrentChatId(),
@@ -717,6 +732,13 @@ export class Harness {
       createdByAgentId: input.createdByAgentId,
       prompt,
     });
+    logger.info("task", "scheduled", {
+      project: this._config.name,
+      taskId: task.id,
+      title: task.title,
+      chatId: task.chatId,
+    });
+    return task;
   }
 
   async deleteTask(taskId: string, chatId?: string): Promise<boolean> {
@@ -788,6 +810,12 @@ export class Harness {
     onTaskMessage: ((task: ScheduledTask, message: Message) => void | Promise<void>) | undefined,
     task: ScheduledTask,
   ): Promise<void> {
+    logger.info("task", "started", {
+      project: this._config.name,
+      taskId: task.id,
+      title: task.title,
+      chatId: task.chatId,
+    });
     try {
       const message = await this.handleScheduledTask(
         task.chatId,
@@ -796,7 +824,20 @@ export class Harness {
       );
       await onTaskMessage?.(task, message);
       await this.emitTaskNotification(task, "taskCompleted", `Task ${task.title} completed.`);
+      logger.info("task", "completed", {
+        project: this._config.name,
+        taskId: task.id,
+        title: task.title,
+        chatId: task.chatId,
+      });
     } catch (error) {
+      logger.warn("task", "failed", {
+        project: this._config.name,
+        taskId: task.id,
+        title: task.title,
+        chatId: task.chatId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await this.emitTaskNotification(
         task,
         "taskFailed",
@@ -886,7 +927,21 @@ export class Harness {
       this.handleAgentStopped.bind(this, record.id),
     );
     this._runningAgents.set(record.id, agent);
-    return { agent: agent.start() };
+    logger.info("agent", "created", {
+      project: this._config.name,
+      agentId: record.id,
+      name: record.name,
+      chatId: record.chatId,
+      sourceChatId: record.sourceChatId,
+    });
+    const started = agent.start();
+    logger.info("agent", "started", {
+      project: this._config.name,
+      agentId: started.id,
+      name: started.name,
+      chatId: started.chatId,
+    });
+    return { agent: started };
   }
 
   async attachAgentChat(agentRef: string): Promise<AgentChatResult> {
@@ -918,17 +973,41 @@ export class Harness {
 
   cancelAgent(agentRef: string): AgentRecord | undefined {
     const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.cancel() : undefined;
+    const cancelled = agent ? this._runningAgents.get(agent.id)?.cancel() : undefined;
+    if (cancelled) {
+      logger.info("agent", "cancelled", {
+        project: this._config.name,
+        agentId: cancelled.id,
+        name: cancelled.name,
+      });
+    }
+    return cancelled;
   }
 
   pauseAgent(agentRef: string): AgentRecord | undefined {
     const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.pause() : undefined;
+    const paused = agent ? this._runningAgents.get(agent.id)?.pause() : undefined;
+    if (paused) {
+      logger.info("agent", "paused", {
+        project: this._config.name,
+        agentId: paused.id,
+        name: paused.name,
+      });
+    }
+    return paused;
   }
 
   resumeAgent(agentRef: string): AgentRecord | undefined {
     const agent = this.findAgent(agentRef);
-    return agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
+    const resumed = agent ? this._runningAgents.get(agent.id)?.resume() : undefined;
+    if (resumed) {
+      logger.info("agent", "resumed", {
+        project: this._config.name,
+        agentId: resumed.id,
+        name: resumed.name,
+      });
+    }
+    return resumed;
   }
 
   async steerAgent(agentRef: string, prompt: string): Promise<AgentRecord | undefined> {
@@ -977,6 +1056,12 @@ export class Harness {
         this.handleAgentStopped.bind(this, record.id),
       );
       this._runningAgents.set(record.id, agent);
+      logger.info("agent", "restored", {
+        project: this._config.name,
+        agentId: record.id,
+        name: record.name,
+        status: record.status,
+      });
       agent.restore();
     }
   }
@@ -989,11 +1074,23 @@ export class Harness {
     }
 
     if (latest.status === "completed") {
+      logger.info("agent", "completed", {
+        project: this._config.name,
+        agentId: latest.id,
+        name: latest.name,
+        stepCount: latest.stepCount,
+      });
       this.emitAgentNotification(latest, "agentCompleted", `Agent ${latest.name} completed.`);
       return;
     }
 
     if (latest.status === "failed") {
+      logger.warn("agent", "failed", {
+        project: this._config.name,
+        agentId: latest.id,
+        name: latest.name,
+        error: latest.lastError,
+      });
       this.emitAgentNotification(
         latest,
         "agentFailed",
@@ -1116,6 +1213,19 @@ export class Harness {
       kind: "manual",
       text,
     });
+    if (!result.delivered) {
+      logger.warn("notification", "delivery-failed", {
+        project: this._config.name,
+        destination: input.destination,
+        sourceType: input.sourceType ?? "user",
+      });
+    } else {
+      logger.info("notification", "delivered", {
+        project: this._config.name,
+        destination: input.destination,
+        sourceType: input.sourceType ?? "user",
+      });
+    }
 
     const saveToInbox = input.saveToInbox ?? result.delivered;
     if (saveToInbox && result.target) {

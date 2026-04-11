@@ -9,6 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseConfiguredModel, type ProjectConfig } from "./config.js";
 import { makeId } from "./fs-utils.js";
+import { logger } from "./logger.js";
 import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
 import type {
@@ -314,6 +315,10 @@ export class ChatRuntime {
     this.activeChatId = chatId;
     this.activeChat = await this.loadChat(chatId);
     await this.chatStore.saveChat(this.activeChat);
+    logger.debug("chat", "switched", {
+      project: this.config.name,
+      chatId: this.activeChat.id,
+    });
     return this.activeChat;
   }
 
@@ -325,6 +330,10 @@ export class ChatRuntime {
 
     const chat = await this.loadChat(chatId);
     await this.chatStore.saveChat(chat);
+    logger.info("chat", "created", {
+      project: this.config.name,
+      chatId: chat.id,
+    });
     return { chat };
   }
 
@@ -355,6 +364,11 @@ export class ChatRuntime {
     if (chatId === this.activeChatId) {
       this.activeChat = chat;
     }
+
+    logger.info("chat", "reset", {
+      project: this.config.name,
+      chatId: chat.id,
+    });
 
     return chat;
   }
@@ -395,6 +409,13 @@ export class ChatRuntime {
       this.activeChat = chat;
     }
 
+    logger.info("chat", "compressed", {
+      project: this.config.name,
+      chatId: chat.id,
+      removedMessages: olderMessages.length,
+      keptMessages: recentMessages.length,
+    });
+
     return {
       chat,
       keptMessages: recentMessages.length,
@@ -413,6 +434,11 @@ export class ChatRuntime {
     this.previousChatId = this.activeChatId;
     this.activeChatId = newChatId;
     this.activeChat = forkedChat;
+    logger.info("chat", "forked", {
+      project: this.config.name,
+      sourceChatId: this.previousChatId,
+      chatId: forkedChat.id,
+    });
     return forkedChat;
   }
 

@@ -13,6 +13,8 @@ import { logger } from "./logger.js";
 import { ChannelRouter } from "./router.js";
 import {
   defaultServerLogFile,
+  defaultServerLogMaxBytes,
+  defaultServerLogMaxFiles,
   defaultServerPort,
   loadServerConfig,
   loadServerSecrets,
@@ -92,10 +94,17 @@ export class MaclawServer {
   private started = false;
 
   private constructor(config: ServerConfig, secrets: ServerSecrets, options: ServerOptions = {}) {
-    this.config = config;
+    this.config = {
+      ...config,
+      logging: config.logging ?? {
+        file: defaultServerLogFile(),
+        maxBytes: defaultServerLogMaxBytes(),
+        maxFiles: defaultServerLogMaxFiles(),
+      },
+    };
     this.secrets = secrets;
     this.options = options;
-    this._router = new ChannelRouter(config, this.channels);
+    this._router = new ChannelRouter(this.config, this.channels);
   }
 
   static load(options: ServerOptions = {}): MaclawServer {
@@ -160,7 +169,10 @@ export class MaclawServer {
       return;
     }
 
-    logger.setFile(defaultServerLogFile());
+    logger.setFile(this.config.logging.file, {
+      maxBytes: this.config.logging.maxBytes,
+      maxFiles: this.config.logging.maxFiles,
+    });
     logger.setStderr(this.options.logStderr);
     logger.info("server", "start", {
       configuredProjects: this.config.projects.length,

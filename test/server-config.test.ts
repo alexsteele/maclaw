@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { loadServerConfig, loadServerSecrets } from "../src/server-config.js";
+import {
+  defaultServerLogFile,
+  loadServerConfig,
+  loadServerSecrets,
+} from "../src/server-config.js";
 
 test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style config", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-"));
@@ -19,6 +23,11 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
       configPath,
       `${JSON.stringify(
         {
+          logging: {
+            file: "./logs/test.log",
+            maxBytes: 2048,
+            maxFiles: 7,
+          },
           port: 4100,
           projects: [
             { name: "home", folder: projectA },
@@ -67,6 +76,9 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
     const config = loadServerConfig(configPath);
 
     assert.equal(config.configFile, configPath);
+    assert.equal(config.logging.file, path.join(rootDir, "logs", "test.log"));
+    assert.equal(config.logging.maxBytes, 2048);
+    assert.equal(config.logging.maxFiles, 7);
     assert.deepEqual(config.projects, [
       { name: "home", folder: projectA },
       { name: "work", folder: projectB },
@@ -166,6 +178,9 @@ test("loadServerConfig keeps channels optional when none are configured", async 
     );
 
     const config = loadServerConfig(configPath);
+    assert.equal(config.logging.file, defaultServerLogFile());
+    assert.equal(config.logging.maxBytes, 5 * 1024 * 1024);
+    assert.equal(config.logging.maxFiles, 5);
     assert.equal(config.port, 4000);
     assert.equal(config.channels, undefined);
     assert.equal(config.remotes, undefined);
