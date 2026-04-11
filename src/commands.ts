@@ -33,6 +33,7 @@ type DispatchOptions = {
 export const helpText = [
   "Commands:",
   "  /help              Show this help",
+  "  /chats             List saved chats",
   "  /new               Create and switch to a new chat",
   "  /switch            Switch to a chat",
   "  /fork              Fork the current chat",
@@ -995,6 +996,10 @@ const handleConfigCommand: CommandHandler = async (harness, input) => {
 };
 
 const handleChatCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/chats") {
+    return handleChatCommand(harness, "/chat list", options);
+  }
+
   if (input === "/chat help") {
     return chatHelpText;
   }
@@ -1478,6 +1483,10 @@ export const dispatchCommand = async (
   input: string,
   options: DispatchOptions = {},
 ): Promise<string | null> => {
+  if (input === "/chats") {
+    return handleChatCommand(harness, "/chat list", options);
+  }
+
   if (input === "?") {
     return helpText;
   }

@@ -21,7 +21,7 @@ import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js
 
 const replHelpText = [
   helpText,
-  "  /switch X         Switch the REPL to project folder X",
+  "  /project switch X  Switch the REPL to project folder X",
   "  /quit             Exit the REPL",
   "  /verbose <on|off>  Toggle verbose reply metadata",
   "  /wrap [off|N]     Set REPL output wrap width",
@@ -29,7 +29,7 @@ const replHelpText = [
 
 const replProjectHelpText = [
   projectHelpText,
-  "  /switch X         Switch the REPL to project folder X",
+  "  /project switch X  Switch the REPL to project folder X",
   "  /verbose <on|off>  Toggle verbose reply metadata",
   "  /wrap [off|N]     Set REPL output wrap width",
 ].join("\n");
@@ -272,7 +272,7 @@ class Repl {
   private async switchProject(requestedFolder: string): Promise<string> {
     const trimmedFolder = requestedFolder.trim();
     if (trimmedFolder.length === 0) {
-      return "Provide a project folder, for example: /switch ../other-project";
+      return "Provide a project folder, for example: /project switch ../other-project";
     }
     const nextFolder = path.resolve(
       this.harness.config.projectFolder,
@@ -365,8 +365,10 @@ class Repl {
       return false;
     }
 
-    if (line.startsWith("/switch ")) {
-      this.writeLine(await this.switchProject(line.slice("/switch ".length)));
+    if (line.startsWith("/project switch ")) {
+      this.writeLine(
+        await this.switchProject(line.slice("/project switch ".length)),
+      );
       return false;
     }
 

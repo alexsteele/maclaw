@@ -193,6 +193,25 @@ test("dispatchCommand renders chat list output", async () => {
   }
 });
 
+test("dispatchCommand supports /chats as an alias for /chat list", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chats-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
+
+    const reply = await dispatchCommand(harness, "/chats");
+
+    assert.match(reply ?? "", /\bchat\b/u);
+    assert.match(reply ?? "", /\bmessages\b/u);
+    assert.match(reply ?? "", /default/u);
+    assert.match(reply ?? "", /branch-a/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand persists a switched chat so it appears in chat list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-switch-list-"));
 
