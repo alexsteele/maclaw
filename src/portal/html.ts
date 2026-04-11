@@ -565,11 +565,22 @@ export const renderPortalHtml = ({
         padding: 10px 12px;
       }
 
+      select:focus,
+      textarea:focus,
+      button:focus {
+        outline: none;
+      }
+
       textarea {
         min-height: 44px;
         height: 44px;
         resize: vertical;
         line-height: 1.55;
+      }
+
+      textarea:focus {
+        border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+        background: color-mix(in srgb, var(--panel) 92%, var(--bg-soft));
       }
 
       button {
@@ -699,6 +710,13 @@ export const renderPortalHtml = ({
         display: inline-block;
         margin-top: 2px;
         font-size: 11px;
+      }
+
+      .shortcut-note {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
       }
 
       .shortcut-key {
@@ -836,8 +854,7 @@ export const renderPortalHtml = ({
           <div class="transcript" id="transcript"></div>
           <div class="composer">
             <label for="message">Message</label>
-            <textarea id="message" placeholder="Send a message to maclaw..."></textarea>
-            <button type="button" id="send-button">Send</button>
+            <textarea id="message" placeholder="Message"></textarea>
           </div>
         </section>
       </main>
@@ -860,6 +877,7 @@ export const renderPortalHtml = ({
           <section class="card">
             <h3>Shortcuts</h3>
             <div class="shortcut-list">${renderShortcutList(portalKeybindings)}</div>
+            <p class="shortcut-note">Type <code>?</code> or <code>/help</code> in the chat to see available commands.</p>
           </section>
         </div>
         <div class="theme-spacer"></div>
@@ -881,7 +899,6 @@ export const renderPortalHtml = ({
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("chat-status");
       const messageInput = document.getElementById("message");
-      const sendButton = document.getElementById("send-button");
       const chatList = document.getElementById("chat-list");
       const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
       const sidebarPanels = {
@@ -907,7 +924,7 @@ export const renderPortalHtml = ({
       if (window.marked?.setOptions) {
         window.marked.setOptions({
           gfm: true,
-          breaks: false,
+          breaks: true,
         });
       }
 
@@ -938,6 +955,10 @@ export const renderPortalHtml = ({
       };
 
       const renderMessageContent = (message) => {
+        if (message.format === 'plain') {
+          return '<div class="message-text">' + escapeHtml(message.content) + '</div>';
+        }
+
         if (message.role === 'assistant') {
           return renderMarkdownHtml(message.content);
         }
@@ -1057,7 +1078,7 @@ export const renderPortalHtml = ({
       const appendNotification = (text) => {
         displayMessages = [
           ...displayMessages,
-          { role: 'assistant', content: text },
+          { role: 'assistant', content: text, format: 'plain' },
         ];
         renderMessages();
       };
@@ -1196,10 +1217,9 @@ export const renderPortalHtml = ({
         displayMessages = [
           ...displayMessages,
           { role: 'user', content: text },
-          { role: 'assistant', content: '...' },
+          { role: 'assistant', content: '...', format: 'plain' },
         ];
         renderMessages();
-        sendButton.disabled = true;
         status.textContent = "Sending…";
         messageInput.value = "";
 
@@ -1219,7 +1239,7 @@ export const renderPortalHtml = ({
             displayMessages = [
               ...displayMessages.slice(0, -2),
               { role: 'user', content: data.command.text },
-              { role: 'assistant', content: data.command.reply },
+              { role: 'assistant', content: data.command.reply, format: 'plain' },
             ];
             renderMessages();
             status.textContent = project + ' / ' + currentChatId;
@@ -1240,7 +1260,6 @@ export const renderPortalHtml = ({
           status.textContent = project + ' / ' + currentChatId;
           await loadChats();
         }
-        sendButton.disabled = false;
         messageInput.focus();
       };
 
@@ -1248,10 +1267,6 @@ export const renderPortalHtml = ({
         currentChatId = readStoredChatId(currentProject());
         showLoadingChat('Loading chat…');
         void loadChat();
-      });
-
-      sendButton.addEventListener('click', () => {
-        void sendMessage();
       });
 
       messageInput.addEventListener('keydown', (event) => {
@@ -1309,6 +1324,7 @@ export const renderPortalHtml = ({
       applyTheme(window.localStorage.getItem('maclaw-theme') || 'light');
       setActiveTab('agents');
       currentChatId = readStoredChatId(currentProject());
+      messageInput.focus();
       void loadChat();
     </script>
   </body>
