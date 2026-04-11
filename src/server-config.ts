@@ -13,6 +13,21 @@ export type ServerProjectConfig = {
   name: string;
 };
 
+/**
+ * Named SSH remote used by `maclaw teleport`.
+ *
+ * The CLI can resolve one of these entries, open a short-lived SSH tunnel, and
+ * forward commands to a remote maclaw server over the local forwarded port.
+ */
+export type TeleportRemoteConfig = {
+  name: string;
+  sshHost: string;
+  sshUser?: string;
+  sshPort?: number;
+  remoteServerPort?: number;
+  localForwardPort?: number;
+};
+
 export type WhatsAppConfig = {
   enabled: boolean;
   graphApiVersion: string;
@@ -44,6 +59,7 @@ export type ServerConfig = {
   defaultProject?: string;
   port?: number;
   projects: ServerProjectConfig[];
+  remotes?: TeleportRemoteConfig[];
   channels?: {
     discord?: DiscordConfig;
     email?: EmailConfig;
@@ -111,6 +127,7 @@ const toPositiveInt = (value: unknown, fallback: number): number => {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 };
 
+// TODO: Too much complicated custom code here.
 export const loadServerConfig = (
   configFile: string = defaultServerConfigFile(),
 ): ServerConfig => {
@@ -125,6 +142,7 @@ export const loadServerConfig = (
   const parsed = JSON.parse(raw) as {
     defaultProject?: string;
     port?: number;
+    remotes?: Partial<TeleportRemoteConfig>[];
     channels?: {
       discord?: Partial<DiscordConfig>;
       email?: Partial<EmailConfig>;
@@ -152,8 +170,22 @@ export const loadServerConfig = (
   const slack = parsed.channels?.slack;
   const discord = parsed.channels?.discord;
   const email = parsed.channels?.email;
+  const remotes = Array.isArray(parsed.remotes) ? parsed.remotes : [];
   if (parsed.defaultProject && !names.has(parsed.defaultProject)) {
     throw new Error(`Unknown default project: ${parsed.defaultProject}`);
+  }
+
+  const remoteNames = new Set<string>();
+  for (const remote of remotes) {
+    if (!remote?.name || !remote?.sshHost) {
+      throw new Error(`Invalid server remote entry in ${resolvedConfigFile}`);
+    }
+
+    if (remoteNames.has(remote.name)) {
+      throw new Error(`Duplicate server remote name: ${remote.name}`);
+    }
+
+    remoteNames.add(remote.name);
   }
 
   const channels = {
@@ -208,6 +240,23 @@ export const loadServerConfig = (
       name: project.name,
       folder: path.resolve(project.folder),
     })),
+    remotes:
+      remotes.length > 0
+        ? remotes.map((remote) => ({
+            name: remote.name as string,
+            sshHost: remote.sshHost as string,
+            sshUser: remote.sshUser,
+            sshPort: toPositiveInt(remote.sshPort, 22),
+            remoteServerPort: toPositiveInt(
+              remote.remoteServerPort,
+              defaultServerPort(),
+            ),
+            localForwardPort: toPositiveInt(
+              remote.localForwardPort,
+              toPositiveInt(remote.remoteServerPort, defaultServerPort()),
+            ),
+          }))
+        : undefined,
     channels: Object.keys(channels).length > 0 ? channels : undefined,
   };
 };

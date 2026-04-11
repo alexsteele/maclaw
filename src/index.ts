@@ -3,15 +3,16 @@
 import { runConfigCommand } from "./cli/config.js";
 import { runRepl } from "./cli/repl.js";
 import { normalizeSetupSection, runSetup } from "./cli/setup.js";
+import { loadServerConfig } from "./server-config.js";
 import { MaclawServer } from "./server.js";
-import { RemoteRuntimeClient } from "./teleport.js";
+import { isTeleportUrl, sendTeleportCommand } from "./teleport.js";
 
 const cliHelpText = [
   "Usage: maclaw [command]",
   "",
   "Commands:",
   "  repl            Start the local REPL (default)",
-  "  server          Start the maclaw server and web portal",
+  "  server          Start the maclaw server",
   "  teleport        Send one command or message to a remote maclaw server",
   "  setup [section] Run guided setup",
   "  config          Show or update project config",
@@ -31,15 +32,19 @@ const parsePortFlag = (args: string[]): number | undefined => {
   const rawPort = args[portIndex + 1];
   const port = Number.parseInt(rawPort ?? "", 10);
   if (!Number.isFinite(port) || port < 0) {
-    throw new Error("Usage: maclaw server [--port <port>]");
+    throw new Error("Usage: maclaw server [--port <port>] [--api-only]");
   }
 
   return port;
 };
 
+const hasFlag = (args: string[], name: string): boolean => args.includes(name);
+
 const runServer = async (args: string[]): Promise<void> => {
   const server = MaclawServer.load({
     port: parsePortFlag(args),
+    serveHttp: hasFlag(args, "--api-only") || hasFlag(args, "--no-portal"),
+    servePortal: !(hasFlag(args, "--api-only") || hasFlag(args, "--no-portal")),
   });
   await server.start();
 };
@@ -61,7 +66,7 @@ const parseFlagValue = (args: string[], name: string): string | undefined => {
 
   const value = args[index + 1]?.trim();
   if (!value) {
-    throw new Error(`Usage: maclaw teleport <url> [--project <name>] [--chat <id>] <message>`);
+    throw new Error(`Usage: maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>`);
   }
 
   return value;
@@ -81,19 +86,23 @@ const runTeleportCommand = async (args: string[]): Promise<void> => {
   const chatId = parseFlagValue(args, "--chat");
   const withoutProject = removeFlag(args, "--project");
   const positional = removeFlag(withoutProject, "--chat");
-  const baseUrl = positional[0]?.trim();
+  const target = positional[0]?.trim();
   const text = positional.slice(1).join(" ").trim();
 
-  if (!baseUrl || !text) {
-    throw new Error("Usage: maclaw teleport <url> [--project <name>] [--chat <id>] <message>");
+  if (!target || !text) {
+    throw new Error("Usage: maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>");
   }
 
-  const client = new RemoteRuntimeClient(baseUrl);
-  const result = await client.sendCommand({
-    project,
-    chatId,
-    text,
-  });
+  const serverConfig = isTeleportUrl(target) ? undefined : loadServerConfig();
+  const result = await sendTeleportCommand(
+    target,
+    {
+      project,
+      chatId,
+      text,
+    },
+    serverConfig,
+  );
 
   process.stdout.write(`${result.reply}\n`);
 };

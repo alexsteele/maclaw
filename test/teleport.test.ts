@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -6,7 +7,10 @@ import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import { MaclawServer } from "../src/server.js";
 import type { RemoteCommandRequest, RemoteCommandResponse } from "../src/teleport.js";
-import { RemoteRuntimeClient } from "../src/teleport.js";
+import {
+  RemoteRuntimeClient,
+  sendTeleportCommand,
+} from "../src/teleport.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 
 useDummyProviderEnv();
@@ -132,6 +136,90 @@ test("RemoteRuntimeClient sends structured commands to /api/command", async () =
   } finally {
     globalThis.fetch = actualFetch;
   }
+});
+
+test("sendTeleportCommand uses a configured SSH remote", async () => {
+  const spawnCalls: Array<{
+    command: string;
+    args: string[];
+  }> = [];
+  const tunnel = new EventEmitter() as EventEmitter & {
+    kill: (signal?: NodeJS.Signals | number) => boolean;
+    stderr: EventEmitter;
+  };
+  tunnel.stderr = new EventEmitter();
+  tunnel.kill = () => {
+    queueMicrotask(() => {
+      tunnel.emit("exit", 0, null);
+    });
+    return true;
+  };
+
+  const response = await sendTeleportCommand(
+    "gpu-box",
+    {
+      project: "home",
+      chatId: "remote-chat",
+      text: "/project",
+    },
+    {
+      remotes: [
+        {
+          name: "gpu-box",
+          sshHost: "gpu.example.com",
+          sshUser: "alex",
+          sshPort: 2222,
+          remoteServerPort: 4400,
+          localForwardPort: 4100,
+        },
+      ],
+    },
+    {
+      startupDelayMs: 0,
+      spawnFn(command, args) {
+        spawnCalls.push({ command, args });
+        return tunnel as never;
+      },
+      fetchFn: async (input) =>
+        new Response(
+          JSON.stringify({
+            project: "home",
+            chatId: "remote-chat",
+            reply: "ok",
+            handledAsCommand: true,
+          } satisfies RemoteCommandResponse),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+            },
+          },
+        ),
+      sleep: async () => {},
+    },
+  );
+
+  assert.deepEqual(response, {
+    project: "home",
+    chatId: "remote-chat",
+    reply: "ok",
+    handledAsCommand: true,
+  });
+  assert.deepEqual(spawnCalls, [
+    {
+      command: "ssh",
+      args: [
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-N",
+        "-L",
+        "4100:127.0.0.1:4400",
+        "-p",
+        "2222",
+        "alex@gpu.example.com",
+      ],
+    },
+  ]);
 });
 
 test("server remote commands can send chat messages into the target chat", async () => {

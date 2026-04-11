@@ -322,6 +322,10 @@ export class MaclawServer {
     }
   }
 
+  /**
+   * Handles one structured remote command request from teleport or another
+   * remote client without requiring an HTTP listener in the caller.
+   */
   async handleRemoteCommand(
     request: RemoteCommandRequest,
   ): Promise<RemoteCommandResponse> {

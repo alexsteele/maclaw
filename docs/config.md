@@ -63,6 +63,16 @@ Example `server.json`:
   "defaultProject": "home",
   "port": 4000,
   "projects": [{ "name": "home", "folder": "/path/to/home-project" }],
+  "remotes": [
+    {
+      "name": "gpu-box",
+      "sshHost": "gpu.example.com",
+      "sshUser": "alex",
+      "sshPort": 22,
+      "remoteServerPort": 4000,
+      "localForwardPort": 4100
+    }
+  ],
   "channels": {
     "discord": {
       "enabled": true
@@ -164,12 +174,18 @@ Agents and scheduled tasks can override project notifications with JSON options
 ## Server Notes
 
 - Project names must be unique.
+- Remote names must be unique.
 - `defaultProject`, if set, must match a configured project name.
+- `remotes` are optional and are used by `maclaw teleport <remote-name>`.
 - Slack, Discord, and WhatsApp channel config is deny-by-default unless
   explicitly enabled.
 - Email channel config is outbound-only for now.
 - `channels.email.to` is optional. If omitted, email notifications default to
   `channels.email.from`.
+- Remote defaults:
+  - `sshPort: 22`
+  - `remoteServerPort: 4000`
+  - `localForwardPort`: defaults to `remoteServerPort`
 - WhatsApp defaults currently include:
   - `graphApiVersion: "v23.0"`
   - `port: 3000`

@@ -1,4 +1,4 @@
-## Teleport
+# Teleport
 
 `teleport` is a proposed way to connect a local maclaw client to a remote maclaw
 runtime running on another machine, likely over SSH.
@@ -10,7 +10,7 @@ model execution, agents, and long-running tasks onto a cloud or remote host.
 
 The simplest useful first version is:
 
-1. Run `maclaw server` on a remote machine.
+1. Run `maclaw server --api-only` on a remote machine.
 2. Use SSH port forwarding to tunnel a local port to that remote server.
 3. Have the local CLI or portal talk to the remote server through the tunnel.
 
@@ -47,6 +47,12 @@ Likely v1 CLI:
 
 ```text
 maclaw teleport <remote>
+```
+
+Current direct form:
+
+```text
+maclaw teleport <url> [--project <name>] [--chat <id>] <message>
 ```
 
 Possible future variants:
@@ -93,21 +99,34 @@ This is intentionally small. A remote definition should be enough to:
 
 Proposed v1 flow:
 
-1. User runs `maclaw teleport gpu-box`.
-2. maclaw opens an SSH tunnel from `localhost:<localForwardPort>` to the remote
-   server port.
-3. The local CLI or portal connects to the forwarded local port.
+1. Start `maclaw server --api-only` on the remote host.
+2. Open an SSH tunnel from `localhost:<localForwardPort>` to the remote server
+   port.
+3. Run `maclaw teleport http://127.0.0.1:<localForwardPort> ...`.
 4. The remote maclaw server handles chats, agents, tasks, notifications, and
    storage normally.
-5. The local UI shows results as if the runtime were local, but marked as
-   remote.
+5. The local CLI shows the remote reply.
+
+Example:
+
+```shell
+remote$ maclaw server --api-only --port 4000
+
+local$ ssh -L 4100:127.0.0.1:4000 alex@gpu.example.com
+
+local$ maclaw teleport http://127.0.0.1:4100 --project home "/help"
+```
 
 ## Architecture Fit
 
 This approach fits the current code well:
 
 - [`src/server.ts`](../src/server.ts) already hosts the runtime and portal API
+- [`src/server.ts`](../src/server.ts) now exposes `POST /api/command` for
+  structured remote command dispatch
 - [`src/cli/repl.ts`](../src/cli/repl.ts) already owns the local terminal UX
+- [`src/teleport.ts`](../src/teleport.ts) provides the thin remote command
+  client
 - [`src/portal/`](../src/portal) can eventually point at a remote-backed server
 - `teleport` can stay a connection concern rather than a harness concern
 
@@ -134,8 +153,8 @@ That suggests a likely split:
 Recommended v1:
 
 - SSH tunnel only
-- explicit remote definitions in config
-- one local command to connect
+- localhost-bound command API on the remote server
+- one local command to send a remote message
 - one remote server as the execution authority
 - very visible "remote" status in the UI
 

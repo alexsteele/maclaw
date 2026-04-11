@@ -17,4 +17,7 @@
   - Figure out the first sandbox environment, likely AWS
 - Agent orchestration/coordination demo
 - Easy cloud setup. aws script
-- /teleport talk to cloud maclaw over ssh.
+- /teleport talk to cloud maclaw over ssh
+  - Let teleport bootstrap remote maclaw itself by inspecting remote config
+  - Consider using a remote REPL/session when the remote server is not already running
+  - Add a long-lived teleport session/tunnel for remote REPL and portal flows
