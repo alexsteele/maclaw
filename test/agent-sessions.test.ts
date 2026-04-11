@@ -184,6 +184,58 @@ test("ChatRuntime includes the compressed chat summary in the system prompt", as
   }
 });
 
+test("ChatRuntime mentions agent inbox availability in the system prompt", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-agent-inbox-prompt-"));
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<{ input?: Array<Record<string, unknown>> }> = [];
+
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as { input?: Array<Record<string, unknown>> });
+      return {
+        ok: true,
+        json: async () => ({ output_text: "ok" }),
+      } as Response;
+    }) as typeof fetch;
+
+    const config: ProjectConfig = {
+      name: path.basename(projectDir),
+      createdAt: undefined,
+      model: "openai/gpt-4.1-mini",
+      storage: "json",
+      notifications: "all",
+      defaultTaskTime: "9:00 AM",
+      contextMessages: 2,
+      maxToolIterations: 8,
+      retentionDays: 30,
+      skillsDir: path.join(projectDir, ".maclaw", "skills"),
+      compressionMode: "none",
+      schedulerPollMs: 1_000,
+      projectFolder: projectDir,
+      projectConfigFile: path.join(projectDir, ".maclaw", "maclaw.json"),
+      chatId: "default",
+      chatsDir: path.join(projectDir, ".maclaw", "chats"),
+      openAiApiKey: "test-key",
+      tools: ["read", "act"],
+    };
+
+    const chatStore = new JsonFileChatStore(config.chatsDir);
+    const runtime = new ChatRuntime(config, chatStore, createTools(config));
+
+    await runtime.prompt("start work");
+
+    const input = requestBodies[0]?.input ?? [];
+    const systemMessage = input[0] as { content?: Array<{ text?: string }> };
+    const systemPrompt = systemMessage.content?.[0]?.text ?? "";
+
+    assert.match(systemPrompt, /Agent inbox messages may contain relevant work context or requests\./u);
+    assert.match(systemPrompt, /Review them when they seem important to your current work\./u);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("ChatRuntime logs tool calls in the chat transcript without storing tool output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chat-tools-"));
   const originalFetch = globalThis.fetch;

@@ -94,6 +94,7 @@ const buildSystemPrompt = async (
     "Your goal is to help the user answer questions and complete tasks.",
     "Keep answers concise and practical.",
     "Use tools when needed.",
+    "Agent inbox messages may contain relevant work context or requests. Review them when they seem important to your current work.",
     "Local skills are available as user-authored task descriptions. Read them when useful.",
     `Project initialized: ${existsSync(config.projectConfigFile) ? "yes" : "no"}.`,
     `Chat retention: ${config.retentionDays} days.`,
