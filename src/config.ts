@@ -16,6 +16,9 @@ import type { NotificationPolicy, ToolPermission } from "./types.js";
 export const defaultProjectDataDir = (projectFolder: string): string =>
   path.join(projectFolder, ".maclaw");
 
+export const defaultProjectLockFile = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "lock.json");
+
 export const defaultTasksFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "tasks.json");
 

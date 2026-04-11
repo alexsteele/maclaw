@@ -22,7 +22,7 @@ import {
   type AgentStore,
 } from "./agent.js";
 import { createAgentInboxEntry, type AgentInboxStore } from "./agent-inbox.js";
-import { ensureDir } from "./fs-utils.js";
+import { ensureDir, makeId } from "./fs-utils.js";
 import {
   createInboxEntry,
   type InboxStore,
@@ -31,6 +31,7 @@ import { NoopRouter, type NotificationRouter } from "./router.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
+import { acquireProjectLock, type ProjectLockHandle } from "./project-lock.js";
 import { createProjectStorage, type ProjectStorage } from "./storage/index.js";
 import { createTools } from "./tools/index.js";
 import type { MaclawToolContext } from "./tools/maclaw.js";
@@ -292,6 +293,8 @@ export class Harness {
   private _taskListener?: TaskMessageHandler;
   private _router: NotificationRouter;
   private _origin?: Origin;
+  private _projectLock?: ProjectLockHandle;
+  private readonly _lockOwnerId = makeId("lock");
 
   constructor(config: ProjectConfig, options: HarnessOptions = {}) {
     this._config = config;
@@ -322,23 +325,29 @@ export class Harness {
     return existsSync(this._config.projectConfigFile);
   }
 
-  start(): Promise<void> {
+  async start(): Promise<void> {
+    await this.ensureProjectLock();
+
     const onTaskMessage = this._taskListener ?? (async () => {});
-    return this.pruneExpiredChats().then(() => {
-      this.restorePersistedAgents();
-      this._scheduler.start(
-        this._config.schedulerPollMs,
-        this.executeScheduledTask.bind(this, onTaskMessage),
-      );
-    });
+    await this.pruneExpiredChats();
+    this.restorePersistedAgents();
+    this._scheduler.start(
+      this._config.schedulerPollMs,
+      this.executeScheduledTask.bind(this, onTaskMessage),
+    );
   }
 
-  teardown(): void {
+  async teardown(): Promise<void> {
     for (const agent of this._runningAgents.values()) {
       agent.cancel();
     }
     this._runningAgents.clear();
     this._scheduler.stop();
+
+    if (this._projectLock) {
+      await this._projectLock.release();
+      this._projectLock = undefined;
+    }
   }
 
   async initProject(configPatch: Partial<ProjectConfig> = {}): Promise<Harness> {
@@ -376,7 +385,7 @@ export class Harness {
     await nextScheduler.replaceTasks(tasks);
 
     if (this._taskListener) {
-      this.teardown();
+      await this.teardown();
     }
 
     this._config = nextConfig;
@@ -403,7 +412,7 @@ export class Harness {
       return false;
     }
 
-    this.teardown();
+    await this.teardown();
     await this._storage.wipe();
     await rm(defaultProjectDataDir(this._config.projectFolder), {
       recursive: true,
@@ -472,6 +481,17 @@ export class Harness {
 
   async listSkills(): Promise<Skill[]> {
     return loadSkills(this._config.skillsDir);
+  }
+
+  private async ensureProjectLock(): Promise<void> {
+    if (!this.isProjectInitialized() || this._projectLock) {
+      return;
+    }
+
+    this._projectLock = await acquireProjectLock(
+      this._config.projectFolder,
+      this._lockOwnerId,
+    );
   }
 
   // Project tools and metadata

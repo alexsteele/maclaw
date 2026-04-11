@@ -5,7 +5,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
-import { defaultAgentsFile, defaultInboxFile, initProjectConfig } from "../src/config.js";
+import {
+  defaultAgentsFile,
+  defaultInboxFile,
+  defaultProjectLockFile,
+  initProjectConfig,
+} from "../src/config.js";
 import { JsonFileAgentStore, JsonFileInboxStore } from "../src/storage/json.js";
 import type { AgentRecord } from "../src/types.js";
 import { useDummyProviderEnv } from "./provider-env.js";
@@ -261,7 +266,7 @@ test("teardown cancels running agents", async () => {
     });
     assert.ok(created.agent);
 
-    harness.teardown();
+    await harness.teardown();
 
     const settled = await waitForAgentToSettle(harness, created.agent.id);
     assert.equal(settled.status, "cancelled");
@@ -294,6 +299,126 @@ test("wipeProject deletes .maclaw and returns the harness to headless mode", asy
     assert.equal(existsSync(path.join(projectDir, ".maclaw")), false);
     assert.equal((await harness.listCurrentChatTasks()).length, 0);
     assert.equal(await harness.getCurrentChatTranscript(), "No history yet.");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness start acquires and teardown releases the project lock", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-lock-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      name: "lock-project",
+      model: "dummy/test-model",
+    });
+
+    const lockFile = defaultProjectLockFile(projectDir);
+    assert.equal(existsSync(lockFile), false);
+
+    await harness.start();
+    assert.equal(existsSync(lockFile), true);
+
+    await harness.teardown();
+    assert.equal(existsSync(lockFile), false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness start refuses to open a project already locked by another runtime", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-lock-busy-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "busy-project",
+      model: "dummy/test-model",
+    });
+
+    const firstHarness = Harness.load(projectDir);
+    const secondHarness = Harness.load(projectDir);
+
+    await firstHarness.start();
+
+    await assert.rejects(
+      secondHarness.start(),
+      /Project is already in use by maclaw/u,
+    );
+
+    await firstHarness.teardown();
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness start replaces a stale project lock", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-lock-stale-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "stale-lock-project",
+      model: "dummy/test-model",
+    });
+
+    const lockFile = defaultProjectLockFile(projectDir);
+    await writeFile(
+      lockFile,
+      `${JSON.stringify({
+        pid: 999_999_999,
+        host: os.hostname(),
+        ownerId: "stale-owner",
+        acquiredAt: "2026-04-11T00:00:00.000Z",
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const harness = Harness.load(projectDir);
+    await harness.start();
+
+    const rawLock = await readFile(lockFile, "utf8");
+    const parsedLock = JSON.parse(rawLock) as {
+      pid: number;
+      host: string;
+      ownerId: string;
+    };
+
+    assert.equal(parsedLock.pid, process.pid);
+    assert.equal(parsedLock.host, os.hostname());
+    assert.notEqual(parsedLock.ownerId, "stale-owner");
+
+    await harness.teardown();
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("harness start does not replace a lock from another host", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-lock-remote-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      name: "remote-lock-project",
+      model: "dummy/test-model",
+    });
+
+    const lockFile = defaultProjectLockFile(projectDir);
+    await writeFile(
+      lockFile,
+      `${JSON.stringify({
+        pid: 1234,
+        host: "other-host",
+        ownerId: "remote-owner",
+        acquiredAt: "2026-04-11T00:00:00.000Z",
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const harness = Harness.load(projectDir);
+    await assert.rejects(
+      harness.start(),
+      /Project is already in use by maclaw \(pid 1234 on other-host\)/u,
+    );
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

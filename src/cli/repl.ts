@@ -213,7 +213,7 @@ class Repl {
       } catch {
         output.write("\n");
         await this.teleport.disconnect();
-        this.harness.teardown();
+        await this.harness.teardown();
         await this.stopChannels();
         this.rl.close();
         break;
@@ -226,7 +226,7 @@ class Repl {
       const shouldExit = await this.handleLine(line);
       if (shouldExit) {
         await this.teleport.disconnect();
-        this.harness.teardown();
+        await this.harness.teardown();
         await this.stopChannels();
         this.rl.close();
         break;
@@ -300,7 +300,7 @@ class Repl {
       expandHome(trimmedFolder),
     );
 
-    this.harness.teardown();
+    await this.harness.teardown();
     await this.teleport.disconnect();
     await this.stopChannels();
     this.serverConfig = loadReplServerConfig();

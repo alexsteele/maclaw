@@ -326,7 +326,7 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
   } finally {
     harness?.cancelAgent("planner");
     harness?.cancelAgent("child-planner");
-    harness?.teardown();
+    await harness?.teardown();
     await new Promise((resolve) => setTimeout(resolve, 10));
     await rm(projectDir, { recursive: true, force: true });
   }

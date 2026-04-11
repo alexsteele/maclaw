@@ -6,7 +6,7 @@ runtime running on another machine, likely over SSH.
 The goal is to keep the local user experience simple while moving the actual
 model execution, agents, and long-running tasks onto a cloud or remote host.
 
-## V1 Direction
+## Direction
 
 The simplest useful first version is:
 
@@ -125,36 +125,74 @@ local$ ssh -L 4100:127.0.0.1:4000 alex@gpu.example.com
 local$ maclaw teleport http://127.0.0.1:4100 --project home "/help"
 ```
 
-## Architecture Fit
+## Code
 
-This approach fits the current code well:
+Main teleport code lives in [`src/teleport.ts`](../src/teleport.ts).
 
-- [`src/server.ts`](../src/server.ts) already hosts the runtime and portal API
-- [`src/server.ts`](../src/server.ts) now exposes `POST /api/command` for
-  structured remote command dispatch
-- [`src/cli/repl.ts`](../src/cli/repl.ts) already owns the local terminal UX
-- [`src/teleport.ts`](../src/teleport.ts) provides the thin remote command
-  client
-- [`src/portal/`](../src/portal) can eventually point at a remote-backed server
-- `teleport` can stay a connection concern rather than a harness concern
+Key types:
 
-That suggests a likely split:
+- `RemoteRuntimeClient`
+  - thin client for the remote `POST /api/command` endpoint
+- `TeleportSession`
+  - owns one direct-url or SSH-backed remote connection
+  - reuses one SSH tunnel across multiple remote messages
+- `TeleportController`
+  - attached-session state for interactive clients
+  - tracks the active remote target, project, and chat
 
-- local CLI manages the SSH tunnel and connection state
-- remote `MaclawServer` remains the authoritative runtime
+Main integration points:
+
+- [`src/index.ts`](../src/index.ts)
+  - top-level `maclaw teleport ...` CLI entrypoint
+- [`src/commands.ts`](../src/commands.ts)
+  - shared `/teleport` command parsing and help text
+- [`src/cli/repl.ts`](../src/cli/repl.ts)
+  - REPL-attached remote sessions and remote-aware prompt UI
+- [`src/server.ts`](../src/server.ts)
+  - `POST /api/command` on the remote side
+  - per-user attached teleport sessions for server-backed chats
+
+Current direction:
+
+- keep teleport sessions process-local and simple for now
+- support attached long-lived sessions inside one REPL or channel conversation
+- avoid introducing named shared teleport sessions unless we actually need them
+- protect projects with local lock/pidfiles so two maclaw runtimes do not work
+  on the same project at once
+
+## Lock Files
+
+Teleport makes it more likely that a user may accidentally point multiple maclaw
+runtimes at the same project, for example through a local REPL, a local server,
+and a remote attached session.
+
+maclaw now uses one advisory lock file per initialized project under
+`.maclaw/lock.json`.
+
+Current behavior:
+
+- acquire the project lock from `Harness.start()`
+- store ownership info including:
+  - pid
+  - host
+  - an internal owner id
+  - acquiredAt
+- refuse to start when another live local maclaw already owns that project
+- replace stale local locks when the recorded process no longer exists
+
+This should stay simple at first. The goal is not distributed coordination. The
+goal is to avoid two local maclaw runtimes both acting as the authority for the
+same project at once.
 
 ## Open Questions
 
-- Should `teleport` attach to a remote server generally, or to a specific remote
-  project by default?
-- Should the portal connect directly to a remote server, or only through a
-  locally managed tunnel?
-- Should teleport sessions be purely process-local, or remembered across REPL
-  restarts?
+- Should the portal eventually support the same attached remote-session model as
+  the REPL and server-backed chats?
 - Do we want remote notifications to route back through the local machine, or
   remain fully remote?
-- Should there be a matching "return to local" command, or is simply exiting the
-  teleport session enough?
+- Should teleport eventually be able to bootstrap remote maclaw itself when the
+  remote server is not already running?
+- Should we eventually add richer lock metadata such as runtime mode or command?
 
 ## Recommended V1
 
@@ -162,9 +200,13 @@ Recommended v1:
 
 - SSH tunnel only
 - localhost-bound command API on the remote server
-- one local command to send a remote message
-- one remote server as the execution authority
+- direct URL and named-remote support
+- `maclaw setup remotes` for configuring SSH targets
+- one-shot `maclaw teleport ...` for simple remote commands
+- attached long-lived teleport sessions inside the REPL and server-backed chats
 - very visible "remote" status in the UI
+- process-local teleport sessions rather than named shared sessions
+- project-level advisory locks to avoid multiple runtimes on one project
 
 This gives maclaw a practical cloud story without committing too early to a more
 complicated remote orchestration model.

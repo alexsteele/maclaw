@@ -75,7 +75,7 @@ test("agent coordination state survives restart through inbox, memory, and pause
     );
     assert.equal((await harness.listAgentInbox("parent"))?.length, 1);
 
-    harness.teardown();
+    await harness.teardown();
 
     const restarted = Harness.load(projectDir);
     await restarted.start();

@@ -21,3 +21,8 @@
   - Let teleport bootstrap remote maclaw itself by inspecting remote config
   - Consider using a remote REPL/session when the remote server is not already running
   - Add a long-lived teleport session/tunnel for remote REPL and portal flows
+- Project lock/pidfiles
+  - Add one advisory lock per project, likely under `.maclaw/`
+  - Acquire it from `Harness.start()` for REPL/server runtimes
+  - Refuse to start when another live maclaw already owns the project
+  - Show a clear stale-lock recovery path later if needed

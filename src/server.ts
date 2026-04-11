@@ -237,7 +237,7 @@ export class MaclawServer {
     }
 
     for (const harness of this.projects.values()) {
-      harness.teardown();
+      await harness.teardown();
     }
 
     this.resetRuntimeState();
