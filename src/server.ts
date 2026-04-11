@@ -410,6 +410,13 @@ export class MaclawServer {
       userId: chatId,
     };
 
+    logger.info("server", "remote-command", {
+      project: projectName,
+      chatId,
+      channel: origin.channel,
+      handledAsCommand: userInput.startsWith("/"),
+    });
+
     const commandReply = await dispatchCommand(harness, userInput, {
       chatId,
       origin,
