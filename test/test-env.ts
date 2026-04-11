@@ -1,7 +1,9 @@
 import { afterEach, beforeEach } from "node:test";
 
 const providerEnvKeys = [
+  "MACLAW_LOG",
   "MACLAW_MODEL",
+  "MACLAW_SERVER_LOG_FILE",
   "OPENAI_API_KEY",
 ] as const;
 

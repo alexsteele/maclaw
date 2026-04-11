@@ -9,8 +9,10 @@ import { DiscordChannel } from "./channels/discord.js";
 import { EmailChannel } from "./channels/email.js";
 import { dispatchCommand } from "./commands.js";
 import { Harness } from "./harness.js";
+import { logger } from "./logger.js";
 import { ChannelRouter } from "./router.js";
 import {
+  defaultServerLogFile,
   defaultServerPort,
   loadServerConfig,
   loadServerSecrets,
@@ -72,6 +74,7 @@ export type ServerOptions = {
   port?: number;
   servePortal?: boolean;
   serveHttp?: boolean;
+  logStderr?: boolean;
 };
 
 export class MaclawServer {
@@ -157,6 +160,14 @@ export class MaclawServer {
       return;
     }
 
+    logger.setFile(defaultServerLogFile());
+    logger.setStderr(this.options.logStderr);
+    logger.info("server", "start", {
+      configuredProjects: this.config.projects.length,
+      servePortal: this.options.servePortal !== false,
+      serveHttp: this.options.serveHttp === true,
+    });
+
     for (const project of this.config.projects) {
       this.projects.set(
         project.name,
@@ -211,9 +222,19 @@ export class MaclawServer {
     }
 
     this.started = true;
+    logger.info("server", "started", {
+      projects: this.projects.size,
+      channels: Array.from(this.channels.keys()),
+      port: this.portalPort ?? this.options.port ?? this.config.port ?? defaultServerPort(),
+    });
   }
 
   async stop(): Promise<void> {
+    logger.info("server", "stop", {
+      projects: this.projects.size,
+      channels: this.channels.size,
+      teleports: this.teleports.size,
+    });
     for (const teleport of this.teleports.values()) {
       await teleport.disconnect();
     }
@@ -241,6 +262,8 @@ export class MaclawServer {
     }
 
     this.resetRuntimeState();
+    logger.info("server", "stopped");
+    await logger.close();
   }
 
   listProjectNames(): ProjectName[] {

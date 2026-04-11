@@ -32,7 +32,7 @@ const parsePortFlag = (args: string[]): number | undefined => {
   const rawPort = args[portIndex + 1];
   const port = Number.parseInt(rawPort ?? "", 10);
   if (!Number.isFinite(port) || port < 0) {
-    throw new Error("Usage: maclaw server [--port <port>] [--api-only]");
+    throw new Error("Usage: maclaw server [--port <port>] [--api-only] [--log-stderr]");
   }
 
   return port;
@@ -43,6 +43,7 @@ const hasFlag = (args: string[], name: string): boolean => args.includes(name);
 const runServer = async (args: string[]): Promise<void> => {
   const server = MaclawServer.load({
     port: parsePortFlag(args),
+    logStderr: hasFlag(args, "--log-stderr"),
     serveHttp: hasFlag(args, "--api-only") || hasFlag(args, "--no-portal"),
     servePortal: !(hasFlag(args, "--api-only") || hasFlag(args, "--no-portal")),
   });

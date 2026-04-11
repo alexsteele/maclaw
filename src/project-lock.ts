@@ -9,6 +9,7 @@ import path from "node:path";
 import { open, readFile, rm } from "node:fs/promises";
 import { defaultProjectLockFile } from "./config.js";
 import { ensureDir } from "./fs-utils.js";
+import { logger } from "./logger.js";
 
 export type ProjectLockRecord = {
   pid: number;
@@ -74,10 +75,19 @@ const createProjectLockHandle = (
       || current.pid !== record.pid
       || current.host !== record.host
     ) {
+      logger.debug("project-lock", "skip release", {
+        filePath,
+        ownerId: record.ownerId,
+      });
       return;
     }
 
     await rm(filePath, { force: true });
+    logger.debug("project-lock", "released", {
+      filePath,
+      pid: record.pid,
+      host: record.host,
+    });
   },
 });
 
@@ -130,6 +140,11 @@ export const acquireProjectLock = async (
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const acquired = await tryWriteProjectLock(filePath, record);
     if (acquired) {
+      logger.debug("project-lock", "acquired", {
+        filePath,
+        pid: record.pid,
+        host: record.host,
+      });
       return acquired;
     }
 
@@ -139,17 +154,37 @@ export const acquireProjectLock = async (
     }
 
     if (existing.ownerId === ownerId) {
+      logger.debug("project-lock", "reused", {
+        filePath,
+        pid: existing.pid,
+        host: existing.host,
+      });
       return createProjectLockHandle(filePath, existing);
     }
 
     if (existing.host !== currentHost) {
+      logger.debug("project-lock", "blocked by remote host", {
+        filePath,
+        pid: existing.pid,
+        host: existing.host,
+      });
       throw new Error(describeActiveLock(filePath, existing));
     }
 
     if (isProcessRunning(existing.pid)) {
+      logger.debug("project-lock", "blocked by live process", {
+        filePath,
+        pid: existing.pid,
+        host: existing.host,
+      });
       throw new Error(describeActiveLock(filePath, existing));
     }
 
+    logger.debug("project-lock", "removing stale lock", {
+      filePath,
+      pid: existing.pid,
+      host: existing.host,
+    });
     await rm(filePath, { force: true });
   }
 

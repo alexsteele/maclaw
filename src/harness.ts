@@ -27,6 +27,7 @@ import {
   createInboxEntry,
   type InboxStore,
 } from "./inbox.js";
+import { logger } from "./logger.js";
 import { NoopRouter, type NotificationRouter } from "./router.js";
 import { loadSkills } from "./skills.js";
 import { expandNotificationPolicy } from "./notifications.js";
@@ -326,6 +327,11 @@ export class Harness {
   }
 
   async start(): Promise<void> {
+    logger.debug("harness", "start", {
+      project: this._config.name,
+      folder: this._config.projectFolder,
+      initialized: this.isProjectInitialized(),
+    });
     await this.ensureProjectLock();
 
     const onTaskMessage = this._taskListener ?? (async () => {});
@@ -335,9 +341,17 @@ export class Harness {
       this._config.schedulerPollMs,
       this.executeScheduledTask.bind(this, onTaskMessage),
     );
+    logger.debug("harness", "started", {
+      project: this._config.name,
+      schedulerPollMs: this._config.schedulerPollMs,
+    });
   }
 
   async teardown(): Promise<void> {
+    logger.debug("harness", "teardown", {
+      project: this._config.name,
+      runningAgents: this._runningAgents.size,
+    });
     for (const agent of this._runningAgents.values()) {
       agent.cancel();
     }
@@ -348,6 +362,9 @@ export class Harness {
       await this._projectLock.release();
       this._projectLock = undefined;
     }
+    logger.debug("harness", "stopped", {
+      project: this._config.name,
+    });
   }
 
   async initProject(configPatch: Partial<ProjectConfig> = {}): Promise<Harness> {

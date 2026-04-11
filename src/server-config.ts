@@ -101,6 +101,9 @@ export const defaultServerConfigFile = (homeDir: string = os.homedir()): string 
 export const defaultServerSecretsFile = (homeDir: string = os.homedir()): string =>
   process.env.MACLAW_SERVER_SECRETS ?? path.join(maclawHomeDir(homeDir), "secrets.json");
 
+export const defaultServerLogFile = (homeDir: string = os.homedir()): string =>
+  process.env.MACLAW_SERVER_LOG_FILE ?? path.join(maclawHomeDir(homeDir), "logs", "server.log");
+
 export const defaultServerPort = (): number => 4000;
 export const defaultTeleportForwardPort = (): number => 4001;
 
