@@ -4,6 +4,7 @@ import { runConfigCommand } from "./cli/config.js";
 import { runRepl } from "./cli/repl.js";
 import { normalizeSetupSection, runSetup } from "./cli/setup.js";
 import { MaclawServer } from "./server.js";
+import { RemoteRuntimeClient } from "./teleport.js";
 
 const cliHelpText = [
   "Usage: maclaw [command]",
@@ -11,6 +12,7 @@ const cliHelpText = [
   "Commands:",
   "  repl            Start the local REPL (default)",
   "  server          Start the maclaw server and web portal",
+  "  teleport        Send one command or message to a remote maclaw server",
   "  setup [section] Run guided setup",
   "  config          Show or update project config",
   "  -h, --help      Show this help",
@@ -51,6 +53,51 @@ const runSetupCommand = async (args: string[]): Promise<void> => {
   await runSetup({ startSection });
 };
 
+const parseFlagValue = (args: string[], name: string): string | undefined => {
+  const index = args.indexOf(name);
+  if (index < 0) {
+    return undefined;
+  }
+
+  const value = args[index + 1]?.trim();
+  if (!value) {
+    throw new Error(`Usage: maclaw teleport <url> [--project <name>] [--chat <id>] <message>`);
+  }
+
+  return value;
+};
+
+const removeFlag = (args: string[], name: string): string[] => {
+  const index = args.indexOf(name);
+  if (index < 0) {
+    return [...args];
+  }
+
+  return [...args.slice(0, index), ...args.slice(index + 2)];
+};
+
+const runTeleportCommand = async (args: string[]): Promise<void> => {
+  const project = parseFlagValue(args, "--project");
+  const chatId = parseFlagValue(args, "--chat");
+  const withoutProject = removeFlag(args, "--project");
+  const positional = removeFlag(withoutProject, "--chat");
+  const baseUrl = positional[0]?.trim();
+  const text = positional.slice(1).join(" ").trim();
+
+  if (!baseUrl || !text) {
+    throw new Error("Usage: maclaw teleport <url> [--project <name>] [--chat <id>] <message>");
+  }
+
+  const client = new RemoteRuntimeClient(baseUrl);
+  const result = await client.sendCommand({
+    project,
+    chatId,
+    text,
+  });
+
+  process.stdout.write(`${result.reply}\n`);
+};
+
 const main = async (): Promise<void> => {
   const command = process.argv[2];
 
@@ -66,6 +113,11 @@ const main = async (): Promise<void> => {
 
   if (command === "server") {
     await runServer(process.argv.slice(3));
+    return;
+  }
+
+  if (command === "teleport") {
+    await runTeleportCommand(process.argv.slice(3));
     return;
   }
 

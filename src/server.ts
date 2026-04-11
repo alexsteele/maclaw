@@ -18,6 +18,7 @@ import {
   type ServerSecrets,
 } from "./server-config.js";
 import type { Message, Origin, ScheduledTask } from "./types.js";
+import type { RemoteCommandRequest, RemoteCommandResponse } from "./teleport.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
 import { WebChannel } from "./channels/web.js";
@@ -69,6 +70,7 @@ type ChannelUser = string;  // ${channel}:${userId}
 export type ServerOptions = {
   port?: number;
   servePortal?: boolean;
+  serveHttp?: boolean;
 };
 
 export class MaclawServer {
@@ -197,8 +199,8 @@ export class MaclawServer {
       await harness.start();
     }
 
-    if (this.options.servePortal !== false) {
-      await this.startPortal();
+    if (this.options.servePortal !== false || this.options.serveHttp === true) {
+      await this.startHttpServer();
     }
 
     for (const channel of this.channels.values()) {
@@ -304,6 +306,72 @@ export class MaclawServer {
     response.end(this.renderPortal());
   }
 
+  private async postRemoteCommand(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    const rawBody = await readRequestBody(request);
+    const parsed = JSON.parse(rawBody || "{}") as RemoteCommandRequest;
+
+    try {
+      json(response, 200, await this.handleRemoteCommand(parsed));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const statusCode = /^unknown project:/u.test(message) ? 404 : 400;
+      json(response, statusCode, { error: message });
+    }
+  }
+
+  async handleRemoteCommand(
+    request: RemoteCommandRequest,
+  ): Promise<RemoteCommandResponse> {
+    this.requireStarted();
+
+    const userInput = request.text?.trim();
+    if (!userInput) {
+      throw new Error("text is required");
+    }
+
+    const projectName = request.project ?? this.getDefaultProjectName();
+    if (!projectName) {
+      throw new Error(
+        `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`,
+      );
+    }
+
+    const harness = this.projects.get(projectName);
+    if (!harness) {
+      throw new Error(`unknown project: ${projectName}`);
+    }
+
+    const chatId = request.chatId?.trim() || harness.config.chatId;
+    const origin: Origin = request.origin ?? {
+      channel: "teleport",
+      conversationId: `teleport:${projectName}`,
+      userId: chatId,
+    };
+
+    const commandReply = await dispatchCommand(harness, userInput, {
+      chatId,
+      origin,
+    });
+    const reply =
+      commandReply !== null
+        ? commandReply
+        : (
+            await harness.promptChat(chatId, userInput, {
+              origin,
+            })
+          ).content;
+
+    return {
+      project: projectName,
+      chatId,
+      reply,
+      handledAsCommand: commandReply !== null,
+    };
+  }
+
   private sendPortalProjects(response: ServerResponse): void {
     json(response, 200, {
       currentProject: this.getDefaultProjectName(),
@@ -407,9 +475,24 @@ export class MaclawServer {
     response: ServerResponse,
   ): Promise<void> {
     const url = new URL(request.url ?? "/", "http://localhost");
+    if (url.pathname === "/api/command") {
+      if (request.method !== "POST") {
+        text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      await this.postRemoteCommand(request, response);
+      return;
+    }
+
     if (url.pathname === "/") {
       if (request.method !== "GET") {
         text(response, 405, "method_not_allowed");
+        return;
+      }
+
+      if (this.options.servePortal === false) {
+        text(response, 404, "not_found");
         return;
       }
 
@@ -494,7 +577,7 @@ export class MaclawServer {
     text(response, 404, "not_found");
   }
 
-  private async startPortal(): Promise<void> {
+  private async startHttpServer(): Promise<void> {
     this.httpServer = http.createServer((request, response) => {
       void this.handlePortalRequest(request, response).catch((error) => {
         response.statusCode = 500;
@@ -507,13 +590,21 @@ export class MaclawServer {
 
     await new Promise<void>((resolve, reject) => {
       this.httpServer?.once("error", reject);
-      this.httpServer?.listen(this.options.port ?? this.config.port ?? defaultServerPort(), resolve);
+      this.httpServer?.listen(
+        this.options.port ?? this.config.port ?? defaultServerPort(),
+        "127.0.0.1",
+        resolve,
+      );
     });
 
     const address = this.httpServer.address();
     if (address && typeof address === "object") {
       this.portalPort = address.port;
-      process.stdout.write(`Web portal listening on http://localhost:${address.port}/\n`);
+      process.stdout.write(
+        this.options.servePortal === false
+          ? `Server API listening on http://localhost:${address.port}/\n`
+          : `Web portal listening on http://localhost:${address.port}/\n`,
+      );
     }
   }
 
