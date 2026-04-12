@@ -16,6 +16,8 @@
  *   temporary session, send one command, and cleanly tear it down.
  * - `RemoteRuntimeClient` owns the remote `/api/command` protocol once a
  *   transport has connected to the remote runtime.
+ * - `remote.ts` outlines the future remote executor/recipe/access interfaces
+ *   for bootstrap and lifecycle commands.
  *
  * Most callers should work with `TeleportController`, `TeleportSession`,
  * `sendTeleportCommand`, and `TeleportOptions` rather than the lower-level
@@ -23,6 +25,7 @@
  */
 export * from "./runtime.js";
 export * from "./options.js";
+export * from "./remote.js";
 export * from "./transport.js";
 export * from "./tunnel.js";
 export * from "./controller.js";

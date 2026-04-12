@@ -25,6 +25,12 @@ type LoggerRotationOptions = {
   maxFiles?: number;
 };
 
+export type LoggerLike = {
+  debug(scope: string, message: string, fields?: Record<string, unknown>): void;
+  info(scope: string, message: string, fields?: Record<string, unknown>): void;
+  warn(scope: string, message: string, fields?: Record<string, unknown>): void;
+};
+
 const formatValue = (value: unknown): string => {
   if (typeof value === "string") {
     return value.includes(" ") ? JSON.stringify(value) : value;
