@@ -746,7 +746,7 @@ export class MaclawServer {
       return commandReply;
     }
 
-    if (teleport.isConnected()) {
+    if (teleport.isAttached()) {
       const remoteReply = await teleport.sendMessage(message.text);
       return remoteReply?.reply ?? "teleport: disconnected";
     }

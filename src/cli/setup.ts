@@ -22,9 +22,10 @@ import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
   maclawHomeDir,
+  type SshConfig,
+  type RemoteConfig,
   type ServerConfig,
   type ServerSecrets,
-  type TeleportRemoteConfig,
 } from "../server-config.js";
 import { readJsonFile, writeJsonFile } from "../fs-utils.js";
 
@@ -701,20 +702,23 @@ const runRemoteSetup = async (
   );
   const existingRemote = (serverConfig.remotes ?? []).find((remote) => remote.name === remoteName);
   printExistingRemoteConfig(prompt, existingRemote);
+  const existingSshRemote: RemoteConfig | undefined =
+    existingRemote?.provider === "ssh" ? existingRemote : undefined;
+  const existingSshConfig = existingSshRemote?.metadata as SshConfig | undefined;
 
   const sshHost = await prompt.askLine(
     "SSH host",
-    existingRemote?.sshHost ?? "",
+    existingSshConfig?.host ?? "",
   );
   const sshUser = await prompt.askLine(
     "SSH user (optional)",
-    existingRemote?.sshUser ?? "",
+    existingSshConfig?.user ?? "",
     { preserveBlank: true },
   );
   const sshPort = Number.parseInt(
     await prompt.askLine(
       "SSH port",
-      String(existingRemote?.sshPort ?? 22),
+      String(existingSshConfig?.port ?? 22),
     ),
     10,
   ) || 22;
@@ -733,11 +737,14 @@ const runRemoteSetup = async (
     10,
   ) || defaultTeleportForwardPort();
 
-  const remoteConfig: TeleportRemoteConfig = {
+  const remoteConfig: RemoteConfig = {
     name: remoteName,
-    sshHost,
-    ...(sshUser ? { sshUser } : {}),
-    sshPort,
+    provider: "ssh",
+    metadata: {
+      host: sshHost,
+      ...(sshUser ? { user: sshUser } : {}),
+      port: sshPort,
+    },
     remoteServerPort,
     localForwardPort,
   };
@@ -805,7 +812,7 @@ const printExistingChannelConfig = (
 
 const printExistingRemoteConfig = (
   prompt: SetupPrompter,
-  remoteConfig: TeleportRemoteConfig | undefined,
+  remoteConfig: RemoteConfig | undefined,
 ): void => {
   if (!remoteConfig) {
     return;

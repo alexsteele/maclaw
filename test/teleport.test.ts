@@ -168,36 +168,43 @@ test("sendTeleportCommand uses a configured SSH remote", async () => {
       remotes: [
         {
           name: "gpu-box",
-          sshHost: "gpu.example.com",
-          sshUser: "alex",
-          sshPort: 2222,
+          provider: "ssh",
+          metadata: {
+            host: "gpu.example.com",
+            user: "alex",
+            port: 2222,
+          },
           remoteServerPort: 4400,
           localForwardPort: 4100,
         },
       ],
     },
     {
-      startupDelayMs: 0,
-      spawnFn(command, args) {
-        spawnCalls.push({ command, args });
-        return tunnel as never;
+      tunnel: {
+        startupDelayMs: 0,
+        spawnFn(command, args) {
+          spawnCalls.push({ command, args });
+          return tunnel as never;
+        },
       },
-      fetchFn: async (input) =>
-        new Response(
-          JSON.stringify({
-            project: "home",
-            chatId: "remote-chat",
-            reply: "ok",
-            handledAsCommand: true,
-          } satisfies RemoteCommandResponse),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
+      runtime: {
+        fetchFn: async (input) =>
+          new Response(
+            JSON.stringify({
+              project: "home",
+              chatId: "remote-chat",
+              reply: "ok",
+              handledAsCommand: true,
+            } satisfies RemoteCommandResponse),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+              },
             },
-          },
-        ),
-      sleep: async () => {},
+          ),
+        sleep: async () => {},
+      },
     },
   );
 
@@ -219,6 +226,98 @@ test("sendTeleportCommand uses a configured SSH remote", async () => {
         "-p",
         "2222",
         "alex@gpu.example.com",
+      ],
+    },
+  ]);
+});
+
+test("sendTeleportCommand uses a configured AWS remote", async () => {
+  const spawnCalls: Array<{
+    command: string;
+    args: string[];
+  }> = [];
+  const tunnel = new EventEmitter() as EventEmitter & {
+    kill: (signal?: NodeJS.Signals | number) => boolean;
+    stderr: EventEmitter;
+  };
+  tunnel.stderr = new EventEmitter();
+  tunnel.kill = () => {
+    queueMicrotask(() => {
+      tunnel.emit("exit", 0, null);
+    });
+    return true;
+  };
+
+  const response = await sendTeleportCommand(
+    "aws-dev",
+    {
+      project: "home",
+      chatId: "remote-chat",
+      text: "/project",
+    },
+    {
+      remotes: [
+        {
+          name: "aws-dev",
+          provider: "aws-ec2",
+          metadata: {
+            region: "us-west-2",
+            instanceId: "i-1234567890abcdef0",
+          },
+          remoteServerPort: 4400,
+          localForwardPort: 4100,
+        },
+      ],
+    },
+    {
+      tunnel: {
+        startupDelayMs: 0,
+        spawnFn(command, args) {
+          spawnCalls.push({ command, args });
+          return tunnel as never;
+        },
+      },
+      runtime: {
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              project: "home",
+              chatId: "remote-chat",
+              reply: "ok",
+              handledAsCommand: true,
+            } satisfies RemoteCommandResponse),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+              },
+            },
+          ),
+        sleep: async () => {},
+      },
+    },
+  );
+
+  assert.deepEqual(response, {
+    project: "home",
+    chatId: "remote-chat",
+    reply: "ok",
+    handledAsCommand: true,
+  });
+  assert.deepEqual(spawnCalls, [
+    {
+      command: "aws",
+      args: [
+        "ssm",
+        "start-session",
+        "--region",
+        "us-west-2",
+        "--target",
+        "i-1234567890abcdef0",
+        "--document-name",
+        "AWS-StartPortForwardingSession",
+        "--parameters",
+        "{\"portNumber\":[\"4400\"],\"localPortNumber\":[\"4100\"]}",
       ],
     },
   ]);
@@ -248,34 +347,42 @@ test("TeleportSession reuses one SSH tunnel across multiple commands", async () 
       remotes: [
         {
           name: "gpu-box",
-          sshHost: "gpu.example.com",
+          provider: "ssh",
+          metadata: {
+            host: "gpu.example.com",
+            port: 22,
+          },
         },
       ],
     },
     {
-      startupDelayMs: 0,
-      spawnFn(command, args) {
-        spawnCalls.push({ command, args });
-        return tunnel as never;
+      tunnel: {
+        startupDelayMs: 0,
+        spawnFn(command, args) {
+          spawnCalls.push({ command, args });
+          return tunnel as never;
+        },
       },
-      fetchFn: async (_input, init) => {
-        fetchBodies.push(String(init?.body));
-        return new Response(
-          JSON.stringify({
-            project: "home",
-            chatId: "remote-chat",
-            reply: "ok",
-            handledAsCommand: true,
-          } satisfies RemoteCommandResponse),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
+      runtime: {
+        fetchFn: async (_input, init) => {
+          fetchBodies.push(String(init?.body));
+          return new Response(
+            JSON.stringify({
+              project: "home",
+              chatId: "remote-chat",
+              reply: "ok",
+              handledAsCommand: true,
+            } satisfies RemoteCommandResponse),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+              },
             },
-          },
-        );
+          );
+        },
+        sleep: async () => {},
       },
-      sleep: async () => {},
     },
   );
 
@@ -293,7 +400,7 @@ test("TeleportSession reuses one SSH tunnel across multiple commands", async () 
   assert.match(fetchBodies[1] ?? "", /"text":"\/help"/u);
 });
 
-test("TeleportController tracks an attached session and sends messages with stored defaults", async () => {
+test("TeleportController tracks an attached target and sends messages with stored defaults", async () => {
   const tunnel = new EventEmitter() as EventEmitter & {
     kill: (signal?: NodeJS.Signals | number) => boolean;
     stderr: EventEmitter;
@@ -312,45 +419,53 @@ test("TeleportController tracks an attached session and sends messages with stor
       remotes: [
         {
           name: "gpu-box",
-          sshHost: "gpu.example.com",
+          provider: "ssh",
+          metadata: {
+            host: "gpu.example.com",
+            port: 22,
+          },
         },
       ],
     },
     {
-      startupDelayMs: 0,
-      spawnFn() {
-        return tunnel as never;
+      tunnel: {
+        startupDelayMs: 0,
+        spawnFn() {
+          return tunnel as never;
+        },
       },
-      fetchFn: async (_input, init) => {
-        fetchBodies.push(String(init?.body));
-        return new Response(
-          JSON.stringify({
-            project: "home",
-            chatId: "remote-chat",
-            reply: "ok",
-            handledAsCommand: false,
-          } satisfies RemoteCommandResponse),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
+      runtime: {
+        fetchFn: async (_input, init) => {
+          fetchBodies.push(String(init?.body));
+          return new Response(
+            JSON.stringify({
+              project: "home",
+              chatId: "remote-chat",
+              reply: "ok",
+              handledAsCommand: false,
+            } satisfies RemoteCommandResponse),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+              },
             },
-          },
-        );
+          );
+        },
+        sleep: async () => {},
       },
-      sleep: async () => {},
     },
   );
 
   try {
-    const connection = await controller.connect("gpu-box", {
+    const target = await controller.connect("gpu-box", {
       project: "home",
       chatId: "remote-chat",
     });
     const reply = await controller.sendMessage("hello remote");
 
-    assert.deepEqual(connection, controller.getConnection());
-    assert.equal(connection.target, "gpu-box");
+    assert.deepEqual(target, controller.getTarget());
+    assert.equal(target.target, "gpu-box");
     assert.equal(reply?.reply, "ok");
     assert.match(fetchBodies[0] ?? "", /"project":"home"/u);
     assert.match(fetchBodies[0] ?? "", /"chatId":"remote-chat"/u);
@@ -360,7 +475,7 @@ test("TeleportController tracks an attached session and sends messages with stor
     await controller.disconnect();
   }
 
-  assert.equal(controller.getConnection(), undefined);
+  assert.equal(controller.getTarget(), undefined);
 });
 
 test("server remote commands can send chat messages into the target chat", async () => {

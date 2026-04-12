@@ -346,10 +346,13 @@ test("runSetup can jump straight to remotes with startSection", async () => {
     const serverConfigPath = path.join(maclawHomeDir(homeDir), "server.json");
     const serverConfig = JSON.parse(await readFile(serverConfigPath, "utf8")) as {
       remotes?: Array<{
+        metadata: {
+          host: string;
+          port?: number;
+          user?: string;
+        };
         name: string;
-        sshHost: string;
-        sshUser?: string;
-        sshPort?: number;
+        provider: string;
         remoteServerPort?: number;
         localForwardPort?: number;
       }>;
@@ -357,10 +360,13 @@ test("runSetup can jump straight to remotes with startSection", async () => {
 
     assert.deepEqual(serverConfig.remotes, [
       {
+        metadata: {
+          host: "gpu.example.com",
+          user: "alex",
+          port: 22,
+        },
         name: "gpu-box",
-        sshHost: "gpu.example.com",
-        sshUser: "alex",
-        sshPort: 22,
+        provider: "ssh",
         remoteServerPort: 4000,
         localForwardPort: 4100,
       },

@@ -7,6 +7,8 @@
  */
 import { Harness, type AgentCreateOptions } from "./harness.js";
 import { loadConfig, parseConfiguredModel } from "./config.js";
+import type { TeleportRemoteConfig } from "./server-config.js";
+import { summarizeTeleportRemote } from "./teleport.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -38,16 +40,12 @@ type TeleportControl = {
     target: string;
   }>;
   disconnect(): Promise<boolean>;
-  getConnection(): {
+  getTarget(): {
     chatId: string;
     project?: string;
     target: string;
   } | undefined;
-  listRemotes(): Array<{
-    name: string;
-    sshHost: string;
-    sshPort?: number;
-  }>;
+  listRemotes(): TeleportRemoteConfig[];
 };
 
 type DispatchOptions = {
@@ -1600,21 +1598,21 @@ const removeTeleportFlag = (value: string, name: string): string => {
   return value.replace(pattern, "").trim();
 };
 
-const renderTeleportStatus = (connection: ReturnType<TeleportControl["getConnection"]>): string =>
-  !connection
+const renderTeleportStatus = (target: ReturnType<TeleportControl["getTarget"]>): string =>
+  !target
     ? "teleport: disconnected"
     : [
         "teleport: connected",
-        `target: ${connection.target}`,
-        `project: ${connection.project ?? "(default)"}`,
-        `chat: ${connection.chatId}`,
+        `target: ${target.target}`,
+        `project: ${target.project ?? "(default)"}`,
+        `chat: ${target.chatId}`,
       ].join("\n");
 
 const renderTeleportRemotes = (remotes: ReturnType<TeleportControl["listRemotes"]>): string =>
   remotes.length === 0
     ? "No remotes configured."
     : remotes
-      .map((remote) => `- ${remote.name}: ${remote.sshHost}${remote.sshPort ? `:${remote.sshPort}` : ""}`)
+      .map((remote) => `- ${remote.name}: ${summarizeTeleportRemote(remote)}`)
       .join("\n");
 
 const handleTeleportCommand: CommandHandler = async (harness, input, options) => {
@@ -1623,7 +1621,7 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
   }
 
   if (input === "/teleport status") {
-    return renderTeleportStatus(options.teleport?.getConnection());
+    return renderTeleportStatus(options.teleport?.getTarget());
   }
 
   if (input === "/teleport help") {
@@ -1663,16 +1661,16 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
       return teleportHelpText;
     }
 
-    let connection;
+    let attachedTarget;
     try {
-      connection = await options.teleport.connect(target, {
+      attachedTarget = await options.teleport.connect(target, {
         project: requestedProject ?? harness.config.name,
         chatId: requestedChatId ?? getScopedChatId(harness, options),
       });
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
     }
-    return `attached to remote: ${connection.target}\n${renderTeleportStatus(connection)}`;
+    return `attached to remote: ${attachedTarget.target}\n${renderTeleportStatus(attachedTarget)}`;
   }
 
   if (input.startsWith("/teleport")) {

@@ -20,7 +20,7 @@ import {
   type ServerSecrets,
 } from "../server-config.js";
 import { TeleportController } from "../teleport.js";
-import type { TeleportConnectionState } from "../teleport.js";
+import type { TeleportTarget } from "../teleport.js";
 import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
 const replHelpText = [
@@ -56,11 +56,11 @@ const replOrigin: Origin = {
 };
 
 export const formatReplPrompt = (
-  connection?: TeleportConnectionState,
+  target?: TeleportTarget,
 ): string =>
-  !connection
+  !target
     ? "> "
-    : `[teleport ${connection.target}${connection.project ? ` ${connection.project}` : ""}:${connection.chatId}] > `;
+    : `[teleport ${target.target}${target.project ? ` ${target.project}` : ""}:${target.chatId}] > `;
 
 export const wrapReplLine = (line: string, width: number): string => {
   if (line.length <= width || line.trim().length === 0) {
@@ -263,7 +263,7 @@ class Repl {
   }
 
   private getPrompt(): string {
-    return formatReplPrompt(this.teleport.getConnection());
+    return formatReplPrompt(this.teleport.getTarget());
   }
 
   private formatForDisplay(text: string): string {
@@ -414,7 +414,7 @@ class Repl {
       return false;
     }
 
-    if (this.teleport.isConnected()) {
+    if (this.teleport.isAttached()) {
       const reply = await this.teleport.sendMessage(line);
       if (!reply) {
         this.writeLine("teleport: disconnected");

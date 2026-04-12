@@ -14,19 +14,31 @@ export type ServerProjectConfig = {
 };
 
 /**
- * Named SSH remote used by `maclaw teleport`.
- *
- * The CLI can resolve one of these entries, open a short-lived SSH tunnel, and
- * forward commands to a remote maclaw server over the local forwarded port.
+ * Teleport remotes
  */
-export type TeleportRemoteConfig = {
-  name: string;
-  sshHost: string;
-  sshUser?: string;
-  sshPort?: number;
-  remoteServerPort?: number;
-  localForwardPort?: number;
+
+export type TeleportProvider = "aws-ec2" | "ssh";
+
+export type SshConfig = {
+  host: string;
+  port?: number;
+  user?: string;
 };
+
+export type Ec2Config = {
+  instanceId: string;
+  region: string;
+};
+
+export type RemoteConfig = {
+  name: string;
+  provider: TeleportProvider;
+  localForwardPort?: number;
+  remoteServerPort?: number;
+  metadata: Ec2Config | SshConfig;
+};
+
+export type TeleportRemoteConfig = RemoteConfig;
 
 export type WhatsAppConfig = {
   enabled: boolean;
@@ -142,6 +154,54 @@ const toPositiveInt = (value: unknown, fallback: number): number => {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 };
 
+const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {
+  if (!remote?.name || !remote?.provider || !remote?.metadata) {
+    throw new Error("Invalid remote config");
+  }
+
+  if (remote.provider === "ssh") {
+    const metadata = remote.metadata as SshConfig;
+    if (typeof metadata.host !== "string" || metadata.host.trim().length === 0) {
+      throw new Error("Invalid SSH remote metadata");
+    }
+
+    return {
+      name: remote.name,
+      provider: "ssh",
+      metadata: {
+        host: metadata.host,
+        ...(typeof metadata.user === "string" && metadata.user.trim().length > 0
+          ? { user: metadata.user }
+          : {}),
+        port: toPositiveInt(metadata.port, 22),
+      },
+      remoteServerPort: toPositiveInt(remote.remoteServerPort, defaultServerPort()),
+      localForwardPort: toPositiveInt(remote.localForwardPort, defaultTeleportForwardPort()),
+    };
+  }
+
+  const metadata = remote.metadata as Ec2Config;
+  if (
+    typeof metadata.region !== "string" ||
+    metadata.region.trim().length === 0 ||
+    typeof metadata.instanceId !== "string" ||
+    metadata.instanceId.trim().length === 0
+  ) {
+    throw new Error("Invalid AWS EC2 remote metadata");
+  }
+
+  return {
+    name: remote.name,
+    provider: "aws-ec2",
+    metadata: {
+      region: metadata.region,
+      instanceId: metadata.instanceId,
+    },
+    remoteServerPort: toPositiveInt(remote.remoteServerPort, defaultServerPort()),
+    localForwardPort: toPositiveInt(remote.localForwardPort, defaultTeleportForwardPort()),
+  };
+};
+
 // TODO: Too much complicated custom code here.
 export const loadServerConfig = (
   configFile: string = defaultServerConfigFile(),
@@ -158,7 +218,7 @@ export const loadServerConfig = (
     defaultProject?: string;
     logging?: Partial<ServerLoggingConfig>;
     port?: number;
-    remotes?: Partial<TeleportRemoteConfig>[];
+    remotes?: RemoteConfig[];
     channels?: {
       discord?: Partial<DiscordConfig>;
       email?: Partial<EmailConfig>;
@@ -194,12 +254,18 @@ export const loadServerConfig = (
 
   const remoteNames = new Set<string>();
   for (const remote of remotes) {
-    if (!remote?.name || !remote?.sshHost) {
+    if (!remote?.name) {
       throw new Error(`Invalid server remote entry in ${resolvedConfigFile}`);
     }
 
     if (remoteNames.has(remote.name)) {
       throw new Error(`Duplicate server remote name: ${remote.name}`);
+    }
+
+    try {
+      normalizeRemoteConfig(remote);
+    } catch {
+      throw new Error(`Invalid server remote entry in ${resolvedConfigFile}`);
     }
 
     remoteNames.add(remote.name);
@@ -267,20 +333,7 @@ export const loadServerConfig = (
     })),
     remotes:
       remotes.length > 0
-        ? remotes.map((remote) => ({
-            name: remote.name as string,
-            sshHost: remote.sshHost as string,
-            sshUser: remote.sshUser,
-            sshPort: toPositiveInt(remote.sshPort, 22),
-            remoteServerPort: toPositiveInt(
-              remote.remoteServerPort,
-              defaultServerPort(),
-            ),
-            localForwardPort: toPositiveInt(
-              remote.localForwardPort,
-              defaultTeleportForwardPort(),
-            ),
-          }))
+        ? remotes.map((remote) => normalizeRemoteConfig(remote))
         : undefined,
     channels: Object.keys(channels).length > 0 ? channels : undefined,
   };

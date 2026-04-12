@@ -36,9 +36,12 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
           remotes: [
             {
               name: "gpu-box",
-              sshHost: "gpu.example.com",
-              sshUser: "alex",
-              sshPort: 2222,
+              provider: "ssh",
+              metadata: {
+                host: "gpu.example.com",
+                user: "alex",
+                port: 2222,
+              },
               remoteServerPort: 4400,
               localForwardPort: 4100,
             },
@@ -88,9 +91,12 @@ test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style
     assert.deepEqual(config.remotes, [
       {
         name: "gpu-box",
-        sshHost: "gpu.example.com",
-        sshUser: "alex",
-        sshPort: 2222,
+        provider: "ssh",
+        metadata: {
+          host: "gpu.example.com",
+          user: "alex",
+          port: 2222,
+        },
         remoteServerPort: 4400,
         localForwardPort: 4100,
       },
@@ -205,7 +211,10 @@ test("loadServerConfig applies defaults for teleport remotes", async () => {
           remotes: [
             {
               name: "gpu-box",
-              sshHost: "gpu.example.com",
+              provider: "ssh",
+              metadata: {
+                host: "gpu.example.com",
+              },
             },
           ],
         },
@@ -219,9 +228,59 @@ test("loadServerConfig applies defaults for teleport remotes", async () => {
     assert.deepEqual(config.remotes, [
       {
         name: "gpu-box",
-        sshHost: "gpu.example.com",
-        sshUser: undefined,
-        sshPort: 22,
+        provider: "ssh",
+        metadata: {
+          host: "gpu.example.com",
+          port: 22,
+        },
+        remoteServerPort: 4000,
+        localForwardPort: 4001,
+      },
+    ]);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadServerConfig applies defaults for AWS teleport remotes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-aws-remotes-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+          remotes: [
+            {
+              name: "aws-dev",
+              provider: "aws-ec2",
+              metadata: {
+                region: "us-west-2",
+                instanceId: "i-1234567890abcdef0",
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadServerConfig(configPath);
+    assert.deepEqual(config.remotes, [
+      {
+        name: "aws-dev",
+        provider: "aws-ec2",
+        metadata: {
+          region: "us-west-2",
+          instanceId: "i-1234567890abcdef0",
+        },
         remoteServerPort: 4000,
         localForwardPort: 4001,
       },

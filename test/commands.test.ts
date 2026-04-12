@@ -92,13 +92,21 @@ test("dispatchCommand lists configured teleport remotes", async () => {
       async disconnect() {
         return false;
       },
-      getConnection() {
+      getTarget() {
         return undefined;
       },
       listRemotes() {
         return [
-          { name: "local-box", sshHost: "127.0.0.1", sshPort: 22 },
-          { name: "dev-box", sshHost: "dev.example.com", sshPort: 2222 },
+          {
+            name: "local-box",
+            provider: "ssh" as const,
+            metadata: { host: "127.0.0.1", port: 22 },
+          },
+          {
+            name: "dev-box",
+            provider: "ssh" as const,
+            metadata: { host: "dev.example.com", port: 2222 },
+          },
         ];
       },
     };
@@ -116,7 +124,7 @@ test("dispatchCommand lists configured teleport remotes", async () => {
 test("dispatchCommand can connect and disconnect teleport through a controller", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-connect-"));
   const calls: string[] = [];
-  let connection:
+  let attachedTarget:
     | { target: string; project?: string; chatId: string }
     | undefined;
 
@@ -126,20 +134,20 @@ test("dispatchCommand can connect and disconnect teleport through a controller",
     const controller = {
       async connect(target: string, options: { project?: string; chatId: string }) {
         calls.push(`connect:${target}:${options.project}:${options.chatId}`);
-        connection = {
+        attachedTarget = {
           target,
           project: options.project,
           chatId: options.chatId,
         };
-        return connection;
+        return attachedTarget;
       },
       async disconnect() {
         calls.push("disconnect");
-        connection = undefined;
+        attachedTarget = undefined;
         return true;
       },
-      getConnection() {
-        return connection;
+      getTarget() {
+        return attachedTarget;
       },
     };
 
@@ -185,7 +193,7 @@ test("dispatchCommand prints teleport connection errors cleanly", async () => {
       async disconnect() {
         return false;
       },
-      getConnection() {
+      getTarget() {
         return undefined;
       },
       listRemotes() {
