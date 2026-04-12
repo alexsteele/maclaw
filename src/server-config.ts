@@ -87,6 +87,20 @@ export type ServerConfig = {
   };
 };
 
+export type EditableServerConfig = {
+  defaultProject?: string;
+  logging?: Partial<ServerLoggingConfig>;
+  port?: number;
+  projects?: ServerProjectConfig[];
+  remotes?: RemoteConfig[];
+  channels?: {
+    discord?: Partial<DiscordConfig>;
+    email?: Partial<EmailConfig>;
+    slack?: Partial<SlackConfig>;
+    whatsapp?: Partial<WhatsAppConfig>;
+  };
+};
+
 export type ServerSecrets = {
   configFile: string;
   openai: {
@@ -152,6 +166,31 @@ const toPositiveInt = (value: unknown, fallback: number): number => {
   }
 
   return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+export const validateRemoteConfig = (remote: unknown): string | undefined => {
+  if (!remote || typeof remote !== "object" || Array.isArray(remote)) {
+    return "Remote config must be a JSON object.";
+  }
+
+  const candidate = remote as Record<string, unknown>;
+  if (typeof candidate.name !== "string" || candidate.name.trim().length === 0) {
+    return "Remote config must include a non-empty name.";
+  }
+
+  if (candidate.provider !== "ssh" && candidate.provider !== "aws-ec2") {
+    return "Remote config provider must be 'ssh' or 'aws-ec2'.";
+  }
+
+  if (
+    !candidate.metadata
+    || typeof candidate.metadata !== "object"
+    || Array.isArray(candidate.metadata)
+  ) {
+    return "Remote config must include metadata.";
+  }
+
+  return undefined;
 };
 
 const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {

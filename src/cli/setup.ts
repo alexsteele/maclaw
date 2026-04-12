@@ -22,10 +22,11 @@ import {
   defaultServerConfigFile,
   defaultServerSecretsFile,
   maclawHomeDir,
+  type EditableServerConfig,
   type SshConfig,
   type RemoteConfig,
-  type ServerConfig,
   type ServerSecrets,
+  type ServerConfig,
 } from "../server-config.js";
 import { readJsonFile, writeJsonFile } from "../fs-utils.js";
 
@@ -65,18 +66,7 @@ export const normalizeSetupSection = (value: string | undefined): SetupSection |
   }
 };
 
-type ServerConfigData = {
-  defaultProject?: string;
-  port?: number;
-  projects?: ServerConfig["projects"];
-  remotes?: ServerConfig["remotes"];
-  channels?: {
-    discord?: Partial<NonNullable<ServerConfig["channels"]>["discord"]>;
-    email?: Partial<NonNullable<ServerConfig["channels"]>["email"]>;
-    slack?: Partial<NonNullable<ServerConfig["channels"]>["slack"]>;
-    whatsapp?: Partial<NonNullable<ServerConfig["channels"]>["whatsapp"]>;
-  };
-};
+type ServerConfigData = EditableServerConfig;
 type ServerSecretsData = Partial<Omit<ServerSecrets, "configFile">>;
 
 const OPENAI_SETUP_URL = "https://developers.openai.com/api/docs/quickstart";

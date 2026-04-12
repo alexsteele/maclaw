@@ -7,8 +7,15 @@
  */
 import { Harness, type AgentCreateOptions } from "./harness.js";
 import { loadConfig, parseConfiguredModel } from "./config.js";
-import type { TeleportRemoteConfig } from "./server-config.js";
+import {
+  defaultServerConfigFile,
+  type EditableServerConfig,
+  type RemoteConfig,
+  type TeleportRemoteConfig,
+  validateRemoteConfig,
+} from "./server-config.js";
 import { summarizeTeleportRemote } from "./teleport.js";
+import { readJsonFile, writeJsonFile } from "./fs-utils.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -79,6 +86,7 @@ export const helpText = [
   "  /task              Task scheduling commands",
   "  /send              Send a test notification",
   "  /inbox             Show saved notifications",
+  "  /remote            Manage configured remotes",
   "  /teleport          Attach this session to a remote maclaw runtime",
 ].join("\n");
 
@@ -226,6 +234,16 @@ export const teleportHelpText = [
   "While teleport is connected, normal REPL or channel messages are sent to the remote runtime.",
 ].join("\n");
 
+export const remoteHelpText = [
+  "Command: /remote",
+  "  /remote                  Show remote help",
+  "  /remote list             List configured remotes",
+  "  /remote show <name>      Show one remote config",
+  "  /remote rm <name>        Delete one remote config",
+  "  /remote create           Create a remote interactively when supported",
+  "  /remote create <json>    Save one remote config from JSON",
+].join("\n");
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "numeric",
   day: "numeric",
@@ -244,6 +262,43 @@ const parseChatId = (value: string): string | null => {
   }
 
   return /^[A-Za-z0-9._-]+$/u.test(trimmed) ? trimmed : null;
+};
+
+type ServerConfigData = EditableServerConfig;
+
+const serverConfigFallback = (): ServerConfigData => ({
+  projects: [],
+});
+
+const loadEditableServerConfig = async (): Promise<ServerConfigData> =>
+  await readJsonFile<ServerConfigData>(defaultServerConfigFile(), serverConfigFallback());
+
+const saveEditableServerConfig = async (serverConfig: ServerConfigData): Promise<void> => {
+  await writeJsonFile(defaultServerConfigFile(), serverConfig);
+};
+
+const renderRemoteInfo = (remote: RemoteConfig): string =>
+  JSON.stringify(remote, null, 2);
+
+const renderRemoteList = (remotes: RemoteConfig[]): string =>
+  remotes.length === 0
+    ? "No remotes configured."
+    : remotes.map((remote) => `- ${remote.name}: ${summarizeTeleportRemote(remote)}`).join("\n");
+
+const parseRemoteCreateJson = (value: string): RemoteConfig | string => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return "Invalid remote JSON.";
+  }
+
+  const validationError = validateRemoteConfig(parsed);
+  if (validationError) {
+    return validationError;
+  }
+
+  return parsed as RemoteConfig;
 };
 
 const formatChatTimestamp = (value: string): string => {
@@ -763,6 +818,10 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
 
   if (input === "/help teleport") {
     return teleportHelpText;
+  }
+
+  if (input === "/help remote") {
+    return remoteHelpText;
   }
 
   if (input.startsWith("/help")) {
@@ -1680,6 +1739,70 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
   return teleportHelpText;
 };
 
+const handleRemoteCommand: CommandHandler = async (_harness, input) => {
+  if (input === "/remote" || input === "/remote help") {
+    return remoteHelpText;
+  }
+
+  const serverConfig = await loadEditableServerConfig();
+  const remotes = [...(serverConfig.remotes ?? [])];
+
+  if (input === "/remote list") {
+    return renderRemoteList(remotes);
+  }
+
+  if (input.startsWith("/remote show ")) {
+    const name = input.slice("/remote show ".length).trim();
+    if (!name) {
+      return "Usage: /remote show <name>";
+    }
+
+    const remote = remotes.find((entry) => entry.name === name);
+    return remote ? renderRemoteInfo(remote) : `remote not found: ${name}`;
+  }
+
+  if (input.startsWith("/remote rm ")) {
+    const name = input.slice("/remote rm ".length).trim();
+    if (!name) {
+      return "Usage: /remote rm <name>";
+    }
+
+    const nextRemotes = remotes.filter((entry) => entry.name !== name);
+    if (nextRemotes.length === remotes.length) {
+      return `remote not found: ${name}`;
+    }
+
+    serverConfig.remotes = nextRemotes.length > 0 ? nextRemotes : undefined;
+    await saveEditableServerConfig(serverConfig);
+    return `deleted remote: ${name}`;
+  }
+
+  if (input === "/remote create") {
+    return "Interactive /remote create is not supported yet. Use /remote create <json>.";
+  }
+
+  if (input.startsWith("/remote create ")) {
+    const body = input.slice("/remote create ".length).trim();
+    const remote = parseRemoteCreateJson(body);
+    if (typeof remote === "string") {
+      return remote;
+    }
+
+    serverConfig.remotes = [
+      ...remotes.filter((entry) => entry.name !== remote.name),
+      remote,
+    ];
+    await saveEditableServerConfig(serverConfig);
+    return `saved remote: ${remote.name}`;
+  }
+
+  if (input.startsWith("/remote")) {
+    return remoteHelpText;
+  }
+
+  return remoteHelpText;
+};
+
 const handleNewCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/new") {
     return handleChatCommand(harness, "/chat new", options);
@@ -1752,6 +1875,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   tools: handleToolsCommand,
   skills: handleSkillsCommand,
   history: handleHistoryCommand,
+  remote: handleRemoteCommand,
   teleport: handleTeleportCommand,
 };
 

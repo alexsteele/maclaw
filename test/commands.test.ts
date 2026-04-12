@@ -10,6 +10,7 @@ import {
   inboxHelpText,
   modelHelpText,
   projectHelpText,
+  remoteHelpText,
   saveHelpText,
   sendHelpText,
   taskScheduleHelpText,
@@ -61,6 +62,19 @@ test("dispatchCommand shows teleport help", async () => {
 
     assert.equal(await dispatchCommand(harness, "/help teleport"), teleportHelpText);
     assert.equal(await dispatchCommand(harness, "/teleport help"), teleportHelpText);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows remote help", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-remote-help-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    assert.equal(await dispatchCommand(harness, "/help remote"), remoteHelpText);
+    assert.equal(await dispatchCommand(harness, "/remote help"), remoteHelpText);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -118,6 +132,60 @@ test("dispatchCommand lists configured teleport remotes", async () => {
     assert.equal(reply, "- local-box: 127.0.0.1:22\n- dev-box: dev.example.com:2222");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can create, show, list, and delete remotes", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-remote-create-"));
+  const maclawHome = await mkdtemp(path.join(os.tmpdir(), "maclaw-home-remote-"));
+  const originalMaclawHome = process.env.MACLAW_HOME;
+
+  try {
+    process.env.MACLAW_HOME = maclawHome;
+    const harness = Harness.load(projectDir);
+
+    const createHelpReply = await dispatchCommand(harness, "/remote create");
+    const createSshReply = await dispatchCommand(
+      harness,
+      '/remote create {"name":"gpu-box","provider":"ssh","metadata":{"host":"gpu.example.com","user":"alex","port":2222},"remoteServerPort":4000,"localForwardPort":4100}',
+    );
+    const createAwsReply = await dispatchCommand(
+      harness,
+      '/remote create {"name":"aws-dev","provider":"aws-ec2","metadata":{"region":"us-west-2","instanceId":"i-0d4a7b8d1b15e49c4"},"remoteServerPort":4000,"localForwardPort":4101}',
+    );
+    const listReply = await dispatchCommand(harness, "/remote list");
+    const showReply = await dispatchCommand(harness, "/remote show aws-dev");
+    const deleteReply = await dispatchCommand(harness, "/remote rm gpu-box");
+    const missingReply = await dispatchCommand(harness, "/remote show gpu-box");
+
+    assert.equal(
+      createHelpReply,
+      "Interactive /remote create is not supported yet. Use /remote create <json>.",
+    );
+    assert.equal(createSshReply, "saved remote: gpu-box");
+    assert.equal(createAwsReply, "saved remote: aws-dev");
+    assert.equal(
+      listReply,
+      "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2)",
+    );
+    assert.match(showReply, /"name": "aws-dev"/u);
+    assert.match(showReply, /"provider": "aws-ec2"/u);
+    assert.match(showReply, /"instanceId": "i-0d4a7b8d1b15e49c4"/u);
+    assert.equal(deleteReply, "deleted remote: gpu-box");
+    assert.equal(missingReply, "remote not found: gpu-box");
+
+    const savedConfig = JSON.parse(
+      await readFile(path.join(maclawHome, "server.json"), "utf8"),
+    ) as { remotes?: Array<{ name: string }> };
+    assert.deepEqual(savedConfig.remotes?.map((remote) => remote.name), ["aws-dev"]);
+  } finally {
+    if (originalMaclawHome === undefined) {
+      delete process.env.MACLAW_HOME;
+    } else {
+      process.env.MACLAW_HOME = originalMaclawHome;
+    }
+    await rm(projectDir, { recursive: true, force: true });
+    await rm(maclawHome, { recursive: true, force: true });
   }
 });
 
