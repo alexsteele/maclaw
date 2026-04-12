@@ -11,11 +11,12 @@ Derived from local git history.
 | 2026-04-09 |         6 |                          1.5 | +1,630 / -329   |
 | 2026-04-10 |        10 |                          1.8 | +2,107 / -589   |
 | 2026-04-11 |        24 |                          6.3 | +5,491 / -323   |
+| 2026-04-12 |         6 |                          5.2 | +1,776 / -779   |
 
 Current code size:
 
-- `src/`: `14,804` lines
-- `test/`: `7,075` lines
+- `src/`: `15,516` lines
+- `test/`: `7,331` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -98,3 +99,16 @@ Current code size:
 - Portal polish: channels panel, reply-focused navigation shortcuts, cleaner
   assistant transcript layout, composer cleanup, and README screenshot.
 - Kept command output plain in the portal for help/list alignment.
+
+## 2026-04-12 Notes
+
+- EC2 /teleport proof of concept.
+- Added config-backed `/remote` commands for list/show/create/delete.
+- Simplified `/remote create` to use JSON input plus lightweight validation.
+- Removed duplicate editable server-config typing by introducing a shared
+  `EditableServerConfig`.
+- Refined teleport remote interfaces into `src/teleport/remote.ts`.
+- Added `RemoteAccess`, `RemoteExecutor`, and `RemoteRecipe` outlines.
+- Proved out SSH remote access with a concrete executor and bootstrap recipe.
+- Continued simplifying teleport types and boundaries around runtime, tunnel,
+  and remote access.
