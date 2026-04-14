@@ -12,56 +12,19 @@ import {
   type RemoteConfig,
   type SshConfig,
 } from "../server-config.js";
-import {
-  DEFAULT_REMOTE_INSTALL_MARKER,
-  DEFAULT_REMOTE_REPO_URL,
-  DEFAULT_REMOTE_WORKSPACE,
-} from "./constants.js";
+import { buildSshBootstrapCommand } from "./bootstrap.js";
+import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
   RemoteActionResult,
   RemoteConnectOptions,
   RemoteConnection,
+  RemoteInitOptions,
   RemotePrompter,
   RemoteRecipe,
   RemoteSetupResult,
 } from "./types.js";
-
-
-function buildSshBootstrapCommand(): string {
-  return shellLines([
-    "set -e",
-    `mkdir -p ${DEFAULT_REMOTE_WORKSPACE}`,
-    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
-    `if [ -f package.json ] && [ -f ${DEFAULT_REMOTE_INSTALL_MARKER} ]; then`,
-    `  echo 'maclaw already installed in ${DEFAULT_REMOTE_WORKSPACE}'`,
-    "  exit 0",
-    "fi",
-    "command -v node >/dev/null 2>&1 || { echo 'node is required'; exit 1; }",
-    "command -v npm >/dev/null 2>&1 || { echo 'npm is required'; exit 1; }",
-    "command -v git >/dev/null 2>&1 || { echo 'git is required'; exit 1; }",
-    "if [ ! -f package.json ]; then",
-    "  if [ -n \"$(ls -A . 2>/dev/null)\" ]; then",
-    `    echo 'workspace is not a maclaw repo and is not empty: ${DEFAULT_REMOTE_WORKSPACE}'`,
-    "    exit 2",
-    "  fi",
-    `  git clone ${DEFAULT_REMOTE_REPO_URL} .`,
-    "fi",
-    "npm install",
-    "npm run build",
-  ]);
-}
-
-function buildSshStartCommand(remote: RemoteConfig): string {
-  return shellLines([
-    "set -e",
-    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
-    "mkdir -p .maclaw",
-    `nohup npm start -- server --api-only --port ${remote.remoteServerPort ?? defaultServerPort()} >> .maclaw/server.log 2>&1 < /dev/null &`,
-    `echo 'started maclaw server on port ${remote.remoteServerPort ?? defaultServerPort()}'`,
-  ]);
-}
 
 /**
  * Registered SSH remote recipe.
@@ -130,28 +93,43 @@ export const sshRemoteRecipe: RemoteRecipe = {
 export function createSshRemote(config: RemoteConfig): Remote {
   return {
     config,
-    async bootstrap() {
+    async bootstrap(options?: RemoteInitOptions) {
       if (this.config.provider !== "ssh") {
         return unsupportedSshAction("bootstrap");
       }
 
-      return await runSshCommand(this.config, buildSshBootstrapCommand());
+      return await runSshCommand(
+        this.config,
+        buildSshBootstrapCommand(options?.project, options?.server, options?.bootstrap),
+      );
     },
-    async start() {
+    async start(options?: RemoteInitOptions) {
       if (this.config.provider !== "ssh") {
         return unsupportedSshAction("start");
       }
 
-      return await runSshCommand(this.config, buildSshStartCommand(this.config));
+      return await runSshCommand(
+        this.config,
+        buildRemoteServerStartCommand(
+          this.config.remoteServerPort,
+          options?.project,
+          options?.server,
+          options?.bootstrap,
+        ),
+      );
     },
     async connect(options: RemoteConnectOptions = {}) {
       return await createSshConnection(this.config.name, this.config, options);
     },
-    async stop() {
-      return {
-        exitCode: 64,
-        message: "stop is not implemented for ssh remotes yet.",
-      };
+    async stop(options?: RemoteInitOptions) {
+      if (this.config.provider !== "ssh") {
+        return unsupportedSshAction("stop");
+      }
+
+      return await runSshCommand(
+        this.config,
+        buildRemoteServerStopCommand(options?.bootstrap),
+      );
     },
   };
 }
@@ -168,10 +146,6 @@ function unsupportedSshAction(action: string): RemoteActionResult {
   };
 }
 
-
-function shellLines(lines: string[]): string {
-  return lines.join("\n");
-}
 
 function createSshConnection(
   target: string,

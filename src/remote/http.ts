@@ -13,6 +13,7 @@ import type {
   RemoteActionResult,
   RemoteConnectOptions,
   RemoteConnection,
+  RemoteInitOptions,
   RemotePrompter,
   RemoteRecipe,
   RemoteSetupResult,
@@ -69,16 +70,16 @@ export const httpRemoteRecipe: RemoteRecipe = {
 export function createHttpRemote(config: RemoteConfig): Remote {
   return {
     config,
-    async bootstrap() {
+    async bootstrap(_options?: RemoteInitOptions) {
       return unsupported("bootstrap");
     },
-    async start() {
+    async start(_options?: RemoteInitOptions) {
       return noop("start");
     },
     async connect(options: RemoteConnectOptions = {}) {
       return createHttpConnection(this.config.name, this.config, options);
     },
-    async stop() {
+    async stop(_options?: RemoteInitOptions) {
       return noop("stop");
     },
   };

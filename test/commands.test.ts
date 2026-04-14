@@ -160,6 +160,8 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
     const listReply = await dispatchCommand(harness, "/remote list");
     const showReply = await dispatchCommand(harness, "/remote show aws-dev");
     const bootstrapReply = await dispatchCommand(harness, "/remote bootstrap local-api");
+    const startReply = await dispatchCommand(harness, "/remote start local-api");
+    const stopReply = await dispatchCommand(harness, "/remote stop local-api");
     const deleteReply = await dispatchCommand(harness, "/remote rm gpu-box");
     const missingReply = await dispatchCommand(harness, "/remote show gpu-box");
 
@@ -181,6 +183,8 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
       bootstrapReply,
       "bootstrap failed: local-api (exit 64)\nbootstrap is not implemented for http remotes.",
     );
+    assert.equal(startReply, "start complete: local-api\nstart is a no-op for http remotes.");
+    assert.equal(stopReply, "stop complete: local-api\nstop is a no-op for http remotes.");
     assert.equal(deleteReply, "deleted remote: gpu-box");
     assert.equal(missingReply, "remote not found: gpu-box");
 

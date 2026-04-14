@@ -12,18 +12,15 @@ import {
   type Ec2Config,
   type RemoteConfig,
 } from "../server-config.js";
-import {
-  DEFAULT_REMOTE_INSTALL_MARKER,
-  DEFAULT_REMOTE_NODE_MAJOR,
-  DEFAULT_REMOTE_REPO_URL,
-  DEFAULT_REMOTE_WORKSPACE,
-} from "./constants.js";
+import { buildEc2BootstrapCommand } from "./bootstrap.js";
+import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
   RemoteActionResult,
   RemoteConnectOptions,
   RemoteConnection,
+  RemoteInitOptions,
   RemotePrompter,
   RemoteRecipe,
   RemoteSetupResult,
@@ -92,17 +89,30 @@ export const ec2RemoteRecipe: RemoteRecipe = {
 export function createEc2Remote(config: RemoteConfig): Remote {
   return {
     config,
-    async bootstrap() {
-      return await runEc2Bootstrap(this.config);
+    async bootstrap(options?: RemoteInitOptions) {
+      return await runEc2Bootstrap(this.config, options);
     },
-    async start() {
-      return unsupported("start");
+    async start(options?: RemoteInitOptions) {
+      return await runEc2ShellCommand(
+        this.config,
+        buildRemoteServerStartCommand(
+          this.config.remoteServerPort,
+          options?.project,
+          options?.server,
+          options?.bootstrap,
+        ).split("\n"),
+        `maclaw start ${this.config.name}`,
+      );
     },
     async connect(options: RemoteConnectOptions = {}) {
       return await createEc2Connection(this.config.name, this.config, options);
     },
-    async stop() {
-      return unsupported("stop");
+    async stop(options?: RemoteInitOptions) {
+      return await runEc2ShellCommand(
+        this.config,
+        buildRemoteServerStopCommand(options?.bootstrap).split("\n"),
+        `maclaw stop ${this.config.name}`,
+      );
     },
   };
 }
@@ -112,99 +122,32 @@ export function summarizeEc2Remote(remote: RemoteConfig): string {
   return `aws-ec2 ${metadata.instanceId} (${metadata.region})`;
 }
 
-function unsupported(action: string): RemoteActionResult {
-  return {
-    exitCode: 64,
-    message: `${action} is not implemented for aws-ec2 remotes yet.`,
-  };
-}
-
-function shellLines(lines: string[]): string {
-  return lines.join("\n");
-}
-
-function buildEc2BootstrapCommands(): string[] {
-  return [
-    "set -e",
-    `mkdir -p ${DEFAULT_REMOTE_WORKSPACE}`,
-    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
-    `if [ -f package.json ] && [ -f ${DEFAULT_REMOTE_INSTALL_MARKER} ]; then`,
-    `  echo 'maclaw already installed in ${DEFAULT_REMOTE_WORKSPACE}'`,
-    "  exit 0",
-    "fi",
-    "sudo dnf update -y",
-    "sudo dnf install -y git tar gzip",
-    `if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q '^v${DEFAULT_REMOTE_NODE_MAJOR}\\.'; then`,
-    `  curl -fsSL https://rpm.nodesource.com/setup_${DEFAULT_REMOTE_NODE_MAJOR}.x | sudo bash -`,
-    "  sudo dnf install -y nodejs",
-    "fi",
-    "if [ ! -f package.json ]; then",
-    "  if [ -n \"$(ls -A . 2>/dev/null)\" ]; then",
-    `    echo 'workspace is not a maclaw repo and is not empty: ${DEFAULT_REMOTE_WORKSPACE}'`,
-    "    exit 2",
-    "  fi",
-    `  git clone ${DEFAULT_REMOTE_REPO_URL} .`,
-    "fi",
-    "npm install",
-    "npm run build",
-  ];
-}
-
-async function runEc2Bootstrap(remote: RemoteConfig): Promise<RemoteActionResult> {
-  const metadata = remote.metadata as Ec2Config;
-  const commandId = await sendEc2ShellCommand(
+async function runEc2Bootstrap(
+  remote: RemoteConfig,
+  options?: RemoteInitOptions,
+): Promise<RemoteActionResult> {
+  return await runEc2ShellCommand(
     remote,
-    buildEc2BootstrapCommands(),
+    buildEc2BootstrapCommand(
+      options?.project,
+      options?.server,
+      options?.bootstrap,
+    ).split("\n"),
     `maclaw bootstrap ${remote.name}`,
   );
+}
+
+async function runEc2ShellCommand(
+  remote: RemoteConfig,
+  commands: string[],
+  comment: string,
+): Promise<RemoteActionResult> {
+  const commandId = await sendEc2ShellCommand(remote, commands, comment);
   if (typeof commandId !== "string") {
     return commandId;
   }
 
   return await waitForEc2Command(remote, commandId);
-}
-
-async function sendEc2ShellCommand(
-  remote: RemoteConfig,
-  commands: string[],
-  comment: string,
-): Promise<string | RemoteActionResult> {
-  const metadata = remote.metadata as Ec2Config;
-  const result = await runAwsCli(remote, [
-    "ssm",
-    "send-command",
-    "--region",
-    metadata.region,
-    "--instance-ids",
-    metadata.instanceId,
-    "--document-name",
-    "AWS-RunShellScript",
-    "--comment",
-    comment,
-    "--parameters",
-    JSON.stringify({ commands }),
-    "--output",
-    "json",
-  ]);
-  if (result.exitCode !== 0) {
-    return {
-      exitCode: result.exitCode,
-      message: [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n"),
-    };
-  }
-
-  const parsed = JSON.parse(result.stdout) as {
-    Command?: { CommandId?: string };
-  };
-  const commandId = parsed.Command?.CommandId?.trim();
-  if (!commandId) {
-    return {
-      exitCode: 1,
-      message: "AWS send-command did not return a command id.",
-    };
-  }
-
-  return commandId;
 }
 
 async function waitForEc2Command(
@@ -274,8 +217,51 @@ async function waitForEc2Command(
 
   return {
     exitCode: 124,
-    message: `Timed out waiting for EC2 bootstrap command ${commandId}.`,
+    message: `Timed out waiting for EC2 command ${commandId}.`,
   };
+}
+
+async function sendEc2ShellCommand(
+  remote: RemoteConfig,
+  commands: string[],
+  comment: string,
+): Promise<string | RemoteActionResult> {
+  const metadata = remote.metadata as Ec2Config;
+  const result = await runAwsCli(remote, [
+    "ssm",
+    "send-command",
+    "--region",
+    metadata.region,
+    "--instance-ids",
+    metadata.instanceId,
+    "--document-name",
+    "AWS-RunShellScript",
+    "--comment",
+    comment,
+    "--parameters",
+    JSON.stringify({ commands }),
+    "--output",
+    "json",
+  ]);
+  if (result.exitCode !== 0) {
+    return {
+      exitCode: result.exitCode,
+      message: [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n"),
+    };
+  }
+
+  const parsed = JSON.parse(result.stdout) as {
+    Command?: { CommandId?: string };
+  };
+  const commandId = parsed.Command?.CommandId?.trim();
+  if (!commandId) {
+    return {
+      exitCode: 1,
+      message: "AWS send-command did not return a command id.",
+    };
+  }
+
+  return commandId;
 }
 
 async function runAwsCli(
@@ -285,7 +271,7 @@ async function runAwsCli(
   logger.info("remote", "aws-cli", {
     name: remote.name,
     provider: remote.provider,
-    args: shellLines(args),
+    args: args.join("\n"),
   });
 
   const child = spawn("aws", args, {

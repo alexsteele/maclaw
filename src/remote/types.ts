@@ -6,7 +6,8 @@
  */
 import type { spawn } from "node:child_process";
 import type { MaclawClient } from "./client.js";
-import type { RemoteConfig } from "../server-config.js";
+import type { ProjectConfig } from "../config.js";
+import type { EditableServerConfig, RemoteConfig } from "../server-config.js";
 
 export type RemoteActionResult = {
   exitCode: number;
@@ -21,6 +22,22 @@ export type RemoteConnectOptions = {
   fetchFn?: typeof fetch;
   spawnFn?: typeof spawn;
   startupDelayMs?: number;
+};
+
+export type RemoteBootstrapOptions = {
+  installMarker?: string;
+  nodeMajor?: number;
+  projectConfig?: Partial<ProjectConfig>;
+  repoUrl?: string;
+  runtimeDir?: string;
+  serverHomeDir?: string;
+  workspace?: string;
+};
+
+export type RemoteInitOptions = {
+  bootstrap?: RemoteBootstrapOptions;
+  project: ProjectConfig;
+  server?: EditableServerConfig;
 };
 
 /**
@@ -63,12 +80,12 @@ export type Remote = {
    * Prepare the remote so maclaw can run there, for example by checking
    * prerequisites, installing dependencies, and building the workspace.
    */
-  bootstrap(): Promise<RemoteActionResult>;
+  bootstrap(options?: RemoteInitOptions): Promise<RemoteActionResult>;
   /**
    * Start the remote maclaw runtime, typically the API-only server used by
    * teleport.
    */
-  start(): Promise<RemoteActionResult>;
+  start(options?: RemoteInitOptions): Promise<RemoteActionResult>;
   /**
    * Connect to the remote runtime and return a ready-to-use maclaw client.
    */
@@ -76,7 +93,7 @@ export type Remote = {
   /**
    * Stop the remote maclaw runtime when the provider supports it.
    */
-  stop(): Promise<RemoteActionResult>;
+  stop(options?: RemoteInitOptions): Promise<RemoteActionResult>;
 };
 
 /**

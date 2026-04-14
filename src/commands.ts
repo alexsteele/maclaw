@@ -240,6 +240,8 @@ export const remoteHelpText = [
   "  /remote list             List configured remotes",
   "  /remote show <name>      Show one remote config",
   "  /remote bootstrap <name> Bootstrap one remote",
+  "  /remote start <name>     Start one remote server",
+  "  /remote stop <name>      Stop one remote server",
   "  /remote rm <name>        Delete one remote config",
   "  /remote create           Create a remote interactively when supported",
   "  /remote create <json>    Save one remote config from JSON",
@@ -1753,7 +1755,7 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
   return teleportHelpText;
 };
 
-const handleRemoteCommand: CommandHandler = async (_harness, input) => {
+const handleRemoteCommand: CommandHandler = async (harness, input) => {
   if (input === "/remote" || input === "/remote help") {
     return remoteHelpText;
   }
@@ -1786,8 +1788,47 @@ const handleRemoteCommand: CommandHandler = async (_harness, input) => {
       return `remote not found: ${name}`;
     }
 
-    const result = await createRemote(remoteConfig).bootstrap();
+    const result = await createRemote(remoteConfig).bootstrap({
+      project: harness.config,
+      server: serverConfig,
+    });
     return formatRemoteActionResult("bootstrap", name, result);
+  }
+
+  if (input.startsWith("/remote start ")) {
+    const name = input.slice("/remote start ".length).trim();
+    if (!name) {
+      return "Usage: /remote start <name>";
+    }
+
+    const remoteConfig = remotes.find((entry) => entry.name === name);
+    if (!remoteConfig) {
+      return `remote not found: ${name}`;
+    }
+
+    const result = await createRemote(remoteConfig).start({
+      project: harness.config,
+      server: serverConfig,
+    });
+    return formatRemoteActionResult("start", name, result);
+  }
+
+  if (input.startsWith("/remote stop ")) {
+    const name = input.slice("/remote stop ".length).trim();
+    if (!name) {
+      return "Usage: /remote stop <name>";
+    }
+
+    const remoteConfig = remotes.find((entry) => entry.name === name);
+    if (!remoteConfig) {
+      return `remote not found: ${name}`;
+    }
+
+    const result = await createRemote(remoteConfig).stop({
+      project: harness.config,
+      server: serverConfig,
+    });
+    return formatRemoteActionResult("stop", name, result);
   }
 
   if (input.startsWith("/remote rm ")) {
