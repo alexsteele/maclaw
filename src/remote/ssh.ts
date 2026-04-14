@@ -12,7 +12,11 @@ import {
   type RemoteConfig,
   type SshConfig,
 } from "../server-config.js";
-import { DEFAULT_REMOTE_REPO_URL, DEFAULT_REMOTE_WORKSPACE } from "./constants.js";
+import {
+  DEFAULT_REMOTE_INSTALL_MARKER,
+  DEFAULT_REMOTE_REPO_URL,
+  DEFAULT_REMOTE_WORKSPACE,
+} from "./constants.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
@@ -28,11 +32,15 @@ import type {
 function buildSshBootstrapCommand(): string {
   return shellLines([
     "set -e",
+    `mkdir -p ${DEFAULT_REMOTE_WORKSPACE}`,
+    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
+    `if [ -f package.json ] && [ -f ${DEFAULT_REMOTE_INSTALL_MARKER} ]; then`,
+    `  echo 'maclaw already installed in ${DEFAULT_REMOTE_WORKSPACE}'`,
+    "  exit 0",
+    "fi",
     "command -v node >/dev/null 2>&1 || { echo 'node is required'; exit 1; }",
     "command -v npm >/dev/null 2>&1 || { echo 'npm is required'; exit 1; }",
     "command -v git >/dev/null 2>&1 || { echo 'git is required'; exit 1; }",
-    `mkdir -p ${DEFAULT_REMOTE_WORKSPACE}`,
-    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
     "if [ ! -f package.json ]; then",
     "  if [ -n \"$(ls -A . 2>/dev/null)\" ]; then",
     `    echo 'workspace is not a maclaw repo and is not empty: ${DEFAULT_REMOTE_WORKSPACE}'`,

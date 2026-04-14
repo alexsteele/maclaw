@@ -15,7 +15,7 @@ import {
   validateRemoteConfig,
 } from "./server-config.js";
 import { readJsonFile, writeJsonFile } from "./fs-utils.js";
-import { summarizeRemote } from "./remote/index.js";
+import { createRemote, summarizeRemote } from "./remote/index.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -239,6 +239,7 @@ export const remoteHelpText = [
   "  /remote                  Show remote help",
   "  /remote list             List configured remotes",
   "  /remote show <name>      Show one remote config",
+  "  /remote bootstrap <name> Bootstrap one remote",
   "  /remote rm <name>        Delete one remote config",
   "  /remote create           Create a remote interactively when supported",
   "  /remote create <json>    Save one remote config from JSON",
@@ -284,6 +285,19 @@ const renderRemoteList = (remotes: RemoteConfig[]): string =>
   remotes.length === 0
     ? "No remotes configured."
     : remotes.map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`).join("\n");
+
+const formatRemoteActionResult = (
+  action: string,
+  remoteName: string,
+  result: { exitCode: number; message: string },
+): string => {
+  const statusLine =
+    result.exitCode === 0
+      ? `${action} complete: ${remoteName}`
+      : `${action} failed: ${remoteName} (exit ${result.exitCode})`;
+  const message = result.message.trim();
+  return message ? `${statusLine}\n${message}` : statusLine;
+};
 
 const parseRemoteCreateJson = (value: string): RemoteConfig | string => {
   let parsed: unknown;
@@ -1759,6 +1773,21 @@ const handleRemoteCommand: CommandHandler = async (_harness, input) => {
 
     const remote = remotes.find((entry) => entry.name === name);
     return remote ? renderRemoteInfo(remote) : `remote not found: ${name}`;
+  }
+
+  if (input.startsWith("/remote bootstrap ")) {
+    const name = input.slice("/remote bootstrap ".length).trim();
+    if (!name) {
+      return "Usage: /remote bootstrap <name>";
+    }
+
+    const remoteConfig = remotes.find((entry) => entry.name === name);
+    if (!remoteConfig) {
+      return `remote not found: ${name}`;
+    }
+
+    const result = await createRemote(remoteConfig).bootstrap();
+    return formatRemoteActionResult("bootstrap", name, result);
   }
 
   if (input.startsWith("/remote rm ")) {

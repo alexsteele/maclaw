@@ -4,12 +4,20 @@
  * This keeps EC2 provider behavior in its own file while reusing the existing
  * tunnel and HTTP client helpers from `src/remote`.
  */
+import { spawn } from "node:child_process";
+import { logger } from "../logger.js";
 import {
   defaultServerPort,
   defaultTeleportForwardPort,
   type Ec2Config,
   type RemoteConfig,
 } from "../server-config.js";
+import {
+  DEFAULT_REMOTE_INSTALL_MARKER,
+  DEFAULT_REMOTE_NODE_MAJOR,
+  DEFAULT_REMOTE_REPO_URL,
+  DEFAULT_REMOTE_WORKSPACE,
+} from "./constants.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
@@ -85,7 +93,7 @@ export function createEc2Remote(config: RemoteConfig): Remote {
   return {
     config,
     async bootstrap() {
-      return unsupported("bootstrap");
+      return await runEc2Bootstrap(this.config);
     },
     async start() {
       return unsupported("start");
@@ -109,6 +117,204 @@ function unsupported(action: string): RemoteActionResult {
     exitCode: 64,
     message: `${action} is not implemented for aws-ec2 remotes yet.`,
   };
+}
+
+function shellLines(lines: string[]): string {
+  return lines.join("\n");
+}
+
+function buildEc2BootstrapCommands(): string[] {
+  return [
+    "set -e",
+    `mkdir -p ${DEFAULT_REMOTE_WORKSPACE}`,
+    `cd ${DEFAULT_REMOTE_WORKSPACE}`,
+    `if [ -f package.json ] && [ -f ${DEFAULT_REMOTE_INSTALL_MARKER} ]; then`,
+    `  echo 'maclaw already installed in ${DEFAULT_REMOTE_WORKSPACE}'`,
+    "  exit 0",
+    "fi",
+    "sudo dnf update -y",
+    "sudo dnf install -y git tar gzip",
+    `if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q '^v${DEFAULT_REMOTE_NODE_MAJOR}\\.'; then`,
+    `  curl -fsSL https://rpm.nodesource.com/setup_${DEFAULT_REMOTE_NODE_MAJOR}.x | sudo bash -`,
+    "  sudo dnf install -y nodejs",
+    "fi",
+    "if [ ! -f package.json ]; then",
+    "  if [ -n \"$(ls -A . 2>/dev/null)\" ]; then",
+    `    echo 'workspace is not a maclaw repo and is not empty: ${DEFAULT_REMOTE_WORKSPACE}'`,
+    "    exit 2",
+    "  fi",
+    `  git clone ${DEFAULT_REMOTE_REPO_URL} .`,
+    "fi",
+    "npm install",
+    "npm run build",
+  ];
+}
+
+async function runEc2Bootstrap(remote: RemoteConfig): Promise<RemoteActionResult> {
+  const metadata = remote.metadata as Ec2Config;
+  const commandId = await sendEc2ShellCommand(
+    remote,
+    buildEc2BootstrapCommands(),
+    `maclaw bootstrap ${remote.name}`,
+  );
+  if (typeof commandId !== "string") {
+    return commandId;
+  }
+
+  return await waitForEc2Command(remote, commandId);
+}
+
+async function sendEc2ShellCommand(
+  remote: RemoteConfig,
+  commands: string[],
+  comment: string,
+): Promise<string | RemoteActionResult> {
+  const metadata = remote.metadata as Ec2Config;
+  const result = await runAwsCli(remote, [
+    "ssm",
+    "send-command",
+    "--region",
+    metadata.region,
+    "--instance-ids",
+    metadata.instanceId,
+    "--document-name",
+    "AWS-RunShellScript",
+    "--comment",
+    comment,
+    "--parameters",
+    JSON.stringify({ commands }),
+    "--output",
+    "json",
+  ]);
+  if (result.exitCode !== 0) {
+    return {
+      exitCode: result.exitCode,
+      message: [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n"),
+    };
+  }
+
+  const parsed = JSON.parse(result.stdout) as {
+    Command?: { CommandId?: string };
+  };
+  const commandId = parsed.Command?.CommandId?.trim();
+  if (!commandId) {
+    return {
+      exitCode: 1,
+      message: "AWS send-command did not return a command id.",
+    };
+  }
+
+  return commandId;
+}
+
+async function waitForEc2Command(
+  remote: RemoteConfig,
+  commandId: string,
+): Promise<RemoteActionResult> {
+  const metadata = remote.metadata as Ec2Config;
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const result = await runAwsCli(remote, [
+      "ssm",
+      "get-command-invocation",
+      "--region",
+      metadata.region,
+      "--instance-id",
+      metadata.instanceId,
+      "--command-id",
+      commandId,
+      "--output",
+      "json",
+    ]);
+
+    if (result.exitCode !== 0) {
+      const message = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
+      if (/InvocationDoesNotExist/u.test(message) && attempt < 5) {
+        await sleep(1000);
+        continue;
+      }
+
+      return {
+        exitCode: result.exitCode,
+        message,
+      };
+    }
+
+    const parsed = JSON.parse(result.stdout) as {
+      ResponseCode?: number;
+      StandardErrorContent?: string;
+      StandardOutputContent?: string;
+      Status?: string;
+      StatusDetails?: string;
+    };
+    const status = parsed.Status ?? parsed.StatusDetails ?? "Unknown";
+
+    if (status === "Pending" || status === "InProgress" || status === "Delayed") {
+      await sleep(1000);
+      continue;
+    }
+
+    const output = [parsed.StandardOutputContent, parsed.StandardErrorContent]
+      .filter((value): value is string => Boolean(value && value.trim().length > 0))
+      .map((value) => value.trim())
+      .join("\n");
+
+    if (status === "Success") {
+      return {
+        exitCode: 0,
+        message: output,
+      };
+    }
+
+    return {
+      exitCode: parsed.ResponseCode && parsed.ResponseCode >= 0 ? parsed.ResponseCode : 1,
+      message: [status, output].filter(Boolean).join("\n"),
+    };
+  }
+
+  return {
+    exitCode: 124,
+    message: `Timed out waiting for EC2 bootstrap command ${commandId}.`,
+  };
+}
+
+async function runAwsCli(
+  remote: RemoteConfig,
+  args: string[],
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  logger.info("remote", "aws-cli", {
+    name: remote.name,
+    provider: remote.provider,
+    args: shellLines(args),
+  });
+
+  const child = spawn("aws", args, {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk: Buffer | string) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    stderr += chunk.toString();
+  });
+
+  return await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      resolve({
+        exitCode: code ?? (signal ? 1 : 0),
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function createEc2Connection(

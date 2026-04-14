@@ -153,8 +153,13 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
       harness,
       '/remote create {"name":"aws-dev","provider":"aws-ec2","metadata":{"region":"us-west-2","instanceId":"i-0d4a7b8d1b15e49c4"},"remoteServerPort":4000,"localForwardPort":4101}',
     );
+    const createHttpReply = await dispatchCommand(
+      harness,
+      '/remote create {"name":"local-api","provider":"http","metadata":{"url":"http://127.0.0.1:4100"}}',
+    );
     const listReply = await dispatchCommand(harness, "/remote list");
     const showReply = await dispatchCommand(harness, "/remote show aws-dev");
+    const bootstrapReply = await dispatchCommand(harness, "/remote bootstrap local-api");
     const deleteReply = await dispatchCommand(harness, "/remote rm gpu-box");
     const missingReply = await dispatchCommand(harness, "/remote show gpu-box");
 
@@ -164,20 +169,25 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
     );
     assert.equal(createSshReply, "saved remote: gpu-box");
     assert.equal(createAwsReply, "saved remote: aws-dev");
+    assert.equal(createHttpReply, "saved remote: local-api");
     assert.equal(
       listReply,
-      "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2)",
+      "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2)\n- local-api: http://127.0.0.1:4100",
     );
     assert.match(showReply, /"name": "aws-dev"/u);
     assert.match(showReply, /"provider": "aws-ec2"/u);
     assert.match(showReply, /"instanceId": "i-0d4a7b8d1b15e49c4"/u);
+    assert.equal(
+      bootstrapReply,
+      "bootstrap failed: local-api (exit 64)\nbootstrap is not implemented for http remotes.",
+    );
     assert.equal(deleteReply, "deleted remote: gpu-box");
     assert.equal(missingReply, "remote not found: gpu-box");
 
     const savedConfig = JSON.parse(
       await readFile(path.join(maclawHome, "server.json"), "utf8"),
     ) as { remotes?: Array<{ name: string }> };
-    assert.deepEqual(savedConfig.remotes?.map((remote) => remote.name), ["aws-dev"]);
+    assert.deepEqual(savedConfig.remotes?.map((remote) => remote.name), ["aws-dev", "local-api"]);
   } finally {
     if (originalMaclawHome === undefined) {
       delete process.env.MACLAW_HOME;
