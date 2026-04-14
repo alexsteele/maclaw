@@ -12,11 +12,12 @@ Derived from local git history.
 | 2026-04-10 |        10 |                          1.8 | +2,107 / -589   |
 | 2026-04-11 |        24 |                          6.3 | +5,491 / -323   |
 | 2026-04-12 |         6 |                          5.2 | +1,776 / -779   |
+| 2026-04-13 |         1 |                          0.0 | +1,119 / -693   |
 
 Current code size:
 
-- `src/`: `15,516` lines
-- `test/`: `7,331` lines
+- `src/`: `15,841` lines
+- `test/`: `7,432` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -112,3 +113,21 @@ Current code size:
 - Proved out SSH remote access with a concrete executor and bootstrap recipe.
 - Continued simplifying teleport types and boundaries around runtime, tunnel,
   and remote access.
+
+## 2026-04-13 Notes
+
+- Split provider-specific SSH and EC2 connection behavior out of teleport and
+  into `src/remote`.
+- Added an `http` remote type for direct HTTP access, with a warning that plain
+  HTTP should generally be used locally or through a secure tunnel.
+- Simplified the remote/teleport boundary so teleport depends on remote, not
+  the other way around.
+- Reworked remote connection flow so `remote.connect()` now returns a
+  ready-to-use maclaw client plus cleanup metadata.
+- Simplified naming across the stack: `RemoteConnection`,
+  `MaclawClient`, and `HttpMaclawClient`.
+- Moved the shared HTTP client into `src/remote/client.ts`.
+- Cleaned up REPL teleport prompt rendering to use a shorter remote-style
+  prompt header.
+- Improved SSH bootstrap so an empty remote workspace clones the maclaw repo
+  automatically before installing and building.
