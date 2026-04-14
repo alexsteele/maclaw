@@ -290,6 +290,50 @@ test("loadServerConfig applies defaults for AWS teleport remotes", async () => {
   }
 });
 
+test("loadServerConfig accepts named HTTP remotes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-http-remotes-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+          remotes: [
+            {
+              name: "local-api",
+              provider: "http",
+              metadata: {
+                url: "http://127.0.0.1:4100",
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadServerConfig(configPath);
+    assert.deepEqual(config.remotes, [
+      {
+        name: "local-api",
+        provider: "http",
+        metadata: {
+          url: "http://127.0.0.1:4100",
+        },
+      },
+    ]);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("loadServerSecrets reads WhatsApp secrets and lets env override file values", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-secrets-"));
 

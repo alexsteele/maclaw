@@ -6,6 +6,7 @@
  */
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
+import { resolveRemoteTarget, type RemoteConnection } from "../remote/index.js";
 import type { ServerConfig } from "../server-config.js";
 import type {
   TeleportOptions,
@@ -13,18 +14,8 @@ import type {
   TeleportTunnelOptions,
 } from "./options.js";
 import {
-  buildTeleportOriginMetadata,
-  createDirectTransport,
-  createTransport,
-  findTeleportRemote,
-  isTeleportUrl,
-  type TeleportTransport,
-} from "./transport.js";
-import {
-  RemoteRuntimeClient,
   type RemoteCommandRequest,
   type RemoteCommandResponse,
-  type TeleportRuntime,
 } from "./runtime.js";
 
 export type TeleportTarget = {
@@ -34,15 +25,11 @@ export type TeleportTarget = {
 };
 
 type TeleportSessionState = {
-  runtime?: TeleportRuntime;
-  transport?: TeleportTransport;
+  client?: RemoteConnection;
 };
 
 const defaultSleep = async (ms: number): Promise<void> =>
   await new Promise((resolve) => setTimeout(resolve, ms));
-
-const getFetchFn = (options: TeleportRuntimeOptions): typeof fetch =>
-  options.fetchFn ?? fetch;
 
 const getSleep = (
   options: TeleportRuntimeOptions,
@@ -60,7 +47,8 @@ const isRetryableError = (error: unknown): boolean => {
 };
 
 /**
- * Teleport session that can talk to either a direct URL or a named SSH remote.
+ * Teleport session that can talk to either a raw HTTP target or a named
+ * configured remote.
  *
  * One-shot teleport commands use this class internally today. It also gives us
  * a natural place to hang a future long-lived remote REPL or portal session.
@@ -81,60 +69,45 @@ export class TeleportSession {
     this.options = options;
   }
 
-  private createRuntime = (baseUrl: string): TeleportRuntime =>
-    new RemoteRuntimeClient(baseUrl, {
-      fetchFn: getFetchFn(this.options.runtime ?? {}),
-    });
-
-  private createTransport(): TeleportTransport {
-    if (isTeleportUrl(this.target)) {
-      return createDirectTransport(this.target, this.createRuntime);
-    }
-
-    const remote = findTeleportRemote(this.config ?? {}, this.target);
+  private async connect(): Promise<RemoteConnection> {
+    const remote = resolveRemoteTarget(this.target, this.config);
     if (!remote) {
       throw new Error(`Unknown remote: ${this.target}`);
     }
 
-    return createTransport(
-      this.target,
-      remote,
-      {
-        spawnFn: getSpawnFn(this.options.tunnel ?? {}),
-        startupDelayMs: getStartupDelayMs(this.options.tunnel ?? {}),
-      },
-      this.createRuntime,
-    );
+    return await remote.connect({
+      fetchFn: this.options.runtime?.fetchFn,
+      spawnFn: getSpawnFn(this.options.tunnel ?? {}),
+      startupDelayMs: getStartupDelayMs(this.options.tunnel ?? {}),
+    });
   }
 
-  async start(): Promise<TeleportRuntime> {
-    if (this.state.runtime) {
-      return this.state.runtime;
+  async start(): Promise<RemoteConnection> {
+    if (this.state.client) {
+      return this.state.client;
     }
 
-    this.state.transport = this.createTransport();
-    this.state.runtime = await this.state.transport.start();
+    this.state.client = await this.connect();
     logger.info("teleport", "connected", {
       target: this.target,
-      mode: this.state.transport.getMode(),
-      remote: this.state.transport.describe(),
+      mode: this.state.client.getMode(),
+      remote: this.state.client.describe(),
     });
-    return this.state.runtime;
+    return this.state.client;
   }
 
   async stop(): Promise<void> {
     const target = this.target;
-    this.state.runtime = undefined;
-    if (!this.state.transport) {
+    if (!this.state.client) {
       logger.info("teleport", "disconnected", {
         target,
       });
       return;
     }
 
-    const transport = this.state.transport;
-    this.state.transport = undefined;
-    await transport.stop();
+    const client = this.state.client;
+    this.state.client = undefined;
+    await client.close();
     logger.info("teleport", "disconnected", {
       target,
     });
@@ -153,8 +126,7 @@ export class TeleportSession {
           ?? (request.project ? `teleport:${request.project}` : undefined),
         threadId: request.origin?.threadId,
         metadata: {
-          ...(this.state.transport?.buildOriginMetadata(this.target)
-            ?? buildTeleportOriginMetadata(this.target, this.config)),
+          ...(this.state.client?.buildOriginMetadata(this.target) ?? {}),
           ...(request.origin?.metadata ?? {}),
         },
       },

@@ -60,7 +60,19 @@ export const formatReplPrompt = (
 ): string =>
   !target
     ? "> "
-    : `[teleport ${target.target}${target.project ? ` ${target.project}` : ""}:${target.chatId}] > `;
+    : `${formatTeleportPromptHeader(target.target)}> `;
+
+const formatTeleportPromptHeader = (target: string): string => {
+  if (/^https?:\/\//u.test(target)) {
+    try {
+      return new URL(target).hostname;
+    } catch {
+      return target;
+    }
+  }
+
+  return target;
+};
 
 export const wrapReplLine = (line: string, width: number): string => {
   if (line.length <= width || line.trim().length === 0) {

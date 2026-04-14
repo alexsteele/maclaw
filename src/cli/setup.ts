@@ -221,6 +221,12 @@ class SetupPrompter {
     return answer || defaultValue || "";
   }
 
+  async askInt(prompt: string, defaultValue: number): Promise<number> {
+    const answer = await this.askLine(prompt, String(defaultValue));
+    const parsed = Number.parseInt(answer, 10);
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+  }
+
   async askYesNo(prompt: string, defaultValue = true): Promise<boolean> {
     const defaultLabel = defaultValue ? "yes" : "no";
     while (true) {

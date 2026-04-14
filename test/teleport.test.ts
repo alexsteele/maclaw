@@ -8,7 +8,7 @@ import { initProjectConfig } from "../src/config.js";
 import { MaclawServer } from "../src/server.js";
 import type { RemoteCommandRequest, RemoteCommandResponse } from "../src/teleport.js";
 import {
-  RemoteRuntimeClient,
+  HttpMaclawClient,
   TeleportController,
   TeleportSession,
   sendTeleportCommand,
@@ -81,7 +81,7 @@ test("server handles remote commands directly when the portal UI is disabled", a
   }
 });
 
-test("RemoteRuntimeClient sends structured commands to /api/command", async () => {
+test("HttpMaclawClient sends structured commands to /api/command", async () => {
   const requests: Array<{
     input: string | URL | Request;
     init?: RequestInit;
@@ -109,7 +109,7 @@ test("RemoteRuntimeClient sends structured commands to /api/command", async () =
   };
 
   try {
-    const client = new RemoteRuntimeClient("http://127.0.0.1:9000/");
+    const client = new HttpMaclawClient("http://127.0.0.1:9000/");
     const request: RemoteCommandRequest = {
       project: "home",
       chatId: "remote-chat",
@@ -229,6 +229,55 @@ test("sendTeleportCommand uses a configured SSH remote", async () => {
       ],
     },
   ]);
+});
+
+test("sendTeleportCommand uses a raw HTTP target through the http remote path", async () => {
+  const requests: Array<{
+    input: string | URL | Request;
+    init?: RequestInit;
+  }> = [];
+
+  const response = await sendTeleportCommand(
+    "http://127.0.0.1:4100",
+    {
+      project: "home",
+      chatId: "remote-chat",
+      text: "/project",
+    },
+    undefined,
+    {
+      runtime: {
+        fetchFn: async (input, init) => {
+          requests.push({ input, init });
+          return new Response(
+            JSON.stringify({
+              project: "home",
+              chatId: "remote-chat",
+              reply: "ok",
+              handledAsCommand: true,
+            } satisfies RemoteCommandResponse),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+              },
+            },
+          );
+        },
+        sleep: async () => {},
+      },
+    },
+  );
+
+  assert.deepEqual(response, {
+    project: "home",
+    chatId: "remote-chat",
+    reply: "ok",
+    handledAsCommand: true,
+  });
+  assert.equal(String(requests[0]?.input), "http://127.0.0.1:4100/api/command");
+  assert.match(String(requests[0]?.init?.body), /"teleportMode":"http"/u);
+  assert.match(String(requests[0]?.init?.body), /"teleportHost":"127\.0\.0\.1"/u);
 });
 
 test("sendTeleportCommand uses a configured AWS remote", async () => {

@@ -13,12 +13,6 @@ export type ServerProjectConfig = {
   name: string;
 };
 
-/**
- * Teleport remotes
- */
-
-export type TeleportProvider = "aws-ec2" | "ssh";
-
 export type SshConfig = {
   host: string;
   port?: number;
@@ -30,12 +24,16 @@ export type Ec2Config = {
   region: string;
 };
 
+export type HttpConfig = {
+  url: string;
+};
+
 export type RemoteConfig = {
   name: string;
-  provider: TeleportProvider;
+  provider: string;
   localForwardPort?: number;
   remoteServerPort?: number;
-  metadata: Ec2Config | SshConfig;
+  metadata: Ec2Config | HttpConfig | SshConfig;
 };
 
 export type TeleportRemoteConfig = RemoteConfig;
@@ -178,8 +176,12 @@ export const validateRemoteConfig = (remote: unknown): string | undefined => {
     return "Remote config must include a non-empty name.";
   }
 
-  if (candidate.provider !== "ssh" && candidate.provider !== "aws-ec2") {
-    return "Remote config provider must be 'ssh' or 'aws-ec2'.";
+  if (
+    candidate.provider !== "http"
+    && candidate.provider !== "ssh"
+    && candidate.provider !== "aws-ec2"
+  ) {
+    return "Remote config provider must be 'http', 'ssh', or 'aws-ec2'.";
   }
 
   if (
@@ -216,6 +218,21 @@ const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {
       },
       remoteServerPort: toPositiveInt(remote.remoteServerPort, defaultServerPort()),
       localForwardPort: toPositiveInt(remote.localForwardPort, defaultTeleportForwardPort()),
+    };
+  }
+
+  if (remote.provider === "http") {
+    const metadata = remote.metadata as HttpConfig;
+    if (typeof metadata.url !== "string" || metadata.url.trim().length === 0) {
+      throw new Error("Invalid HTTP remote metadata");
+    }
+
+    return {
+      name: remote.name,
+      provider: "http",
+      metadata: {
+        url: metadata.url,
+      },
     };
   }
 

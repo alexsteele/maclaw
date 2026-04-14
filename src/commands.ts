@@ -14,8 +14,8 @@ import {
   type TeleportRemoteConfig,
   validateRemoteConfig,
 } from "./server-config.js";
-import { summarizeTeleportRemote } from "./teleport.js";
 import { readJsonFile, writeJsonFile } from "./fs-utils.js";
+import { summarizeRemote } from "./remote/index.js";
 import {
   editableProjectConfigKeys,
   parseProjectConfigValue,
@@ -283,7 +283,7 @@ const renderRemoteInfo = (remote: RemoteConfig): string =>
 const renderRemoteList = (remotes: RemoteConfig[]): string =>
   remotes.length === 0
     ? "No remotes configured."
-    : remotes.map((remote) => `- ${remote.name}: ${summarizeTeleportRemote(remote)}`).join("\n");
+    : remotes.map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`).join("\n");
 
 const parseRemoteCreateJson = (value: string): RemoteConfig | string => {
   let parsed: unknown;
@@ -1671,7 +1671,7 @@ const renderTeleportRemotes = (remotes: ReturnType<TeleportControl["listRemotes"
   remotes.length === 0
     ? "No remotes configured."
     : remotes
-      .map((remote) => `- ${remote.name}: ${summarizeTeleportRemote(remote)}`)
+      .map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`)
       .join("\n");
 
 const handleTeleportCommand: CommandHandler = async (harness, input, options) => {

@@ -27,7 +27,15 @@ test("formatReplPrompt shows teleport target when attached", () => {
       project: "home",
       chatId: "default",
     }),
-    "[teleport local-box home:default] > ",
+    "local-box> ",
+  );
+  assert.equal(
+    formatReplPrompt({
+      target: "http://gpu.example.com:4001",
+      project: "home",
+      chatId: "default",
+    }),
+    "gpu.example.com> ",
   );
 });
 

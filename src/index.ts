@@ -3,9 +3,10 @@
 import { runConfigCommand } from "./cli/config.js";
 import { runRepl } from "./cli/repl.js";
 import { normalizeSetupSection, runSetup } from "./cli/setup.js";
+import { isHttpRemoteTarget } from "./remote/index.js";
 import { loadServerConfig } from "./server-config.js";
 import { MaclawServer } from "./server.js";
-import { isTeleportUrl, sendTeleportCommand } from "./teleport.js";
+import { sendTeleportCommand } from "./teleport.js";
 
 const cliHelpText = [
   "Usage: maclaw [command]",
@@ -111,7 +112,7 @@ const runTeleportCommand = async (args: string[]): Promise<void> => {
   }
 
   try {
-    const serverConfig = isTeleportUrl(target) ? undefined : loadServerConfig();
+    const serverConfig = isHttpRemoteTarget(target) ? undefined : loadServerConfig();
     const result = await sendTeleportCommand(
       target,
       {
