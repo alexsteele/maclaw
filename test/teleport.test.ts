@@ -6,9 +6,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import { MaclawServer } from "../src/server.js";
-import type { RemoteCommandRequest, RemoteCommandResponse } from "../src/teleport.js";
+import type { RemoteCommandRequest, RemoteCommandResponse } from "../src/remote/client.js";
+import { HttpMaclawClient } from "../src/remote/client.js";
 import {
-  HttpMaclawClient,
   TeleportController,
   TeleportSession,
   sendTeleportCommand,

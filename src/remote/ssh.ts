@@ -1,8 +1,8 @@
 /**
  * SSH-backed remote lifecycle implementation.
  *
- * This module proves out the remote-bound interface shape for setup,
- * bootstrap/start, and teleport transport creation over SSH.
+ * This module keeps the public SSH recipe and remote near the top, with shell
+ * and tunnel details below.
  */
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
@@ -13,8 +13,7 @@ import {
   type SshConfig,
 } from "../server-config.js";
 import { DEFAULT_REMOTE_REPO_URL, DEFAULT_REMOTE_WORKSPACE } from "./constants.js";
-import { HttpMaclawClient } from "./client.js";
-import { startTunnelProcess, stopTunnelProcess } from "./tunnel.js";
+import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
   RemoteActionResult,
@@ -25,15 +24,9 @@ import type {
   RemoteSetupResult,
 } from "./types.js";
 
-const shellLines = (lines: string[]): string => lines.join("\n");
 
-const unsupportedSshAction = (action: string): RemoteActionResult => ({
-  exitCode: 64,
-  message: `${action} only supports ssh remotes.`,
-});
-
-const buildSshBootstrapCommand = (): string =>
-  shellLines([
+function buildSshBootstrapCommand(): string {
+  return shellLines([
     "set -e",
     "command -v node >/dev/null 2>&1 || { echo 'node is required'; exit 1; }",
     "command -v npm >/dev/null 2>&1 || { echo 'npm is required'; exit 1; }",
@@ -50,135 +43,17 @@ const buildSshBootstrapCommand = (): string =>
     "npm install",
     "npm run build",
   ]);
+}
 
-const buildSshStartCommand = (remote: RemoteConfig): string =>
-  shellLines([
+function buildSshStartCommand(remote: RemoteConfig): string {
+  return shellLines([
     "set -e",
     `cd ${DEFAULT_REMOTE_WORKSPACE}`,
     "mkdir -p .maclaw",
     `nohup npm start -- server --api-only --port ${remote.remoteServerPort ?? defaultServerPort()} >> .maclaw/server.log 2>&1 < /dev/null &`,
     `echo 'started maclaw server on port ${remote.remoteServerPort ?? defaultServerPort()}'`,
   ]);
-
-const sshDestination = (remote: RemoteConfig): string => {
-  const metadata = remote.metadata as SshConfig;
-  return metadata.user ? `${metadata.user}@${metadata.host}` : metadata.host;
-};
-
-const sshArgs = (remote: RemoteConfig, command: string): string[] => {
-  const metadata = remote.metadata as SshConfig;
-  return [
-    ...(metadata.port ? ["-p", String(metadata.port)] : []),
-    sshDestination(remote),
-    "sh",
-    "-lc",
-    command,
-  ];
-};
-
-const createSshShell = (remote: RemoteConfig) => ({
-  async run(command: string): Promise<RemoteActionResult> {
-    logger.info("remote", "run", {
-      name: remote.name,
-      provider: remote.provider,
-    });
-
-    const child = spawn("ssh", sshArgs(remote, command), {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
-    });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
-    });
-
-    return await new Promise<RemoteActionResult>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) => {
-        const exitCode = code ?? (signal ? 1 : 0);
-        const message = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").trim();
-        resolve({
-          exitCode,
-          message,
-        });
-      });
-    });
-  },
-});
-
-const runSshCommand = async (
-  remote: RemoteConfig,
-  command: string,
-): Promise<RemoteActionResult> =>
-  await createSshShell(remote).run(command);
-
-const getRemoteServerPort = (remote: RemoteConfig): number =>
-  remote.remoteServerPort ?? defaultServerPort();
-
-const getLocalForwardPort = (remote: RemoteConfig): number =>
-  remote.localForwardPort ?? getRemoteServerPort(remote);
-
-export const summarizeSshRemote = (remote: RemoteConfig): string => {
-  const metadata = remote.metadata as SshConfig;
-  return `${metadata.host}${metadata.port ? `:${metadata.port}` : ""}`;
-};
-
-const buildSshOriginMetadata = (
-  target: string,
-  remote: RemoteConfig,
-): Record<string, string> => {
-  const metadata = remote.metadata as SshConfig;
-  return {
-    teleportMode: "ssh",
-    teleportTarget: target,
-    teleportRemote: remote.name,
-    teleportHost: metadata.host,
-  };
-};
-
-const createSshConnection = async (
-  target: string,
-  remote: RemoteConfig,
-  options: RemoteConnectOptions = {},
-): Promise<RemoteConnection> => {
-  const metadata = remote.metadata as SshConfig;
-  const args = [
-    "-o",
-    "ExitOnForwardFailure=yes",
-    "-N",
-    "-L",
-    `${getLocalForwardPort(remote)}:127.0.0.1:${getRemoteServerPort(remote)}`,
-    ...(metadata.port ? ["-p", String(metadata.port)] : []),
-    sshDestination(remote),
-  ];
-  const baseUrl = `http://127.0.0.1:${getLocalForwardPort(remote)}`;
-  const description = `${remote.name} (${sshDestination(remote)})`;
-  const tunnel = await startTunnelProcess("ssh", args, description, options);
-  const client = new HttpMaclawClient(baseUrl, {
-    fetchFn: options.fetchFn,
-  });
-  let openTunnel: typeof tunnel | undefined = tunnel;
-
-  return {
-    buildOriginMetadata: () => buildSshOriginMetadata(target, remote),
-    close: async () => {
-      if (!openTunnel) {
-        return;
-      }
-
-      const activeTunnel = openTunnel;
-      openTunnel = undefined;
-      await stopTunnelProcess(activeTunnel);
-    },
-    describe: () => description,
-    getMode: () => "ssh",
-    sendCommand: async (request) => await client.sendCommand(request),
-  };
-};
+}
 
 /**
  * Registered SSH remote recipe.
@@ -244,29 +119,157 @@ export const sshRemoteRecipe: RemoteRecipe = {
 /**
  * Concrete SSH remote that owns bootstrap/start and remote client creation.
  */
-export const createSshRemote = (config: RemoteConfig): Remote => ({
-  config,
-  async bootstrap() {
-    if (this.config.provider !== "ssh") {
-      return unsupportedSshAction("bootstrap");
-    }
+export function createSshRemote(config: RemoteConfig): Remote {
+  return {
+    config,
+    async bootstrap() {
+      if (this.config.provider !== "ssh") {
+        return unsupportedSshAction("bootstrap");
+      }
 
-    return await runSshCommand(this.config, buildSshBootstrapCommand());
-  },
-  async start() {
-    if (this.config.provider !== "ssh") {
-      return unsupportedSshAction("start");
-    }
+      return await runSshCommand(this.config, buildSshBootstrapCommand());
+    },
+    async start() {
+      if (this.config.provider !== "ssh") {
+        return unsupportedSshAction("start");
+      }
 
-    return await runSshCommand(this.config, buildSshStartCommand(this.config));
-  },
-  async connect(options: RemoteConnectOptions = {}) {
-    return await createSshConnection(this.config.name, this.config, options);
-  },
-  async stop() {
-    return {
-      exitCode: 64,
-      message: "stop is not implemented for ssh remotes yet.",
-    };
-  },
-});
+      return await runSshCommand(this.config, buildSshStartCommand(this.config));
+    },
+    async connect(options: RemoteConnectOptions = {}) {
+      return await createSshConnection(this.config.name, this.config, options);
+    },
+    async stop() {
+      return {
+        exitCode: 64,
+        message: "stop is not implemented for ssh remotes yet.",
+      };
+    },
+  };
+}
+
+export function summarizeSshRemote(remote: RemoteConfig): string {
+  const metadata = remote.metadata as SshConfig;
+  return `${metadata.host}${metadata.port ? `:${metadata.port}` : ""}`;
+}
+
+function unsupportedSshAction(action: string): RemoteActionResult {
+  return {
+    exitCode: 64,
+    message: `${action} only supports ssh remotes.`,
+  };
+}
+
+
+function shellLines(lines: string[]): string {
+  return lines.join("\n");
+}
+
+function createSshConnection(
+  target: string,
+  remote: RemoteConfig,
+  options: RemoteConnectOptions = {},
+): Promise<RemoteConnection> {
+  const metadata = remote.metadata as SshConfig;
+  const args = [
+    "-o",
+    "ExitOnForwardFailure=yes",
+    "-N",
+    "-L",
+    `${getLocalForwardPort(remote)}:127.0.0.1:${getRemoteServerPort(remote)}`,
+    ...(metadata.port ? ["-p", String(metadata.port)] : []),
+    sshDestination(remote),
+  ];
+  const baseUrl = `http://127.0.0.1:${getLocalForwardPort(remote)}`;
+  const description = `${remote.name} (${sshDestination(remote)})`;
+
+  return createTunnelConnection(
+    "ssh",
+    args,
+    baseUrl,
+    description,
+    () => buildSshOriginMetadata(target, remote),
+    "ssh",
+    options,
+  );
+}
+
+function buildSshOriginMetadata(
+  target: string,
+  remote: RemoteConfig,
+): Record<string, string> {
+  const metadata = remote.metadata as SshConfig;
+  return {
+    teleportMode: "ssh",
+    teleportTarget: target,
+    teleportRemote: remote.name,
+    teleportHost: metadata.host,
+  };
+}
+
+function sshDestination(remote: RemoteConfig): string {
+  const metadata = remote.metadata as SshConfig;
+  return metadata.user ? `${metadata.user}@${metadata.host}` : metadata.host;
+}
+
+function sshArgs(remote: RemoteConfig, command: string): string[] {
+  const metadata = remote.metadata as SshConfig;
+  return [
+    ...(metadata.port ? ["-p", String(metadata.port)] : []),
+    sshDestination(remote),
+    "sh",
+    "-lc",
+    command,
+  ];
+}
+
+function createSshShell(remote: RemoteConfig) {
+  return {
+    async run(command: string): Promise<RemoteActionResult> {
+      logger.info("remote", "run", {
+        name: remote.name,
+        provider: remote.provider,
+      });
+
+      const child = spawn("ssh", sshArgs(remote, command), {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (chunk: Buffer | string) => {
+        stdout += chunk.toString();
+      });
+      child.stderr?.on("data", (chunk: Buffer | string) => {
+        stderr += chunk.toString();
+      });
+
+      return await new Promise<RemoteActionResult>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => {
+          const exitCode = code ?? (signal ? 1 : 0);
+          const message = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").trim();
+          resolve({
+            exitCode,
+            message,
+          });
+        });
+      });
+    },
+  };
+}
+
+function runSshCommand(
+  remote: RemoteConfig,
+  command: string,
+): Promise<RemoteActionResult> {
+  return createSshShell(remote).run(command);
+}
+
+function getRemoteServerPort(remote: RemoteConfig): number {
+  return remote.remoteServerPort ?? defaultServerPort();
+}
+
+function getLocalForwardPort(remote: RemoteConfig): number {
+  return remote.localForwardPort ?? getRemoteServerPort(remote);
+}

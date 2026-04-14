@@ -1,11 +1,15 @@
 /**
- * Small helpers for spawned remote tunnel process lifecycle.
+ * Shared tunnel helpers for remote connections.
  *
- * Remote implementations own the actual teleport transport shape and use these
- * helpers only to start and stop the underlying tunnel process.
+ * A tunnel is a long-lived local process, such as `ssh -L` or
+ * `aws ssm start-session`, that forwards a local port to a remote maclaw HTTP
+ * server. Remote implementations use this module to start that process and to
+ * wrap the forwarded local URL in a connected maclaw client with cleanup.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { HttpMaclawClient } from "./client.js";
 import type { RemoteConnectOptions } from "./types.js";
+import type { RemoteConnection } from "./types.js";
 
 type SpawnLike = typeof spawn;
 export type SpawnedTunnel = Pick<ChildProcess, "kill" | "once" | "stderr">;
@@ -15,6 +19,38 @@ const getSpawnFn = (options: RemoteConnectOptions): SpawnLike =>
 
 const getStartupDelayMs = (options: RemoteConnectOptions): number =>
   options.startupDelayMs ?? 150;
+
+export const createTunnelConnection = async (
+  command: string,
+  args: string[],
+  baseUrl: string,
+  description: string,
+  buildOriginMetadata: () => Record<string, string>,
+  mode: string,
+  options: RemoteConnectOptions,
+): Promise<RemoteConnection> => {
+  const tunnel = await startTunnelProcess(command, args, description, options);
+  const client = new HttpMaclawClient(baseUrl, {
+    fetchFn: options.fetchFn,
+  });
+  let openTunnel: typeof tunnel | undefined = tunnel;
+
+  return {
+    buildOriginMetadata,
+    close: async () => {
+      if (!openTunnel) {
+        return;
+      }
+
+      const activeTunnel = openTunnel;
+      openTunnel = undefined;
+      await stopTunnelProcess(activeTunnel);
+    },
+    describe: () => description,
+    getMode: () => mode,
+    sendCommand: async (request) => await client.sendCommand(request),
+  };
+};
 
 export const startTunnelProcess = async (
   command: string,

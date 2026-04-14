@@ -6,6 +6,10 @@
  */
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
+import type {
+  RemoteCommandRequest,
+  RemoteCommandResponse,
+} from "../remote/client.js";
 import { resolveRemoteTarget, type RemoteConnection } from "../remote/index.js";
 import type { ServerConfig } from "../server-config.js";
 import type {
@@ -13,10 +17,6 @@ import type {
   TeleportRuntimeOptions,
   TeleportTunnelOptions,
 } from "./options.js";
-import {
-  type RemoteCommandRequest,
-  type RemoteCommandResponse,
-} from "./runtime.js";
 
 export type TeleportTarget = {
   chatId: string;
@@ -114,7 +114,7 @@ export class TeleportSession {
   }
 
   async sendCommand(request: RemoteCommandRequest): Promise<RemoteCommandResponse> {
-    const runtime = await this.start();
+    const conn = await this.start();
 
     const requestWithOrigin: RemoteCommandRequest = {
       ...request,
@@ -135,7 +135,7 @@ export class TeleportSession {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await runtime.sendCommand(requestWithOrigin);
+        return await conn.sendCommand(requestWithOrigin);
       } catch (error) {
         lastError = error;
         if (!isRetryableError(error) || attempt === 2) {

@@ -5,9 +5,9 @@
  * server-backed chat channels.
  */
 import { logger } from "../logger.js";
+import type { RemoteCommandResponse } from "../remote/client.js";
 import type { RemoteConfig, ServerConfig } from "../server-config.js";
 import type { TeleportOptions } from "./options.js";
-import type { RemoteCommandResponse } from "./runtime.js";
 import { TeleportSession, type TeleportTarget } from "./session.js";
 
 export class TeleportController {

@@ -18,55 +18,6 @@ import type {
   RemoteSetupResult,
 } from "./types.js";
 
-const unsupported = (action: string): RemoteActionResult => ({
-  exitCode: 64,
-  message: `${action} is not implemented for http remotes.`,
-});
-
-const noop = (action: string): RemoteActionResult => ({
-  exitCode: 0,
-  message: `${action} is a no-op for http remotes.`,
-});
-
-export const isHttpRemoteTarget = (value: string): boolean => /^https?:\/\//u.test(value.trim());
-
-export const summarizeHttpRemote = (remote: RemoteConfig): string => {
-  const metadata = remote.metadata as HttpConfig;
-  return metadata.url;
-};
-
-const buildHttpOriginMetadata = (
-  target: string,
-  remote: RemoteConfig,
-): Record<string, string> => {
-  const metadata = remote.metadata as HttpConfig;
-  const url = new URL(metadata.url);
-  return {
-    teleportMode: "http",
-    teleportTarget: target,
-    teleportRemote: remote.name,
-    teleportHost: url.hostname,
-  };
-};
-
-const createHttpConnection = (
-  target: string,
-  remote: RemoteConfig,
-  options: RemoteConnectOptions = {},
-): RemoteConnection => {
-  const metadata = remote.metadata as HttpConfig;
-  const client = new HttpMaclawClient(metadata.url, {
-    fetchFn: options.fetchFn,
-  });
-  return {
-    buildOriginMetadata: () => buildHttpOriginMetadata(target, remote),
-    close: async () => {},
-    describe: () => metadata.url,
-    getMode: () => "http",
-    sendCommand: async (request) => await client.sendCommand(request),
-  };
-};
-
 /**
  * Registered HTTP remote recipe.
  */
@@ -94,7 +45,10 @@ export const httpRemoteRecipe: RemoteRecipe = {
     prompter.print("  Plain HTTP is not encrypted.");
     prompter.print("  Prefer local use, HTTPS, or access through a secure tunnel.");
     const name = await prompter.askLine("Remote name", config?.name ?? "http-remote");
-    const url = await prompter.askLine("Remote URL", existingMetadata.url ?? "http://127.0.0.1:4001");
+    const url = await prompter.askLine(
+      "Remote URL",
+      existingMetadata.url ?? "http://127.0.0.1:4001",
+    );
 
     return {
       name,
@@ -110,6 +64,27 @@ export const httpRemoteRecipe: RemoteRecipe = {
 };
 
 /**
+ * Concrete HTTP remote that connects directly to an existing HTTP endpoint.
+ */
+export function createHttpRemote(config: RemoteConfig): Remote {
+  return {
+    config,
+    async bootstrap() {
+      return unsupported("bootstrap");
+    },
+    async start() {
+      return noop("start");
+    },
+    async connect(options: RemoteConnectOptions = {}) {
+      return createHttpConnection(this.config.name, this.config, options);
+    },
+    async stop() {
+      return noop("stop");
+    },
+  };
+}
+
+/**
  * Create an ephemeral HTTP remote from a raw URL target.
  */
 export const createHttpTargetRemote = (url: string): Remote =>
@@ -121,21 +96,56 @@ export const createHttpTargetRemote = (url: string): Remote =>
     },
   });
 
-/**
- * Concrete HTTP remote that connects directly to an existing HTTP endpoint.
- */
-export const createHttpRemote = (config: RemoteConfig): Remote => ({
-  config,
-  async bootstrap() {
-    return unsupported("bootstrap");
-  },
-  async start() {
-    return noop("start");
-  },
-  async connect(options: RemoteConnectOptions = {}) {
-    return createHttpConnection(this.config.name, this.config, options);
-  },
-  async stop() {
-    return noop("stop");
-  },
-});
+export const isHttpRemoteTarget = (value: string): boolean => /^https?:\/\//u.test(value.trim());
+
+export function summarizeHttpRemote(remote: RemoteConfig): string {
+  const metadata = remote.metadata as HttpConfig;
+  return metadata.url;
+}
+
+function unsupported(action: string): RemoteActionResult {
+  return {
+    exitCode: 64,
+    message: `${action} is not implemented for http remotes.`,
+  };
+}
+
+function noop(action: string): RemoteActionResult {
+  return {
+    exitCode: 0,
+    message: `${action} is a no-op for http remotes.`,
+  };
+}
+
+function createHttpConnection(
+  target: string,
+  remote: RemoteConfig,
+  options: RemoteConnectOptions = {},
+): RemoteConnection {
+  const metadata = remote.metadata as HttpConfig;
+  const client = new HttpMaclawClient(metadata.url, {
+    fetchFn: options.fetchFn,
+  });
+
+  return {
+    buildOriginMetadata: () => buildHttpOriginMetadata(target, remote),
+    close: async () => {},
+    describe: () => metadata.url,
+    getMode: () => "http",
+    sendCommand: async (request) => await client.sendCommand(request),
+  };
+}
+
+function buildHttpOriginMetadata(
+  target: string,
+  remote: RemoteConfig,
+): Record<string, string> {
+  const metadata = remote.metadata as HttpConfig;
+  const url = new URL(metadata.url);
+  return {
+    teleportMode: "http",
+    teleportTarget: target,
+    teleportRemote: remote.name,
+    teleportHost: url.hostname,
+  };
+}

@@ -24,7 +24,6 @@
  * Most callers should work with `TeleportController`, `TeleportSession`,
  * `sendTeleportCommand`, and `TeleportOptions`.
  */
-export * from "./runtime.js";
 export * from "./options.js";
 export * from "./controller.js";
 export * from "./session.js";

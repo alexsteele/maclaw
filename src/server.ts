@@ -12,6 +12,7 @@ import { Harness } from "./harness.js";
 import { logger } from "./logger.js";
 import { PORTAL_DISPLAY_INSTRUCTIONS } from "./prompt.js";
 import { ChannelRouter } from "./router.js";
+import type { RemoteCommandRequest, RemoteCommandResponse } from "./remote/client.js";
 import {
   defaultServerLogFile,
   defaultServerLogMaxBytes,
@@ -23,7 +24,6 @@ import {
   type ServerSecrets,
 } from "./server-config.js";
 import type { Message, Origin, ScheduledTask } from "./types.js";
-import type { RemoteCommandRequest, RemoteCommandResponse } from "./teleport.js";
 import { TeleportController } from "./teleport.js";
 import { SlackChannel } from "./channels/slack.js";
 import { WhatsAppChannel } from "./channels/whatsapp.js";
