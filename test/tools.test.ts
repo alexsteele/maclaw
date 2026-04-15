@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import type { ProjectConfig } from "../src/config.js";
 import { createTools } from "../src/tools/index.js";
@@ -332,6 +332,91 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     harness?.cancelAgent("child-planner");
     await harness?.teardown();
     await new Promise((resolve) => setTimeout(resolve, 10));
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("rooted file tools read, write, and list within the project workspace", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-tools-files-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read", "dangerous"],
+    });
+
+    await mkdir(path.join(projectDir, "notes"), { recursive: true });
+    await writeFile(path.join(projectDir, "notes", "todo.txt"), "alpha\n", "utf8");
+
+    const tools = harness.listTools();
+    const readFileTool = tools.find((tool) => tool.name === "read_file");
+    const writeFileTool = tools.find((tool) => tool.name === "write_file");
+    const listDirTool = tools.find((tool) => tool.name === "list_dir");
+    const listTools = tools.find((tool) => tool.name === "list_tools");
+
+    assert.ok(readFileTool);
+    assert.ok(writeFileTool);
+    assert.ok(listDirTool);
+    assert.ok(listTools);
+    assert.equal(readFileTool.permission, "dangerous");
+    assert.equal(writeFileTool.permission, "dangerous");
+    assert.equal(listDirTool.permission, "dangerous");
+    assert.match(await listTools.execute({}), /- files: Workspace-scoped file and directory tools\./u);
+    assert.match(await listTools.execute({}), /read_file \[dangerous\]/u);
+
+    assert.equal(await readFileTool.execute({ path: "notes/todo.txt" }), "alpha\n");
+    assert.equal(await listDirTool.execute({ path: "notes" }), "file todo.txt");
+    assert.equal(
+      await writeFileTool.execute({ path: "notes/out.txt", content: "beta\n" }),
+      "wrote file: notes/out.txt",
+    );
+    assert.equal(await readFile(path.join(projectDir, "notes", "out.txt"), "utf8"), "beta\n");
+    assert.equal(
+      await writeFileTool.execute({ path: "notes/deep/out-2.txt", content: "gamma\n" }),
+      "wrote file: notes/deep/out-2.txt",
+    );
+    assert.equal(
+      await readFile(path.join(projectDir, "notes", "deep", "out-2.txt"), "utf8"),
+      "gamma\n",
+    );
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("rooted file tools reject paths outside the project workspace", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-tools-files-root-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read", "dangerous"],
+    });
+
+    const tools = harness.listTools();
+    const readFileTool = tools.find((tool) => tool.name === "read_file");
+    const writeFileTool = tools.find((tool) => tool.name === "write_file");
+    const listDirTool = tools.find((tool) => tool.name === "list_dir");
+
+    assert.ok(readFileTool);
+    assert.ok(writeFileTool);
+    assert.ok(listDirTool);
+
+    await assert.rejects(
+      readFileTool.execute({ path: "../secret.txt" }),
+      /Path escapes the workspace root/u,
+    );
+    await assert.rejects(
+      writeFileTool.execute({ path: "../../secret.txt", content: "nope" }),
+      /Path escapes the workspace root/u,
+    );
+    await assert.rejects(
+      listDirTool.execute({ path: "../" }),
+      /Path escapes the workspace root/u,
+    );
+  } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
 });

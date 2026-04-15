@@ -163,6 +163,16 @@ const filterTools = (
   return tools.filter((tool) => allowed.has(tool.permission));
 };
 
+const filterToolsets = (
+  toolsets: Toolset[],
+  tools: Tool[],
+): Toolset[] => {
+  const enabledToolNames = new Set(tools.map((tool) => tool.name));
+
+  return toolsets.filter((toolset) =>
+    (toolset.tools ?? []).some((toolName) => enabledToolNames.has(toolName)));
+};
+
 const findAgentByChatId = (
   agents: AgentRecord[],
   chatId: string,
@@ -305,7 +315,10 @@ export class Harness {
     this._scheduler = new TaskScheduler(this._storage.tasks);
     this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(config, this);
-    this._toolsets = createToolsets(config, createToolContext(this));
+    this._toolsets = filterToolsets(
+      createToolsets(config, createToolContext(this)),
+      this._tools,
+    );
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
@@ -386,7 +399,10 @@ export class Harness {
     const nextChatStore = nextStorage.chats;
     const nextScheduler = new TaskScheduler(nextStorage.tasks);
     const nextTools = createFilteredTools(nextConfig, this);
-    const nextToolsets = createToolsets(nextConfig, createToolContext(this));
+    const nextToolsets = filterToolsets(
+      createToolsets(nextConfig, createToolContext(this)),
+      nextTools,
+    );
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = nextStorage.agents;
     const nextAgentInboxStore = nextStorage.agentInbox;
@@ -463,7 +479,10 @@ export class Harness {
     this._scheduler = new TaskScheduler(this._storage.tasks);
     this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(nextConfig, this);
-    this._toolsets = createToolsets(nextConfig, createToolContext(this));
+    this._toolsets = filterToolsets(
+      createToolsets(nextConfig, createToolContext(this)),
+      this._tools,
+    );
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;

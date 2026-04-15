@@ -2,6 +2,7 @@
 // See `src/tools/` for small domain-focused tool groups.
 import type { ProjectConfig } from "../config.js";
 import type { Tool, Toolset } from "./types.js";
+import { createFileTools } from "./files.js";
 import { createMaclawTools, type MaclawToolContext } from "./maclaw.js";
 import { createSkillTools } from "./skills.js";
 import { createTimeTools } from "./time.js";
@@ -12,13 +13,14 @@ export const createTools = (
 ): Tool[] => {
   return [
     ...(context ? createMaclawTools(context) : []),
+    ...createFileTools(config),
     ...createSkillTools(config),
     ...createTimeTools(),
   ];
 };
 
 export const createToolsets = (
-  _config: ProjectConfig,
+  config: ProjectConfig,
   context?: MaclawToolContext,
 ): Toolset[] => {
   if (!context) {
@@ -30,6 +32,11 @@ export const createToolsets = (
       name: "maclaw",
       description: "Built-in tools for chats, agents, tasks, and notifications.",
       tools: createMaclawTools(context).map((tool) => tool.name),
+    },
+    {
+      name: "files",
+      description: "Workspace-scoped file and directory tools.",
+      tools: createFileTools(config).map((tool) => tool.name),
     },
   ];
 };

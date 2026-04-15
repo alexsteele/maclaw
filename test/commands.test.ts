@@ -1026,6 +1026,29 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
   }
 });
 
+test("dispatchCommand shows the files toolset when dangerous tools are enabled", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-tools-files-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read", "dangerous"],
+    });
+
+    const reply = await dispatchCommand(harness, "/tools");
+
+    assert.match(reply ?? "", /^permissions: read, dangerous$/mu);
+    assert.match(reply ?? "", /- files: Workspace-scoped file and directory tools\./u);
+    assert.match(reply ?? "", /^Files:$/mu);
+    assert.match(reply ?? "", /read_file \[dangerous\]/u);
+    assert.match(reply ?? "", /write_file \[dangerous\]/u);
+    assert.match(reply ?? "", /list_dir \[dangerous\]/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand shows suggested models", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-models-"));
 
