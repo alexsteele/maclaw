@@ -10,8 +10,8 @@ Let agents use stronger tools.
 
 We want to support local and cloud environments. Both long-lived and ephemeral.
 Users should able to easily spin-up and control their sandboxes. We want all of
-this to be automatable via maclaw chats eventually, so you can just tell maclaw to
-spin up and run an agent.
+this to be automatable via maclaw chats eventually, so you can just tell maclaw
+to spin up and run an agent.
 
 ## Design
 
@@ -102,6 +102,7 @@ type RemoteRecipe = {
   localForwardPort?: number;
 };
 ```
+
 ## Current Manual Proof
 
 We have already manually validated a first EC2 remote workspace flow:
@@ -114,6 +115,10 @@ We have already manually validated a first EC2 remote workspace flow:
 - local teleport via Session Manager port forwarding
 
 That gives us confidence that the remote workspace path is real.
+
+## Docker on EC2
+
+We can also run maclaw in Docker on EC2. Steps in skills/setup_docker.md.
 
 ## First Implementation Path
 
