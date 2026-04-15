@@ -13,6 +13,12 @@ import {
   type RemoteConfig,
 } from "../server-config.js";
 import { buildEc2BootstrapCommand } from "./bootstrap.js";
+import {
+  buildDockerBootstrapCommand,
+  buildDockerStartCommand,
+  buildDockerStopCommand,
+  isDockerRuntime,
+} from "./docker.js";
 import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
@@ -66,6 +72,10 @@ export const ec2RemoteRecipe: RemoteRecipe = {
       "Local forwarded port",
       config?.localForwardPort ?? defaultTeleportForwardPort(),
     );
+    const runtimeKind = await prompter.askLine(
+      "Runtime mode (host or docker)",
+      config?.runtime?.kind ?? "host",
+    );
 
     return {
       name,
@@ -76,6 +86,7 @@ export const ec2RemoteRecipe: RemoteRecipe = {
       },
       remoteServerPort,
       localForwardPort,
+      runtime: runtimeKind.trim() === "docker" ? { kind: "docker" } : { kind: "host" },
     };
   },
   create(config: RemoteConfig): Remote {
@@ -95,11 +106,21 @@ export function createEc2Remote(config: RemoteConfig): Remote {
     async start(options?: RemoteInitOptions) {
       return await runEc2ShellCommand(
         this.config,
-        buildRemoteServerStartCommand(
-          this.config.remoteServerPort,
-          options?.project,
-          options?.server,
-          options?.bootstrap,
+        (
+          isDockerRuntime(this.config)
+            ? buildDockerStartCommand(
+                this.config,
+                this.config.remoteServerPort ?? defaultServerPort(),
+                options?.project,
+                options?.server,
+                options?.bootstrap,
+              )
+            : buildRemoteServerStartCommand(
+                this.config.remoteServerPort,
+                options?.project,
+                options?.server,
+                options?.bootstrap,
+              )
         ).split("\n"),
         `maclaw start ${this.config.name}`,
       );
@@ -110,7 +131,11 @@ export function createEc2Remote(config: RemoteConfig): Remote {
     async stop(options?: RemoteInitOptions) {
       return await runEc2ShellCommand(
         this.config,
-        buildRemoteServerStopCommand(options?.bootstrap).split("\n"),
+        (
+          isDockerRuntime(this.config)
+            ? buildDockerStopCommand(this.config)
+            : buildRemoteServerStopCommand(options?.bootstrap)
+        ).split("\n"),
         `maclaw stop ${this.config.name}`,
       );
     },
@@ -119,7 +144,7 @@ export function createEc2Remote(config: RemoteConfig): Remote {
 
 export function summarizeEc2Remote(remote: RemoteConfig): string {
   const metadata = remote.metadata as Ec2Config;
-  return `aws-ec2 ${metadata.instanceId} (${metadata.region})`;
+  return `aws-ec2 ${metadata.instanceId} (${metadata.region})${isDockerRuntime(remote) ? " [docker]" : ""}`;
 }
 
 async function runEc2Bootstrap(
@@ -128,10 +153,20 @@ async function runEc2Bootstrap(
 ): Promise<RemoteActionResult> {
   return await runEc2ShellCommand(
     remote,
-    buildEc2BootstrapCommand(
-      options?.project,
-      options?.server,
-      options?.bootstrap,
+    (
+      isDockerRuntime(remote)
+        ? buildDockerBootstrapCommand(
+            remote,
+            options?.project,
+            options?.server,
+            options?.bootstrap,
+            true,
+          )
+        : buildEc2BootstrapCommand(
+            options?.project,
+            options?.server,
+            options?.bootstrap,
+          )
     ).split("\n"),
     `maclaw bootstrap ${remote.name}`,
   );

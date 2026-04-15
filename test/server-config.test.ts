@@ -7,6 +7,7 @@ import {
   defaultServerLogFile,
   loadServerConfig,
   loadServerSecrets,
+  validateRemoteConfig,
 } from "../src/server-config.js";
 
 test("loadServerConfig reads projects and WhatsApp settings from ~/.maclaw-style config", async () => {
@@ -195,7 +196,7 @@ test("loadServerConfig keeps channels optional when none are configured", async 
   }
 });
 
-test("loadServerConfig applies defaults for teleport remotes", async () => {
+test("loadServerConfig preserves sparse teleport remotes without reshaping them", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-remotes-"));
 
   try {
@@ -231,10 +232,7 @@ test("loadServerConfig applies defaults for teleport remotes", async () => {
         provider: "ssh",
         metadata: {
           host: "gpu.example.com",
-          port: 22,
         },
-        remoteServerPort: 4000,
-        localForwardPort: 4001,
       },
     ]);
   } finally {
@@ -242,7 +240,7 @@ test("loadServerConfig applies defaults for teleport remotes", async () => {
   }
 });
 
-test("loadServerConfig applies defaults for AWS teleport remotes", async () => {
+test("loadServerConfig preserves sparse AWS teleport remotes without reshaping them", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-aws-remotes-"));
 
   try {
@@ -281,8 +279,6 @@ test("loadServerConfig applies defaults for AWS teleport remotes", async () => {
           region: "us-west-2",
           instanceId: "i-1234567890abcdef0",
         },
-        remoteServerPort: 4000,
-        localForwardPort: 4001,
       },
     ]);
   } finally {
@@ -329,6 +325,118 @@ test("loadServerConfig accepts named HTTP remotes", async () => {
         },
       },
     ]);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadServerConfig preserves docker runtime settings for remotes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-docker-runtime-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+          remotes: [
+            {
+              name: "aws-dev",
+              provider: "aws-ec2",
+              metadata: {
+                region: "us-west-2",
+                instanceId: "i-1234567890abcdef0",
+              },
+              runtime: {
+                kind: "docker",
+                image: "maclaw:test",
+                dataDir: "~/sandbox-data",
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const config = loadServerConfig(configPath);
+    assert.deepEqual(config.remotes, [
+      {
+        name: "aws-dev",
+        provider: "aws-ec2",
+        metadata: {
+          region: "us-west-2",
+          instanceId: "i-1234567890abcdef0",
+        },
+        runtime: {
+          kind: "docker",
+          image: "maclaw:test",
+          dataDir: "~/sandbox-data",
+        },
+      },
+    ]);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("validateRemoteConfig does not own the remote provider registry", () => {
+  assert.equal(
+    validateRemoteConfig({
+      name: "future-remote",
+      provider: "aws-fargate",
+      metadata: {
+        cluster: "demo",
+      },
+    }),
+    undefined,
+  );
+});
+
+test("loadServerConfig fails loudly on invalid docker runtime strings", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-server-config-bad-docker-runtime-"));
+
+  try {
+    const configPath = path.join(rootDir, "server.json");
+    const projectDir = path.join(rootDir, "project-a");
+
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          projects: [{ name: "home", folder: projectDir }],
+          remotes: [
+            {
+              name: "aws-dev",
+              provider: "aws-ec2",
+              metadata: {
+                region: "us-west-2",
+                instanceId: "i-1234567890abcdef0",
+              },
+              runtime: {
+                kind: "docker",
+                image: " maclaw:test ",
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    assert.throws(
+      () => loadServerConfig(configPath),
+      /Invalid server remote entry/u,
+    );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

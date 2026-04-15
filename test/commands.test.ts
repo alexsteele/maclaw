@@ -151,7 +151,7 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
     );
     const createAwsReply = await dispatchCommand(
       harness,
-      '/remote create {"name":"aws-dev","provider":"aws-ec2","metadata":{"region":"us-west-2","instanceId":"i-0d4a7b8d1b15e49c4"},"remoteServerPort":4000,"localForwardPort":4101}',
+      '/remote create {"name":"aws-dev","provider":"aws-ec2","metadata":{"region":"us-west-2","instanceId":"i-0d4a7b8d1b15e49c4"},"remoteServerPort":4000,"localForwardPort":4101,"runtime":{"kind":"docker"}}',
     );
     const createHttpReply = await dispatchCommand(
       harness,
@@ -174,11 +174,12 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
     assert.equal(createHttpReply, "saved remote: local-api");
     assert.equal(
       listReply,
-      "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2)\n- local-api: http://127.0.0.1:4100",
+      "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2) [docker]\n- local-api: http://127.0.0.1:4100",
     );
     assert.match(showReply, /"name": "aws-dev"/u);
     assert.match(showReply, /"provider": "aws-ec2"/u);
     assert.match(showReply, /"instanceId": "i-0d4a7b8d1b15e49c4"/u);
+    assert.match(showReply, /"kind": "docker"/u);
     assert.equal(
       bootstrapReply,
       "bootstrap failed: local-api (exit 64)\nbootstrap is not implemented for http remotes.",

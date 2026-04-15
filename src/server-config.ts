@@ -28,12 +28,28 @@ export type HttpConfig = {
   url: string;
 };
 
+export type HostRemoteRuntime = {
+  kind: "host";
+};
+
+export type DockerRemoteRuntime = {
+  kind: "docker";
+  image?: string;
+  dataDir?: string;
+  containerName?: string;
+  hostNetwork?: boolean;
+  hostPid?: boolean;
+};
+
+export type RemoteRuntimeConfig = HostRemoteRuntime | DockerRemoteRuntime;
+
 export type RemoteConfig = {
   name: string;
   provider: string;
   localForwardPort?: number;
   remoteServerPort?: number;
   metadata: Ec2Config | HttpConfig | SshConfig;
+  runtime?: RemoteRuntimeConfig;
 };
 
 export type TeleportRemoteConfig = RemoteConfig;
@@ -176,12 +192,8 @@ export const validateRemoteConfig = (remote: unknown): string | undefined => {
     return "Remote config must include a non-empty name.";
   }
 
-  if (
-    candidate.provider !== "http"
-    && candidate.provider !== "ssh"
-    && candidate.provider !== "aws-ec2"
-  ) {
-    return "Remote config provider must be 'http', 'ssh', or 'aws-ec2'.";
+  if (typeof candidate.provider !== "string" || candidate.provider.trim().length === 0) {
+    return "Remote config must include a non-empty provider.";
   }
 
   if (
@@ -195,30 +207,51 @@ export const validateRemoteConfig = (remote: unknown): string | undefined => {
   return undefined;
 };
 
-const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {
+const assertValidRemoteRuntime = (runtime: RemoteRuntimeConfig | undefined): void => {
+  if (runtime === undefined || runtime.kind === "host") {
+    return;
+  }
+
+  if (runtime.kind !== "docker") {
+    throw new Error("Invalid remote runtime");
+  }
+
+  for (const key of ["image", "dataDir", "containerName"] as const) {
+    const value = runtime[key];
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+      throw new Error(`Invalid docker runtime ${key}`);
+    }
+  }
+};
+
+const assertValidRemoteConfig = (remote: RemoteConfig): void => {
   if (!remote?.name || !remote?.provider || !remote?.metadata) {
     throw new Error("Invalid remote config");
   }
+
+  assertValidRemoteRuntime(remote.runtime);
 
   if (remote.provider === "ssh") {
     const metadata = remote.metadata as SshConfig;
     if (typeof metadata.host !== "string" || metadata.host.trim().length === 0) {
       throw new Error("Invalid SSH remote metadata");
     }
-
-    return {
-      name: remote.name,
-      provider: "ssh",
-      metadata: {
-        host: metadata.host,
-        ...(typeof metadata.user === "string" && metadata.user.trim().length > 0
-          ? { user: metadata.user }
-          : {}),
-        port: toPositiveInt(metadata.port, 22),
-      },
-      remoteServerPort: toPositiveInt(remote.remoteServerPort, defaultServerPort()),
-      localForwardPort: toPositiveInt(remote.localForwardPort, defaultTeleportForwardPort()),
-    };
+    if (metadata.user !== undefined && (typeof metadata.user !== "string" || metadata.user.trim().length === 0)) {
+      throw new Error("Invalid SSH remote metadata");
+    }
+    if (metadata.port !== undefined && toPositiveInt(metadata.port, -1) < 0) {
+      throw new Error("Invalid SSH remote metadata");
+    }
+    if (remote.remoteServerPort !== undefined && toPositiveInt(remote.remoteServerPort, -1) < 0) {
+      throw new Error("Invalid SSH remote config");
+    }
+    if (remote.localForwardPort !== undefined && toPositiveInt(remote.localForwardPort, -1) < 0) {
+      throw new Error("Invalid SSH remote config");
+    }
+    return;
   }
 
   if (remote.provider === "http") {
@@ -226,14 +259,7 @@ const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {
     if (typeof metadata.url !== "string" || metadata.url.trim().length === 0) {
       throw new Error("Invalid HTTP remote metadata");
     }
-
-    return {
-      name: remote.name,
-      provider: "http",
-      metadata: {
-        url: metadata.url,
-      },
-    };
+    return;
   }
 
   const metadata = remote.metadata as Ec2Config;
@@ -245,17 +271,12 @@ const normalizeRemoteConfig = (remote: RemoteConfig): RemoteConfig => {
   ) {
     throw new Error("Invalid AWS EC2 remote metadata");
   }
-
-  return {
-    name: remote.name,
-    provider: "aws-ec2",
-    metadata: {
-      region: metadata.region,
-      instanceId: metadata.instanceId,
-    },
-    remoteServerPort: toPositiveInt(remote.remoteServerPort, defaultServerPort()),
-    localForwardPort: toPositiveInt(remote.localForwardPort, defaultTeleportForwardPort()),
-  };
+  if (remote.remoteServerPort !== undefined && toPositiveInt(remote.remoteServerPort, -1) < 0) {
+    throw new Error("Invalid AWS EC2 remote config");
+  }
+  if (remote.localForwardPort !== undefined && toPositiveInt(remote.localForwardPort, -1) < 0) {
+    throw new Error("Invalid AWS EC2 remote config");
+  }
 };
 
 // TODO: Too much complicated custom code here.
@@ -319,7 +340,7 @@ export const loadServerConfig = (
     }
 
     try {
-      normalizeRemoteConfig(remote);
+      assertValidRemoteConfig(remote);
     } catch {
       throw new Error(`Invalid server remote entry in ${resolvedConfigFile}`);
     }
@@ -389,7 +410,7 @@ export const loadServerConfig = (
     })),
     remotes:
       remotes.length > 0
-        ? remotes.map((remote) => normalizeRemoteConfig(remote))
+        ? remotes
         : undefined,
     channels: Object.keys(channels).length > 0 ? channels : undefined,
   };

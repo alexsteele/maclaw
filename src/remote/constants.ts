@@ -9,3 +9,6 @@ export const DEFAULT_REMOTE_RUNTIME_DIR = ".maclaw";
 export const DEFAULT_REMOTE_SERVER_LOG_FILE = `${DEFAULT_REMOTE_RUNTIME_DIR}/server.log`;
 export const DEFAULT_REMOTE_SERVER_PID_FILE = `${DEFAULT_REMOTE_RUNTIME_DIR}/server.pid`;
 export const DEFAULT_REMOTE_SERVER_HOME_DIR = `${DEFAULT_REMOTE_RUNTIME_DIR}/home`;
+export const DEFAULT_REMOTE_DOCKER_IMAGE = "maclaw:dev";
+export const DEFAULT_REMOTE_DOCKER_DATA_DIR = "~/maclaw-data";
+export const DEFAULT_REMOTE_DOCKER_CONTAINER_NAME = "maclaw-server";

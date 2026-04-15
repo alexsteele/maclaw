@@ -13,6 +13,12 @@ import {
   type SshConfig,
 } from "../server-config.js";
 import { buildSshBootstrapCommand } from "./bootstrap.js";
+import {
+  buildDockerBootstrapCommand,
+  buildDockerStartCommand,
+  buildDockerStopCommand,
+  isDockerRuntime,
+} from "./docker.js";
 import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
@@ -69,6 +75,10 @@ export const sshRemoteRecipe: RemoteRecipe = {
       "Local forwarded port",
       config?.localForwardPort ?? defaultTeleportForwardPort(),
     );
+    const runtimeKind = await prompter.askLine(
+      "Runtime mode (host or docker)",
+      config?.runtime?.kind ?? "host",
+    );
 
     return {
       name,
@@ -80,6 +90,7 @@ export const sshRemoteRecipe: RemoteRecipe = {
       },
       remoteServerPort,
       localForwardPort,
+      runtime: runtimeKind.trim() === "docker" ? { kind: "docker" } : { kind: "host" },
     };
   },
   create(config: RemoteConfig): Remote {
@@ -100,7 +111,14 @@ export function createSshRemote(config: RemoteConfig): Remote {
 
       return await runSshCommand(
         this.config,
-        buildSshBootstrapCommand(options?.project, options?.server, options?.bootstrap),
+        isDockerRuntime(this.config)
+          ? buildDockerBootstrapCommand(
+              this.config,
+              options?.project,
+              options?.server,
+              options?.bootstrap,
+            )
+          : buildSshBootstrapCommand(options?.project, options?.server, options?.bootstrap),
       );
     },
     async start(options?: RemoteInitOptions) {
@@ -110,12 +128,20 @@ export function createSshRemote(config: RemoteConfig): Remote {
 
       return await runSshCommand(
         this.config,
-        buildRemoteServerStartCommand(
-          this.config.remoteServerPort,
-          options?.project,
-          options?.server,
-          options?.bootstrap,
-        ),
+        isDockerRuntime(this.config)
+          ? buildDockerStartCommand(
+              this.config,
+              this.config.remoteServerPort ?? defaultServerPort(),
+              options?.project,
+              options?.server,
+              options?.bootstrap,
+            )
+          : buildRemoteServerStartCommand(
+              this.config.remoteServerPort,
+              options?.project,
+              options?.server,
+              options?.bootstrap,
+            ),
       );
     },
     async connect(options: RemoteConnectOptions = {}) {
@@ -128,7 +154,9 @@ export function createSshRemote(config: RemoteConfig): Remote {
 
       return await runSshCommand(
         this.config,
-        buildRemoteServerStopCommand(options?.bootstrap),
+        isDockerRuntime(this.config)
+          ? buildDockerStopCommand(this.config)
+          : buildRemoteServerStopCommand(options?.bootstrap),
       );
     },
   };
@@ -136,7 +164,7 @@ export function createSshRemote(config: RemoteConfig): Remote {
 
 export function summarizeSshRemote(remote: RemoteConfig): string {
   const metadata = remote.metadata as SshConfig;
-  return `${metadata.host}${metadata.port ? `:${metadata.port}` : ""}`;
+  return `${metadata.host}${metadata.port ? `:${metadata.port}` : ""}${isDockerRuntime(remote) ? " [docker]" : ""}`;
 }
 
 function unsupportedSshAction(action: string): RemoteActionResult {

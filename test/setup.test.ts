@@ -340,6 +340,7 @@ test("runSetup can jump straight to remotes with startSection", async () => {
         "22",
         "4000",
         "4100",
+        "host",
       ],
     });
 
@@ -369,6 +370,9 @@ test("runSetup can jump straight to remotes with startSection", async () => {
         provider: "ssh",
         remoteServerPort: 4000,
         localForwardPort: 4100,
+        runtime: {
+          kind: "host",
+        },
       },
     ]);
     assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);

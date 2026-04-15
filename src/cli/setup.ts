@@ -732,6 +732,10 @@ const runRemoteSetup = async (
     ),
     10,
   ) || defaultTeleportForwardPort();
+  const runtimeKind = await prompt.askLine(
+    "Runtime mode (host or docker)",
+    existingRemote?.runtime?.kind ?? "host",
+  );
 
   const remoteConfig: RemoteConfig = {
     name: remoteName,
@@ -743,6 +747,7 @@ const runRemoteSetup = async (
     },
     remoteServerPort,
     localForwardPort,
+    runtime: runtimeKind.trim() === "docker" ? { kind: "docker" } : { kind: "host" },
   };
   serverConfig.remotes = [
     ...(serverConfig.remotes ?? []).filter((remote) => remote.name !== remoteName),
