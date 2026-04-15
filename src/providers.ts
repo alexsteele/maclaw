@@ -3,8 +3,8 @@ import type {
   ProviderRequest,
   ProviderResult,
   ProviderUsage,
-  ToolDefinition,
 } from "./types.js";
+import type { Tool } from "./tools/types.js";
 
 type ResponsesApiOutputItem = {
   type: string;
@@ -66,7 +66,7 @@ const extractOutputText = (response: ResponsesApiResponse): string => {
   return text || "The model returned no text.";
 };
 
-const buildToolSpec = (tool: ToolDefinition): Record<string, unknown> => ({
+const buildToolSpec = (tool: Tool): Record<string, unknown> => ({
   type: "function",
   name: tool.name,
   description: tool.description,
@@ -186,7 +186,7 @@ export class OpenAIResponsesProvider implements Provider {
 
   private async createResponse(
     input: Array<Record<string, unknown>>,
-    tools: ToolDefinition[],
+    tools: Tool[],
   ): Promise<ResponsesApiResponse> {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

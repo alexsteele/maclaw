@@ -1592,6 +1592,7 @@ const defaultToolCategory = "Utilities";
 
 const renderTools = (
   permissions: string,
+  toolsets: ReturnType<Harness["listToolsets"]>,
   tools: ReturnType<Harness["listTools"]>,
 ): string => {
   if (tools.length === 0) {
@@ -1613,6 +1614,13 @@ const renderTools = (
 
   return [
     `permissions: ${permissions}`,
+    ...(toolsets.length > 0
+      ? [
+          "",
+          "Toolsets:",
+          ...toolsets.map((toolset) => `- ${toolset.name}: ${toolset.description}`),
+        ]
+      : []),
     ...Array.from(grouped.entries()).flatMap(([category, entries]) => {
       if (entries.length === 0) {
         return [];
@@ -1630,8 +1638,9 @@ const renderTools = (
 const handleToolsCommand: CommandHandler = async (harness, input) => {
   if (input === "/tools") {
     const tools = harness.listTools();
+    const toolsets = harness.listToolsets();
     const permissions = harness.config.tools.join(", ");
-    return renderTools(permissions, tools);
+    return renderTools(permissions, toolsets, tools);
   }
 
   if (input === "/tools help" || input.startsWith("/tools ")) {

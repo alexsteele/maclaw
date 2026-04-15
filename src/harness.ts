@@ -34,8 +34,9 @@ import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
 import { acquireProjectLock, type ProjectLockHandle } from "./project-lock.js";
 import { createProjectStorage, type ProjectStorage } from "./storage/index.js";
-import { createTools } from "./tools/index.js";
+import { createTools, createToolsets } from "./tools/index.js";
 import type { MaclawToolContext } from "./tools/maclaw.js";
+import type { Tool, ToolPermission, Toolset } from "./tools/types.js";
 import { TaskScheduler } from "./scheduler.js";
 import {
   ChatRuntime,
@@ -59,8 +60,6 @@ import type {
   Message,
   ScheduledTask,
   Skill,
-  ToolPermission,
-  ToolDefinition,
   UsageSummary,
 } from "./types.js";
 import { writeFile } from "node:fs/promises";
@@ -153,13 +152,13 @@ const isOriginTarget = (value: NotificationTarget): value is Origin => {
   return typeof value === "object" && "userId" in value;
 };
 
-const createFilteredTools = (config: ProjectConfig, harness: Harness): ToolDefinition[] =>
+const createFilteredTools = (config: ProjectConfig, harness: Harness): Tool[] =>
   filterTools(createTools(config, createToolContext(harness)), config.tools);
 
 const filterTools = (
-  tools: ToolDefinition[],
+  tools: Tool[],
   allowedPermissions: ToolPermission[],
-): ToolDefinition[] => {
+): Tool[] => {
   const allowed = new Set(allowedPermissions);
   return tools.filter((tool) => allowed.has(tool.permission));
 };
@@ -176,6 +175,7 @@ const createToolContext = (harness: Harness): MaclawToolContext => ({
   getChatAgent: () =>
     findAgentByChatId(harness.listAgents(), harness.getCurrentChatId()),
   listTools: () => harness.listTools(),
+  listToolsets: () => harness.listToolsets(),
   listChannels: () => harness.listChannels(),
   listChats: () => harness.listChats(),
   loadChat: (chatId) => harness.loadChat(chatId),
@@ -284,7 +284,8 @@ export class Harness {
   private _allowedNotifications: Set<NotificationKind>;
   private _scheduler: TaskScheduler;
   private _chatStore: ChatStore;
-  private _tools: ToolDefinition[];
+  private _tools: Tool[];
+  private _toolsets: Toolset[];
   private _chatRuntime: ChatRuntime;
   private _agentStore: AgentStore;
   private _agentInboxStore: AgentInboxStore;
@@ -304,6 +305,7 @@ export class Harness {
     this._scheduler = new TaskScheduler(this._storage.tasks);
     this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(config, this);
+    this._toolsets = createToolsets(config, createToolContext(this));
     this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
@@ -384,6 +386,7 @@ export class Harness {
     const nextChatStore = nextStorage.chats;
     const nextScheduler = new TaskScheduler(nextStorage.tasks);
     const nextTools = createFilteredTools(nextConfig, this);
+    const nextToolsets = createToolsets(nextConfig, createToolContext(this));
     const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
     const nextAgentStore = nextStorage.agents;
     const nextAgentInboxStore = nextStorage.agentInbox;
@@ -411,6 +414,7 @@ export class Harness {
     this._chatStore = nextChatStore;
     this._scheduler = nextScheduler;
     this._tools = nextTools;
+    this._toolsets = nextToolsets;
     this._chatRuntime = nextChatRuntime;
     this._agentStore = nextAgentStore;
     this._agentInboxStore = nextAgentInboxStore;
@@ -459,6 +463,7 @@ export class Harness {
     this._scheduler = new TaskScheduler(this._storage.tasks);
     this._chatStore = this._storage.chats;
     this._tools = createFilteredTools(nextConfig, this);
+    this._toolsets = createToolsets(nextConfig, createToolContext(this));
     this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
@@ -524,6 +529,10 @@ export class Harness {
   // Project tools and metadata
   listTools() {
     return this._tools;
+  }
+
+  listToolsets() {
+    return this._toolsets;
   }
 
   listChannels(): string[] {

@@ -1,3 +1,5 @@
+import type { Tool, ToolCallLogEntry } from "./tools/types.js";
+
 export type Role = "system" | "user" | "assistant" | "tool";
 
 export type Message = {
@@ -205,27 +207,11 @@ export type TaskRunLogEntry = {
   error?: string;
 };
 
-export type ToolPermission = "read" | "act" | "dangerous";
-
-export type ToolDefinition = {
-  name: string;
-  description: string;
-  category?: string;
-  permission: ToolPermission;
-  inputSchema: Record<string, unknown>;
-  execute: (input: unknown) => Promise<string>;
-};
-
-export type ToolCallLogEntry = {
-  name: string;
-  input: unknown;
-};
-
 export type ProviderRequest = {
   chat: ChatRecord;
   userInput: string;
   systemPrompt: string;
-  tools: ToolDefinition[];
+  tools: Tool[];
   onToolCall?: (entry: ToolCallLogEntry) => void | Promise<void>;
 };
 

@@ -1,7 +1,7 @@
 // Skill tools expose safe read-only access to the local skills directory.
 import type { ProjectConfig } from "../config.js";
 import { loadSkills } from "../skills.js";
-import type { ToolDefinition } from "../types.js";
+import type { Tool } from "./types.js";
 import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 
 const parseReadSkillInput = (input: unknown): { name: string } => {
@@ -11,7 +11,7 @@ const parseReadSkillInput = (input: unknown): { name: string } => {
   };
 };
 
-export const createSkillTools = (config: ProjectConfig): ToolDefinition[] => {
+export const createSkillTools = (config: ProjectConfig): Tool[] => {
   return [
     {
       name: "list_skills",

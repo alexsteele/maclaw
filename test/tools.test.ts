@@ -153,6 +153,8 @@ test("harness-backed tools can inspect chats, agents, and tasks", async () => {
     assert.equal(readAgentMemory.permission, "read");
     assert.equal(showTask.permission, "read");
 
+    assert.match(await listTools.execute({}), /^Toolsets:$/mu);
+    assert.match(await listTools.execute({}), /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
     assert.match(await listTools.execute({}), /list_chats \[read\]/u);
     assert.match(await listTools.execute({}), /list_channels \[read\]/u);
     assert.match(await listTools.execute({}), /read_chat \[read\]/u);
@@ -213,6 +215,8 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(writeAgentMemory.permission, "act");
     assert.equal(createTask.permission, "act");
     assert.equal(notify.permission, "act");
+    assert.match(await listTools.execute({}), /^Toolsets:$/mu);
+    assert.match(await listTools.execute({}), /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
     assert.match(await listTools.execute({}), /create_agent \[act\]/u);
     assert.match(await listTools.execute({}), /send_agent_message \[act\]/u);
     assert.match(await listTools.execute({}), /write_agent_memory \[act\]/u);

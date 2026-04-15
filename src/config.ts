@@ -11,7 +11,8 @@ import { DEFAULT_MODEL } from "./models.js";
 import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
 import { normalizeDefaultTaskTime } from "./task.js";
-import type { NotificationPolicy, ToolPermission } from "./types.js";
+import type { ToolPermission } from "./tools/types.js";
+import type { NotificationPolicy } from "./types.js";
 
 export const defaultProjectDataDir = (projectFolder: string): string =>
   path.join(projectFolder, ".maclaw");

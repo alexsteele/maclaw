@@ -1003,6 +1003,8 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     const sharedHelpReply = await dispatchCommand(harness, "/help tools");
 
     assert.match(reply ?? "", /^permissions: read$/mu);
+    assert.match(reply ?? "", /^Toolsets:$/mu);
+    assert.match(reply ?? "", /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
     assert.match(reply ?? "", /^Project:$/mu);
     assert.match(reply ?? "", /^Chats:$/mu);
     assert.match(reply ?? "", /^Agents:$/mu);

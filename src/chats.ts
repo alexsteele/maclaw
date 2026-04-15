@@ -12,15 +12,14 @@ import { makeId } from "./fs-utils.js";
 import { logger } from "./logger.js";
 import { OpenAIResponsesProvider, DummyProvider, type Provider } from "./providers.js";
 import { loadSkills } from "./skills.js";
+import type { Tool, ToolCallLogEntry } from "./tools/types.js";
 import type {
   ChatRecord,
   ChatSummary,
   Message,
   MessageContext,
   ProviderResult,
-  ToolCallLogEntry,
   ProviderUsage,
-  ToolDefinition,
 } from "./types.js";
 
 export type ChatLoadOptions = {
@@ -280,12 +279,12 @@ export class ChatRuntime {
   private readonly config: ProjectConfig;
   private readonly chatStore: ChatStore;
   private readonly provider: Provider;
-  private readonly tools: ToolDefinition[];
+  private readonly tools: Tool[];
   private activeChatId: string;
   private previousChatId?: string;
   private activeChat?: ChatRecord;
 
-  constructor(config: ProjectConfig, chatStore: ChatStore, tools: ToolDefinition[]) {
+  constructor(config: ProjectConfig, chatStore: ChatStore, tools: Tool[]) {
     this.config = config;
     this.chatStore = chatStore;
     this.tools = tools;

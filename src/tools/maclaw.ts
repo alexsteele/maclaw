@@ -6,8 +6,8 @@ import type {
   ChatSummary,
   NotificationDestination,
   ScheduledTask,
-  ToolDefinition,
 } from "../types.js";
+import type { Tool, Toolset } from "./types.js";
 import { parseTaskSchedule } from "../task.js";
 import { parseEmptyInput, parseObjectInput, requiredString } from "./input.js";
 
@@ -16,7 +16,8 @@ export type MaclawToolContext = {
   contextMessages: number;
   getCurrentChatId(): string;
   getChatAgent(): AgentRecord | undefined;
-  listTools(): ToolDefinition[];
+  listTools(): Tool[];
+  listToolsets(): Toolset[];
   listChannels(): string[];
   listChats(): Promise<ChatSummary[]>;
   loadChat(chatId: string): Promise<ChatRecord>;
@@ -278,10 +279,13 @@ const formatTask = (task: ScheduledTask): string =>
     `lastError: ${task.lastError ?? "(none)"}`,
   ].join("\n");
 
-const formatTool = (tool: ToolDefinition): string =>
+const formatTool = (tool: Tool): string =>
   `- ${tool.name} [${tool.permission}]: ${tool.description}`;
 
-export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] => {
+const formatToolset = (toolset: Toolset): string =>
+  `- ${toolset.name}: ${toolset.description}`;
+
+export const createMaclawTools = (context: MaclawToolContext): Tool[] => {
   return [
     {
       name: "list_tools",
@@ -295,7 +299,17 @@ export const createMaclawTools = (context: MaclawToolContext): ToolDefinition[] 
       },
       execute: async (input) => {
         parseEmptyInput(input);
-        return context.listTools().map(formatTool).join("\n");
+        const toolsets = context.listToolsets();
+        return [
+          ...(toolsets.length > 0
+            ? [
+                "Toolsets:",
+                ...toolsets.map(formatToolset),
+                "",
+              ]
+            : []),
+          ...context.listTools().map(formatTool),
+        ].join("\n");
       },
     },
     {

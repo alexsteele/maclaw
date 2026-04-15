@@ -1,8 +1,8 @@
 // Time tools provide simple grounding information such as the current time.
-import type { ToolDefinition } from "../types.js";
+import type { Tool } from "./types.js";
 import { parseEmptyInput } from "./input.js";
 
-export const createTimeTools = (): ToolDefinition[] => {
+export const createTimeTools = (): Tool[] => {
   return [
     {
       name: "get_time",
