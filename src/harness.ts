@@ -99,6 +99,7 @@ export type HarnessOptions = {
 export type AgentCreateOptions = {
   name: string;
   prompt: string;
+  toolsets?: string[];
   maxSteps?: number;
   timeoutMs?: number;
   stepIntervalMs?: number;
@@ -171,6 +172,58 @@ const filterToolsets = (
 
   return toolsets.filter((toolset) =>
     (toolset.tools ?? []).some((toolName) => enabledToolNames.has(toolName)));
+};
+
+const expandToolsetNames = (
+  selectedToolsets: string[],
+  availableToolsets: Toolset[],
+): string[] | undefined => {
+  const toolsetMap = new Map(availableToolsets.map((toolset) => [toolset.name, toolset]));
+  const expandedTools = new Set<string>();
+  const visited = new Set<string>();
+
+  const visit = (toolsetName: string): boolean => {
+    if (visited.has(toolsetName)) {
+      return true;
+    }
+
+    const toolset = toolsetMap.get(toolsetName);
+    if (!toolset) {
+      return false;
+    }
+
+    visited.add(toolsetName);
+    for (const nestedToolset of toolset.toolsets ?? []) {
+      if (!visit(nestedToolset)) {
+        return false;
+      }
+    }
+
+    for (const toolName of toolset.tools ?? []) {
+      expandedTools.add(toolName);
+    }
+
+    return true;
+  };
+
+  for (const toolsetName of selectedToolsets) {
+    if (!visit(toolsetName)) {
+      return undefined;
+    }
+  }
+
+  return Array.from(expandedTools);
+};
+
+const normalizeToolsetNames = (toolsets: string[] | undefined): string[] | undefined => {
+  if (!toolsets) {
+    return undefined;
+  }
+
+  const normalized = Array.from(
+    new Set(toolsets.map((toolset) => toolset.trim()).filter((toolset) => toolset.length > 0)),
+  );
+  return normalized.length > 0 ? normalized : undefined;
 };
 
 const findAgentByChatId = (
@@ -558,6 +611,20 @@ export class Harness {
     return this._router.listChannels(this._origin);
   }
 
+  resolveAgentTools(agent: AgentRecord): Tool[] {
+    if (!agent.toolsets || agent.toolsets.length === 0) {
+      return this._tools;
+    }
+
+    const enabledToolNames = expandToolsetNames(agent.toolsets, this._toolsets);
+    if (!enabledToolNames) {
+      return this._tools;
+    }
+
+    const allowed = new Set(enabledToolNames);
+    return this._tools.filter((tool) => allowed.has(tool.name));
+  }
+
   async getProjectUsage(): Promise<UsageSummary> {
     const summary = createUsageSummary();
     const chats = await this.listChats();
@@ -812,9 +879,10 @@ export class Harness {
     chatId: string,
     userInput: string,
     context?: MessageContext,
+    toolsOverride?: Tool[],
   ): Promise<Message> {
     const prompt = await resolvePromptText(this.config.projectFolder, userInput);
-    return this._chatRuntime.promptChat(chatId, prompt, context);
+    return this._chatRuntime.promptChat(chatId, prompt, context, toolsOverride);
   }
 
   async handleScheduledTask(
@@ -926,6 +994,15 @@ export class Harness {
       return { error: `agent already running: ${input.name}` };
     }
 
+    const requestedToolsets = normalizeToolsetNames(input.toolsets);
+    if (requestedToolsets) {
+      const availableToolsets = new Set(this._toolsets.map((toolset) => toolset.name));
+      const missingToolset = requestedToolsets.find((toolset) => !availableToolsets.has(toolset));
+      if (missingToolset) {
+        return { error: `unknown toolset: ${missingToolset}` };
+      }
+    }
+
     const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
     const now = new Date().toISOString();
     const id = this.createAgentId();
@@ -934,6 +1011,7 @@ export class Harness {
       name: input.name,
       prompt,
       chatId: input.chatId ?? id,
+      toolsets: requestedToolsets,
       sourceChatId: input.sourceChatId ?? this.getCurrentChatId(),
       createdBy: input.createdBy ?? "user",
       createdByAgentId: input.createdByAgentId,
@@ -951,7 +1029,8 @@ export class Harness {
     const agent = new Agent(
       record,
       this._agentStore,
-      this.promptChat.bind(this),
+      (chatId, prompt) =>
+        this.promptChat(chatId, prompt, undefined, this.resolveAgentTools(record)),
       this.handleAgentStopped.bind(this, record.id),
     );
     this._runningAgents.set(record.id, agent);
@@ -1080,7 +1159,8 @@ export class Harness {
       const agent = new Agent(
         record,
         this._agentStore,
-        this.promptChat.bind(this),
+        (chatId, prompt) =>
+          this.promptChat(chatId, prompt, undefined, this.resolveAgentTools(record)),
         this.handleAgentStopped.bind(this, record.id),
       );
       this._runningAgents.set(record.id, agent);

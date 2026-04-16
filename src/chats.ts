@@ -292,6 +292,10 @@ export class ChatRuntime {
     this.activeChatId = config.chatId;
   }
 
+  private getTools(toolsOverride?: Tool[]): Tool[] {
+    return toolsOverride ?? this.tools;
+  }
+
   private getChatLoadOptions() {
     return {
       retentionDays: this.config.retentionDays,
@@ -467,8 +471,9 @@ export class ChatRuntime {
     chatId: string,
     userInput: string,
     context?: MessageContext,
+    toolsOverride?: Tool[],
   ): Promise<Message> {
-    const reply = await this.promptChatDetailed(chatId, userInput, context);
+    const reply = await this.promptChatDetailed(chatId, userInput, context, toolsOverride);
     return reply.message;
   }
 
@@ -484,6 +489,7 @@ export class ChatRuntime {
     chatId: string,
     userInput: string,
     context?: MessageContext,
+    toolsOverride?: Tool[],
   ): Promise<ChatReply> {
     const chat =
       chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
@@ -501,7 +507,7 @@ export class ChatRuntime {
           chat: promptChat,
           userInput,
           systemPrompt,
-          tools: this.tools,
+          tools: this.getTools(toolsOverride),
           onToolCall: async (entry) => {
             appendMessage(chat, "tool", formatToolCall(entry), entry.name);
             await this.chatStore.saveChat(chat);

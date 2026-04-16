@@ -170,6 +170,7 @@ export const agentHelpText = [
   "  /agent",
   "  /agent list",
   "  /agent create <name> | <prompt> [| <json options>]",
+  '    json options: {"toolsets":["maclaw","skills"],"maxSteps":3}',
   "  /agent send <name> | <message>",
   "  /agent inbox <name>",
   "  /agent inbox clear <name>",
@@ -475,6 +476,7 @@ const renderAgentInfo = (agent: AgentRecord): string =>
   [
     `id: ${agent.id}`,
     `name: ${agent.name}`,
+    `toolsets: ${agent.toolsets?.join(", ") ?? "(default)"}`,
     `status: ${agent.status}`,
     `chatId: ${agent.chatId}`,
     `steps: ${
@@ -722,7 +724,7 @@ const parseAgentCreateOptions = (
   value: string,
 ): Pick<
   AgentCreateOptions,
-  "maxSteps" | "timeoutMs" | "stepIntervalMs" | "notify" | "notifyTarget"
+  "maxSteps" | "timeoutMs" | "stepIntervalMs" | "notify" | "notifyTarget" | "toolsets"
 > | string => {
   let parsed: unknown;
   try {
@@ -737,9 +739,19 @@ const parseAgentCreateOptions = (
 
   const optionsObject = parsed as Record<string, unknown>;
   for (const key of Object.keys(optionsObject)) {
-    if (!["maxSteps", "timeoutMs", "stepIntervalMs", "notify", "notifyTarget"].includes(key)) {
+    if (!["maxSteps", "timeoutMs", "stepIntervalMs", "notify", "notifyTarget", "toolsets"].includes(key)) {
       return `Unknown agent option: ${key}`;
     }
+  }
+
+  if (
+    optionsObject.toolsets !== undefined &&
+    (
+      !Array.isArray(optionsObject.toolsets) ||
+      optionsObject.toolsets.some((value) => typeof value !== "string")
+    )
+  ) {
+    return "toolsets must be an array of toolset names";
   }
 
   const notificationOverride = parseNotificationOverride(optionsObject);
@@ -751,6 +763,7 @@ const parseAgentCreateOptions = (
     maxSteps: optionsObject.maxSteps as AgentCreateOptions["maxSteps"],
     timeoutMs: optionsObject.timeoutMs as AgentCreateOptions["timeoutMs"],
     stepIntervalMs: optionsObject.stepIntervalMs as AgentCreateOptions["stepIntervalMs"],
+    toolsets: optionsObject.toolsets as AgentCreateOptions["toolsets"],
     ...notificationOverride,
   };
 };

@@ -1201,6 +1201,43 @@ test("dispatchCommand creates an agent with JSON options", async () => {
   }
 });
 
+test("dispatchCommand creates an agent with toolsets", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-toolsets-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      '/agent create planner | work through the task | {"toolsets":["maclaw","skills"],"maxSteps":3}',
+    );
+
+    assert.match(reply ?? "", /^started agent: agent_/u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.deepEqual(agent?.toolsets, ["maclaw", "skills"]);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand rejects unknown agent toolsets", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-bad-toolset-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      '/agent create planner | work through the task | {"toolsets":["missing"]}',
+    );
+
+    assert.equal(reply, "unknown toolset: missing");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand creates an agent with notification overrides", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-notify-options-"));
 

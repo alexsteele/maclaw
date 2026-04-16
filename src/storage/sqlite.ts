@@ -54,6 +54,7 @@ const SQLITE_SCHEMA = `
     name text not null,
     prompt text not null,
     chat_id text not null,
+    toolsets_json text,
     source_chat_id text,
     created_by text,
     created_by_agent_id text,
@@ -163,6 +164,7 @@ const rowToAgentRecord = (row: Record<string, unknown>): AgentRecord => ({
   name: String(row.name),
   prompt: String(row.prompt),
   chatId: String(row.chat_id),
+  toolsets: parseJsonField<string[]>(row.toolsets_json),
   sourceChatId: row.source_chat_id === null ? undefined : String(row.source_chat_id),
   createdBy: row.created_by === null ? undefined : (String(row.created_by) as AgentRecord["createdBy"]),
   createdByAgentId:
@@ -291,14 +293,15 @@ export class SqliteAgentStore implements AgentStore {
     this.database
       .prepare(`
         insert into agents (
-          id, name, prompt, chat_id, source_chat_id, created_by, created_by_agent_id, origin_json, notify_json, notify_target_json,
+          id, name, prompt, chat_id, toolsets_json, source_chat_id, created_by, created_by_agent_id, origin_json, notify_json, notify_target_json,
           status, max_steps, timeout_ms, step_interval_ms, step_count, created_at,
           started_at, finished_at, last_message, last_error
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(id) do update set
           name = excluded.name,
           prompt = excluded.prompt,
           chat_id = excluded.chat_id,
+          toolsets_json = excluded.toolsets_json,
           source_chat_id = excluded.source_chat_id,
           created_by = excluded.created_by,
           created_by_agent_id = excluded.created_by_agent_id,
@@ -321,6 +324,7 @@ export class SqliteAgentStore implements AgentStore {
         toText(record.name),
         toText(record.prompt),
         toText(record.chatId),
+        stringifyJsonField(record.toolsets),
         toNullableText(record.sourceChatId),
         toNullableText(record.createdBy),
         toNullableText(record.createdByAgentId),

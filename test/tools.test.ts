@@ -217,6 +217,8 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     assert.equal(notify.permission, "act");
     assert.match(await listTools.execute({}), /^Toolsets:$/mu);
     assert.match(await listTools.execute({}), /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
+    assert.match(await listTools.execute({}), /- skills: Local skill discovery and reading tools\./u);
+    assert.match(await listTools.execute({}), /- time: Basic time and clock tools\./u);
     assert.match(await listTools.execute({}), /create_agent \[act\]/u);
     assert.match(await listTools.execute({}), /send_agent_message \[act\]/u);
     assert.match(await listTools.execute({}), /write_agent_memory \[act\]/u);
@@ -239,6 +241,7 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
 
     const agent = harness.findAgent("planner");
     assert.ok(agent);
+    assert.deepEqual(agent.toolsets, undefined);
     assert.equal(agent.maxSteps, 3);
     assert.notEqual(agent.chatId, harness.getCurrentChatId());
     assert.equal(agent.chatId, agent.id);
@@ -268,6 +271,7 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
     const childAgentReply = await createAgent.execute({
       name: "child-planner",
       prompt: "Plan a child task",
+      toolsets: ["maclaw", "skills"],
     });
     const childTaskReply = await createTask.execute({
       title: "Child Brief",
@@ -280,9 +284,15 @@ test("harness-backed act tools can create agents and tasks when enabled", async 
 
     const childAgent = harness.findAgent("child-planner");
     assert.ok(childAgent);
+    assert.deepEqual(childAgent.toolsets, ["maclaw", "skills"]);
     assert.equal(childAgent.sourceChatId, agent.chatId);
     assert.equal(childAgent.createdBy, "tool");
     assert.equal(childAgent.createdByAgentId, agent.id);
+
+    const childTools = harness.resolveAgentTools(childAgent).map((tool) => tool.name);
+    assert.equal(childTools.includes("list_tools"), true);
+    assert.equal(childTools.includes("list_skills"), true);
+    assert.equal(childTools.includes("get_time"), false);
 
     const childTasks = await harness.listCurrentChatTasks();
     assert.equal(childTasks.length, 1);

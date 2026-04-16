@@ -38,6 +38,7 @@ export type MaclawToolContext = {
   createAgent(input: {
     name: string;
     prompt: string;
+    toolsets?: string[];
     maxSteps?: number;
     timeoutMs?: number;
     stepIntervalMs?: number;
@@ -140,18 +141,28 @@ const parseCreateAgentInput = (
 ): {
   name: string;
   prompt: string;
+  toolsets?: string[];
   maxSteps?: number;
   timeoutMs?: number;
   stepIntervalMs?: number;
 } => {
   const object = parseObjectInput(input);
+  const toolsets = object.toolsets;
   const maxSteps = object.maxSteps;
   const timeoutMs = object.timeoutMs;
   const stepIntervalMs = object.stepIntervalMs;
 
+  if (
+    toolsets !== undefined &&
+    (!Array.isArray(toolsets) || toolsets.some((value) => typeof value !== "string"))
+  ) {
+    throw new Error('Expected "toolsets" to be an array of strings.');
+  }
+
   return {
     name: requiredString(object, "name"),
     prompt: requiredString(object, "prompt"),
+    ...(toolsets === undefined ? {} : { toolsets: toolsets as string[] }),
     ...(typeof maxSteps === "number" ? { maxSteps } : {}),
     ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
     ...(typeof stepIntervalMs === "number" ? { stepIntervalMs } : {}),
@@ -534,6 +545,10 @@ export const createMaclawTools = (context: MaclawToolContext): Tool[] => {
         properties: {
           name: { type: "string" },
           prompt: { type: "string" },
+          toolsets: {
+            type: "array",
+            items: { type: "string" },
+          },
           maxSteps: { type: "number" },
           timeoutMs: { type: "number" },
           stepIntervalMs: { type: "number" },

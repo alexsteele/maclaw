@@ -125,6 +125,7 @@ export type AgentRecord = {
   name: string;
   prompt: string;
   chatId: string;
+  toolsets?: string[];
   sourceChatId?: string;
   createdBy?: CreatedBy;
   createdByAgentId?: string;

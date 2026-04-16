@@ -38,5 +38,15 @@ export const createToolsets = (
       description: "Workspace-scoped file and directory tools.",
       tools: createFileTools(config).map((tool) => tool.name),
     },
+    {
+      name: "skills",
+      description: "Local skill discovery and reading tools.",
+      tools: createSkillTools(config).map((tool) => tool.name),
+    },
+    {
+      name: "time",
+      description: "Basic time and clock tools.",
+      tools: createTimeTools().map((tool) => tool.name),
+    },
   ];
 };
