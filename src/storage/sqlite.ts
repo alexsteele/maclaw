@@ -4,7 +4,12 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import { defaultSqliteFile, type ProjectConfig } from "../config.js";
+import {
+  defaultAgentsDir,
+  defaultAgentsFile,
+  defaultSqliteFile,
+  type ProjectConfig,
+} from "../config.js";
 import type { AgentMemoryEntry, AgentMemoryStore, AgentStore } from "../agent.js";
 import type { AgentInboxStore } from "../agent-inbox.js";
 import type { ChatLoadOptions, ChatStore } from "../chats.js";
@@ -31,6 +36,7 @@ import type {
   TaskRunLogEntry,
   TaskSchedule,
 } from "../types.js";
+import { JsonFileAgentMemoryStore, JsonFileAgentStore } from "./json.js";
 
 const SQLITE_SCHEMA = `
   create table if not exists chats (
@@ -90,12 +96,6 @@ const SQLITE_SCHEMA = `
     source_chat_id text,
     created_at text not null,
     read_at text
-  );
-
-  create table if not exists agent_memory (
-    agent_id text primary key,
-    text text not null,
-    updated_at text not null
   );
 
   create table if not exists tasks (
@@ -208,12 +208,6 @@ const rowToAgentInboxEntry = (row: Record<string, unknown>): AgentInboxEntry => 
   readAt: row.read_at === null ? undefined : String(row.read_at),
 });
 
-const rowToAgentMemoryEntry = (row: Record<string, unknown>): AgentMemoryEntry => ({
-  agentId: String(row.agent_id),
-  text: String(row.text),
-  updatedAt: String(row.updated_at),
-});
-
 const rowToScheduledTask = (row: Record<string, unknown>): ScheduledTask => ({
   id: String(row.id),
   chatId: String(row.chat_id),
@@ -279,9 +273,11 @@ const rowToChatMetadata = (
 
 export class SqliteAgentStore implements AgentStore {
   private readonly database: DatabaseSync;
+  private readonly fileStore: JsonFileAgentStore;
 
-  constructor(filePath: string) {
+  constructor(filePath: string, projectFolder: string) {
     this.database = openDatabase(filePath);
+    this.fileStore = new JsonFileAgentStore(defaultAgentsFile(projectFolder));
   }
 
   getAgent(agentId: string): AgentRecord | undefined {
@@ -342,6 +338,7 @@ export class SqliteAgentStore implements AgentStore {
         toNullableText(record.lastMessage),
         toNullableText(record.lastError),
       );
+    this.fileStore.saveAgent(record);
   }
 
   listAgents(): AgentRecord[] {
@@ -456,49 +453,26 @@ export class SqliteAgentInboxStore implements AgentInboxStore {
 }
 
 export class SqliteAgentMemoryStore implements AgentMemoryStore {
-  private readonly database: DatabaseSync;
+  private readonly fileStore: JsonFileAgentMemoryStore;
 
-  constructor(filePath: string) {
-    this.database = openDatabase(filePath);
+  constructor(projectFolder: string) {
+    this.fileStore = new JsonFileAgentMemoryStore(projectFolder);
   }
 
   async loadEntry(agentId: string): Promise<AgentMemoryEntry | undefined> {
-    const row = this.database
-      .prepare("select * from agent_memory where agent_id = ?")
-      .get(agentId) as Record<string, unknown> | undefined;
-    return row ? rowToAgentMemoryEntry(row) : undefined;
+    return this.fileStore.loadEntry(agentId);
   }
 
   async saveEntry(entry: AgentMemoryEntry): Promise<void> {
-    this.database
-      .prepare(`
-        insert into agent_memory (
-          agent_id, text, updated_at
-        ) values (?, ?, ?)
-        on conflict(agent_id) do update set
-          text = excluded.text,
-          updated_at = excluded.updated_at
-      `)
-      .run(
-        toText(entry.agentId),
-        toText(entry.text),
-        toText(entry.updatedAt),
-      );
+    await this.fileStore.saveEntry(entry);
   }
 
   async deleteEntry(agentId: string): Promise<boolean> {
-    const result = this.database
-      .prepare("delete from agent_memory where agent_id = ?")
-      .run(agentId);
-    return result.changes > 0;
+    return this.fileStore.deleteEntry(agentId);
   }
 
   async clearEntries(): Promise<number> {
-    const countRow = this.database
-      .prepare("select count(*) as count from agent_memory")
-      .get() as { count: number };
-    this.database.prepare("delete from agent_memory").run();
-    return Number(countRow.count);
+    return this.fileStore.clearEntries();
   }
 }
 
@@ -608,7 +582,6 @@ export class SqliteChatStore implements ChatStore {
   async saveChat(chat: ChatRecord): Promise<void> {
     chat.updatedAt = new Date().toISOString();
     await ensureDir(this.chatsDir);
-
     const transcriptPath = chatTranscriptPath(this.chatsDir, chat.id);
     const existingRow = this.database
       .prepare("select message_count from chats where id = ?")
@@ -690,28 +663,23 @@ export class SqliteProjectStorage implements ProjectStorage {
   readonly agentMemory: AgentMemoryStore;
   private readonly sqliteFile: string;
   private readonly chatsDir: string;
+  private readonly agentsDir: string;
   private readonly chatOptions: ChatLoadOptions;
 
-  constructor(
-    chats: ChatStore,
-    tasks: TaskStore,
-    agents: AgentStore,
-    inbox: InboxStore,
-    agentInbox: AgentInboxStore,
-    agentMemory: AgentMemoryStore,
-    sqliteFile: string,
-    chatsDir: string,
-    chatOptions: ChatLoadOptions,
-  ) {
-    this.chats = chats;
-    this.tasks = tasks;
-    this.agents = agents;
-    this.inbox = inbox;
-    this.agentInbox = agentInbox;
-    this.agentMemory = agentMemory;
-    this.sqliteFile = sqliteFile;
-    this.chatsDir = chatsDir;
-    this.chatOptions = chatOptions;
+  constructor(config: ProjectConfig) {
+    this.sqliteFile = defaultSqliteFile(config.projectFolder);
+    this.chatsDir = config.chatsDir;
+    this.agentsDir = defaultAgentsDir(config.projectFolder);
+    this.chats = new SqliteChatStore(this.sqliteFile, this.chatsDir);
+    this.tasks = new SqliteTaskStore(this.sqliteFile);
+    this.agents = new SqliteAgentStore(this.sqliteFile, config.projectFolder);
+    this.inbox = new SqliteInboxStore(this.sqliteFile);
+    this.agentInbox = new SqliteAgentInboxStore(this.sqliteFile);
+    this.agentMemory = new SqliteAgentMemoryStore(config.projectFolder);
+    this.chatOptions = {
+      retentionDays: config.retentionDays,
+      compressionMode: config.compressionMode,
+    };
   }
 
   async loadSnapshot(activeChatId: string): Promise<ProjectSnapshot> {
@@ -729,7 +697,6 @@ export class SqliteProjectStorage implements ProjectStorage {
       delete from agents;
       delete from inbox;
       delete from agent_inbox;
-      delete from agent_memory;
       delete from tasks;
       delete from task_runs;
     `);
@@ -744,6 +711,8 @@ export class SqliteProjectStorage implements ProjectStorage {
 
       await rm(path.join(this.chatsDir, entry.name), { force: true });
     }
+
+    await rm(this.agentsDir, { recursive: true, force: true });
   }
 
   // SQLite wipe removes the database file after clearing tables and transcripts.
@@ -753,20 +722,5 @@ export class SqliteProjectStorage implements ProjectStorage {
   }
 }
 
-export const createSqliteProjectStorage = (config: ProjectConfig): ProjectStorage => {
-  const sqliteFile = defaultSqliteFile(config.projectFolder);
-  return new SqliteProjectStorage(
-    new SqliteChatStore(sqliteFile, config.chatsDir),
-    new SqliteTaskStore(sqliteFile),
-    new SqliteAgentStore(sqliteFile),
-    new SqliteInboxStore(sqliteFile),
-    new SqliteAgentInboxStore(sqliteFile),
-    new SqliteAgentMemoryStore(sqliteFile),
-    sqliteFile,
-    config.chatsDir,
-    {
-      retentionDays: config.retentionDays,
-      compressionMode: config.compressionMode,
-    },
-  );
-};
+export const createSqliteProjectStorage = (config: ProjectConfig): ProjectStorage =>
+  new SqliteProjectStorage(config);

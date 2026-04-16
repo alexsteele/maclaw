@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -32,6 +33,10 @@ test("JsonFileAgentStore persists and reloads agent records", async () => {
     assert.equal(agent?.chatId, "agent_ab12cd");
     assert.equal(agent?.stepCount, 3);
     assert.equal(reloaded.listAgents().length, 1);
+    assert.equal(
+      existsSync(path.join(rootDir, "agents", "agent_ab12cd", "agent.json")),
+      true,
+    );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

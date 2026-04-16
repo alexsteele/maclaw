@@ -5,6 +5,7 @@ import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import {
   defaultAgentsFile,
+  defaultAgentsDir,
   defaultAgentInboxFile,
   defaultAgentMemoryFile,
   defaultInboxFile,
@@ -43,9 +44,11 @@ import type {
 
 export class JsonFileAgentStore implements AgentStore {
   private readonly filePath: string;
+  private readonly agentsDir: string;
 
   constructor(filePath: string) {
     this.filePath = filePath;
+    this.agentsDir = path.join(path.dirname(filePath), "agents");
   }
 
   getAgent(agentId: string): AgentRecord | undefined {
@@ -57,6 +60,7 @@ export class JsonFileAgentStore implements AgentStore {
     const agents = this.readAgents();
     agents[record.id] = structuredClone(record);
     this.writeAgents(agents);
+    this.writeAgentFile(record);
   }
 
   listAgents(): AgentRecord[] {
@@ -75,6 +79,12 @@ export class JsonFileAgentStore implements AgentStore {
   private writeAgents(agents: Record<string, AgentRecord>): void {
     mkdirSync(path.dirname(this.filePath), { recursive: true });
     writeFileSync(this.filePath, `${JSON.stringify(agents, null, 2)}\n`, "utf8");
+  }
+
+  private writeAgentFile(record: AgentRecord): void {
+    const filePath = path.join(this.agentsDir, record.id, "agent.json");
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
   }
 }
 
@@ -175,39 +185,64 @@ export class JsonFileAgentInboxStore implements AgentInboxStore {
 }
 
 export class JsonFileAgentMemoryStore implements AgentMemoryStore {
-  private readonly filePath: string;
+  private readonly projectFolder: string;
 
-  constructor(filePath: string) {
-    this.filePath = filePath;
+  constructor(projectFolder: string) {
+    this.projectFolder = projectFolder;
   }
 
   async loadEntry(agentId: string): Promise<AgentMemoryEntry | undefined> {
-    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
-    const entry = entries[agentId];
-    return entry ? structuredClone(entry) : undefined;
+    const filePath = defaultAgentMemoryFile(this.projectFolder, agentId);
+    if (!existsSync(filePath)) {
+      return undefined;
+    }
+
+    return {
+      agentId,
+      text: readFileSync(filePath, "utf8").trim(),
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   async saveEntry(entry: AgentMemoryEntry): Promise<void> {
-    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
-    entries[entry.agentId] = structuredClone(entry);
-    await writeJsonFile(this.filePath, entries);
+    const filePath = defaultAgentMemoryFile(this.projectFolder, entry.agentId);
+    await ensureDir(path.dirname(filePath));
+    await writeFile(filePath, `${entry.text.trim()}\n`, "utf8");
   }
 
   async deleteEntry(agentId: string): Promise<boolean> {
-    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
-    if (!(agentId in entries)) {
+    const filePath = defaultAgentMemoryFile(this.projectFolder, agentId);
+    if (!existsSync(filePath)) {
       return false;
     }
 
-    delete entries[agentId];
-    await writeJsonFile(this.filePath, entries);
+    await rm(filePath, { force: true });
     return true;
   }
 
   async clearEntries(): Promise<number> {
-    const entries = await readJsonFile<Record<string, AgentMemoryEntry>>(this.filePath, {});
-    await writeJsonFile(this.filePath, {});
-    return Object.keys(entries).length;
+    const agentsDir = defaultAgentsDir(this.projectFolder);
+    if (!existsSync(agentsDir)) {
+      return 0;
+    }
+
+    const entries = await readdir(agentsDir, { withFileTypes: true });
+    let removed = 0;
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const filePath = defaultAgentMemoryFile(this.projectFolder, entry.name);
+      if (!existsSync(filePath)) {
+        continue;
+      }
+
+      await rm(filePath, { force: true });
+      removed += 1;
+    }
+
+    return removed;
   }
 }
 
@@ -288,7 +323,6 @@ export class JsonFileChatStore implements ChatStore {
   async saveChat(chat: ChatRecord): Promise<void> {
     chat.updatedAt = new Date().toISOString();
     await ensureDir(this.chatsDir);
-
     const metadataPath = chatPath(this.chatsDir, chat.id);
     const transcriptPath = chatTranscriptPath(this.chatsDir, chat.id);
     const existingMetadata = await readJsonFile<ChatMetadata | null>(metadataPath, null);
@@ -320,8 +354,8 @@ export class JsonFileChatStore implements ChatStore {
 
   async listChats(): Promise<ChatSummary[]> {
     await ensureDir(this.chatsDir);
-    const entries = await readdir(this.chatsDir, { withFileTypes: true });
     const chats: ChatSummary[] = [];
+    const entries = await readdir(this.chatsDir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) {
@@ -391,44 +425,37 @@ export class JsonProjectStorage implements ProjectStorage {
   readonly agentInbox: AgentInboxStore;
   readonly agentMemory: AgentMemoryStore;
   private readonly chatsDir: string;
+  private readonly agentsDir: string;
   private readonly tasksFile: string;
   private readonly taskRunsFile: string;
   private readonly agentsFile: string;
   private readonly inboxFile: string;
   private readonly agentInboxFile: string;
-  private readonly agentMemoryFile: string;
   private readonly chatOptions: ChatLoadOptions;
 
-  constructor(
-    chats: ChatStore,
-    tasks: TaskStore,
-    agents: AgentStore,
-    inbox: InboxStore,
-    agentInbox: AgentInboxStore,
-    agentMemory: AgentMemoryStore,
-    chatsDir: string,
-    tasksFile: string,
-    taskRunsFile: string,
-    agentsFile: string,
-    inboxFile: string,
-    agentInboxFile: string,
-    agentMemoryFile: string,
-    chatOptions: ChatLoadOptions,
-  ) {
-    this.chats = chats;
-    this.tasks = tasks;
-    this.agents = agents;
-    this.inbox = inbox;
-    this.agentInbox = agentInbox;
-    this.agentMemory = agentMemory;
-    this.chatsDir = chatsDir;
-    this.tasksFile = tasksFile;
-    this.taskRunsFile = taskRunsFile;
-    this.agentsFile = agentsFile;
-    this.inboxFile = inboxFile;
-    this.agentInboxFile = agentInboxFile;
-    this.agentMemoryFile = agentMemoryFile;
-    this.chatOptions = chatOptions;
+  constructor(config: ProjectConfig) {
+    this.chats = new JsonFileChatStore(config.chatsDir);
+    this.tasks = new JsonFileTaskStore(
+      defaultTasksFile(config.projectFolder),
+      defaultTaskRunsFile(config.projectFolder),
+    );
+    this.agents = new JsonFileAgentStore(defaultAgentsFile(config.projectFolder));
+    this.inbox = new JsonFileInboxStore(defaultInboxFile(config.projectFolder));
+    this.agentInbox = new JsonFileAgentInboxStore(
+      defaultAgentInboxFile(config.projectFolder),
+    );
+    this.agentMemory = new JsonFileAgentMemoryStore(config.projectFolder);
+    this.chatsDir = config.chatsDir;
+    this.agentsDir = defaultAgentsDir(config.projectFolder);
+    this.tasksFile = defaultTasksFile(config.projectFolder);
+    this.taskRunsFile = defaultTaskRunsFile(config.projectFolder);
+    this.agentsFile = defaultAgentsFile(config.projectFolder);
+    this.inboxFile = defaultInboxFile(config.projectFolder);
+    this.agentInboxFile = defaultAgentInboxFile(config.projectFolder);
+    this.chatOptions = {
+      retentionDays: config.retentionDays,
+      compressionMode: config.compressionMode,
+    };
   }
 
   async loadSnapshot(activeChatId: string): Promise<ProjectSnapshot> {
@@ -443,9 +470,9 @@ export class JsonProjectStorage implements ProjectStorage {
     await rm(this.agentsFile, { force: true });
     await rm(this.inboxFile, { force: true });
     await rm(this.agentInboxFile, { force: true });
-    await rm(this.agentMemoryFile, { force: true });
     await rm(this.tasksFile, { force: true });
     await rm(this.taskRunsFile, { force: true });
+    await rm(this.agentsDir, { recursive: true, force: true });
 
     if (!existsSync(this.chatsDir)) {
       return;
@@ -471,25 +498,4 @@ export class JsonProjectStorage implements ProjectStorage {
 }
 
 export const createJsonProjectStorage = (config: ProjectConfig): ProjectStorage =>
-  new JsonProjectStorage(
-    new JsonFileChatStore(config.chatsDir),
-    new JsonFileTaskStore(
-      defaultTasksFile(config.projectFolder),
-      defaultTaskRunsFile(config.projectFolder),
-    ),
-    new JsonFileAgentStore(defaultAgentsFile(config.projectFolder)),
-    new JsonFileInboxStore(defaultInboxFile(config.projectFolder)),
-    new JsonFileAgentInboxStore(defaultAgentInboxFile(config.projectFolder)),
-    new JsonFileAgentMemoryStore(defaultAgentMemoryFile(config.projectFolder)),
-    config.chatsDir,
-    defaultTasksFile(config.projectFolder),
-    defaultTaskRunsFile(config.projectFolder),
-    defaultAgentsFile(config.projectFolder),
-    defaultInboxFile(config.projectFolder),
-    defaultAgentInboxFile(config.projectFolder),
-    defaultAgentMemoryFile(config.projectFolder),
-    {
-      retentionDays: config.retentionDays,
-      compressionMode: config.compressionMode,
-    },
-  );
+  new JsonProjectStorage(config);

@@ -237,3 +237,31 @@ test("SqliteChatStore keeps chat metadata in sqlite and transcripts on disk", as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("SqliteChatStore stores agent chat transcripts in the normal chats folder", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "maclaw-chats-sqlite-agent-"));
+  const store = new SqliteChatStore(path.join(dir, "maclaw.db"), path.join(dir, "chats"));
+
+  try {
+    const chat = await store.loadChat("agent_alpha", {
+      retentionDays: 30,
+      compressionMode: "none",
+    });
+    appendMessage(chat, "user", "hello from agent");
+    await store.saveChat(chat);
+
+    const transcriptRaw = await readFile(
+      path.join(dir, "chats", "agent_alpha.jsonl"),
+      "utf8",
+    );
+    const transcriptLines = transcriptRaw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { content: string });
+
+    assert.equal(transcriptLines.length, 1);
+    assert.equal(transcriptLines[0]?.content, "hello from agent");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -29,14 +29,23 @@ export const defaultTaskRunsFile = (projectFolder: string): string =>
 export const defaultAgentsFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "agents.json");
 
+export const defaultAgentsDir = (projectFolder: string): string =>
+  path.join(defaultProjectDataDir(projectFolder), "agents");
+
+export const defaultAgentDir = (projectFolder: string, agentId: string): string =>
+  path.join(defaultAgentsDir(projectFolder), agentId);
+
+export const defaultAgentFile = (projectFolder: string, agentId: string): string =>
+  path.join(defaultAgentDir(projectFolder, agentId), "agent.json");
+
 export const defaultInboxFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "inbox.jsonl");
 
 export const defaultAgentInboxFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "agent-inbox.jsonl");
 
-export const defaultAgentMemoryFile = (projectFolder: string): string =>
-  path.join(defaultProjectDataDir(projectFolder), "agent-memory.json");
+export const defaultAgentMemoryFile = (projectFolder: string, agentId: string): string =>
+  path.join(defaultAgentDir(projectFolder, agentId), "MEMORY.md");
 
 export const defaultSqliteFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "maclaw.db");

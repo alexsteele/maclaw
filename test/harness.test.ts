@@ -6,6 +6,8 @@ import { existsSync } from "node:fs";
 import test from "node:test";
 import { Harness } from "../src/harness.js";
 import {
+  defaultAgentFile,
+  defaultAgentMemoryFile,
   defaultAgentsFile,
   defaultInboxFile,
   defaultProjectLockFile,
@@ -558,6 +560,7 @@ test("harness stores agents and inbox entries in sqlite when configured", async 
     const agents = harness.listAgents();
     assert.equal(agents.length, 1);
     assert.equal(agents[0]?.name, "sqlite-agent");
+    assert.equal(existsSync(defaultAgentFile(projectDir, created.agent.id)), true);
 
     const inbox = await harness.listInbox();
     assert.equal(inbox.length, 1);
@@ -681,6 +684,19 @@ test("harness stores agent inbox entries in sqlite when configured", async () =>
     assert.equal(entries?.length, 1);
     assert.equal(entries?.[0]?.text, "Please pick this up after restart");
     assert.equal(entries?.[0]?.sourceName, "Alex");
+
+    const memoryWritten = await harness.writeAgentMemory(
+      created.agent.id,
+      "Keep the SQLite-backed agent notes on disk.",
+    );
+    assert.equal(memoryWritten, true);
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, created.agent.id)), true);
+
+    await harness.promptChat(created.agent.id, "SQLite agent chat update");
+    assert.equal(
+      existsSync(path.join(projectDir, ".maclaw", "chats", `${created.agent.id}.jsonl`)),
+      true,
+    );
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -735,6 +751,7 @@ test("updateProjectConfig migrates project data when storage changes", async () 
       "Remember to summarize the findings before finishing.",
     );
     assert.equal(memoryWritten, true);
+    await harness.promptChat(created.agent.id, "Agent scratchpad update");
 
     const nextConfig = await harness.updateProjectConfig({ storage: "sqlite" });
 
@@ -752,6 +769,12 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     assert.equal(agents.length, 1);
     assert.equal(agents[0]?.name, "stored-agent");
     assert.equal(agents[0]?.status, "cancelled");
+    assert.equal(existsSync(defaultAgentFile(projectDir, created.agent.id)), true);
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, created.agent.id)), true);
+    assert.equal(
+      existsSync(path.join(projectDir, ".maclaw", "chats", `${created.agent.id}.jsonl`)),
+      true,
+    );
 
     const inbox = await harness.listInbox();
     assert.equal(inbox.length, 1);
