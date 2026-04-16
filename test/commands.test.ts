@@ -1144,14 +1144,17 @@ test("dispatchCommand renders agent list output", async () => {
     await harness.createAgent({
       name: "daily-summary",
       prompt: "Write a summary",
+      toolsets: ["maclaw", "skills"],
     });
 
     const reply = await dispatchCommand(harness, "/agent list");
 
     assert.match(reply ?? "", /\bid\b/u);
     assert.match(reply ?? "", /\bname\b/u);
+    assert.match(reply ?? "", /\btoolsets\b/u);
     assert.match(reply ?? "", /\bstatus\b/u);
     assert.match(reply ?? "", /daily-summary/u);
+    assert.match(reply ?? "", /maclaw,skills/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -1216,6 +1219,26 @@ test("dispatchCommand creates an agent with toolsets", async () => {
 
     const agent = harness.listAgents().find((entry) => entry.name === "planner");
     assert.deepEqual(agent?.toolsets, ["maclaw", "skills"]);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand shows agent toolsets", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-show-toolsets-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = await harness.createAgent({
+      name: "planner",
+      prompt: "Work through the task",
+      toolsets: ["maclaw", "skills"],
+    });
+    assert.ok(created.agent);
+
+    const reply = await dispatchCommand(harness, "/agent show planner");
+
+    assert.match(reply ?? "", /^toolsets: maclaw, skills$/mu);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

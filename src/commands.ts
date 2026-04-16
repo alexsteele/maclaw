@@ -429,6 +429,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
   const rows = agents.map((agent) => ({
     id: agent.id,
     name: agent.name,
+    toolsets: agent.toolsets?.join(",") ?? "(default)",
     status: agent.status,
     steps:
       agent.maxSteps === undefined
@@ -439,6 +440,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
   const nameWidth = Math.max("name".length, ...rows.map((row) => row.name.length));
+  const toolsetsWidth = Math.max("toolsets".length, ...rows.map((row) => row.toolsets.length));
   const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
   const stepsWidth = Math.max("steps".length, ...rows.map((row) => row.steps.length));
   const chatWidth = Math.max("chat".length, ...rows.map((row) => row.chat.length));
@@ -446,6 +448,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
   const header = [
     padCell("id", idWidth),
     padCell("name", nameWidth),
+    padCell("toolsets", toolsetsWidth),
     padCell("status", statusWidth),
     padCell("steps", stepsWidth),
     padCell("chat", chatWidth),
@@ -454,6 +457,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
   const separator = [
     "-".repeat(idWidth),
     "-".repeat(nameWidth),
+    "-".repeat(toolsetsWidth),
     "-".repeat(statusWidth),
     "-".repeat(stepsWidth),
     "-".repeat(chatWidth),
@@ -463,6 +467,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     [
       padCell(row.id, idWidth),
       padCell(row.name, nameWidth),
+      padCell(row.toolsets, toolsetsWidth),
       padCell(row.status, statusWidth),
       padCell(row.steps, stepsWidth),
       padCell(row.chat, chatWidth),
