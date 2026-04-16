@@ -162,6 +162,16 @@ export class OpenAIResponsesProvider implements Provider {
             name: tool.name,
             input: parsedArguments,
           });
+          if (tool.requiresReview) {
+            const approved = await request.reviewToolCall?.(tool, parsedArguments);
+            if (!approved) {
+              throw new Error(
+                request.reviewToolCall
+                  ? "Tool execution was rejected during human review."
+                  : "Tool execution requires human review, but no review path is available.",
+              );
+            }
+          }
           outputText = await tool.execute(parsedArguments);
         } catch (error) {
           outputText = `Tool execution failed: ${

@@ -21,6 +21,7 @@ import {
 } from "../server-config.js";
 import { TeleportController } from "../teleport.js";
 import type { TeleportTarget } from "../teleport.js";
+import type { Tool } from "../tools/types.js";
 import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
 const replHelpText = [
@@ -203,6 +204,24 @@ class Repl {
       `\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n${this.getPrompt()}`,
     );
   };
+  private readonly reviewToolCall = async (tool: Tool, toolInput: unknown): Promise<boolean> => {
+    output.write(
+      `\n${this.formatForDisplay(`Tool review required: ${tool.name}\n${JSON.stringify(toolInput, null, 2)}`)}\n\n`,
+    );
+
+    while (true) {
+      const reply = (await this.rl.question("Approve tool call? [y/N] ")).trim().toLowerCase();
+      if (reply === "y" || reply === "yes") {
+        output.write("\n");
+        return true;
+      }
+
+      if (reply === "" || reply === "n" || reply === "no") {
+        output.write("\n");
+        return false;
+      }
+    }
+  };
 
   constructor() {
     this.serverConfig = loadReplServerConfig();
@@ -212,6 +231,7 @@ class Repl {
     this.harness = loadReplHarness(process.cwd(), {
       onTaskMessage: this.onTaskMessage,
       router: this._router,
+      reviewToolCall: this.reviewToolCall,
     });
   }
 
@@ -332,6 +352,7 @@ class Repl {
     this.harness = Harness.load(nextFolder, {
       onTaskMessage: this.onTaskMessage,
       router: this._router,
+      reviewToolCall: this.reviewToolCall,
     });
     await this.startChannels();
     await this.harness.start();

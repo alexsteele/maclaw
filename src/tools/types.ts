@@ -11,6 +11,7 @@ export type Tool = {
   description: string;
   category?: string;
   permission: ToolPermission;
+  requiresReview?: boolean;
   inputSchema: Record<string, unknown>;
   execute: (input: unknown) => Promise<string>;
 };

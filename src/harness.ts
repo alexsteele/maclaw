@@ -94,6 +94,7 @@ export type HarnessOptions = {
   onTaskMessage?: TaskMessageHandler;
   router?: NotificationRouter;
   origin?: Origin;
+  reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
 };
 
 export type AgentCreateOptions = {
@@ -358,6 +359,7 @@ export class Harness {
   private _taskListener?: TaskMessageHandler;
   private _router: NotificationRouter;
   private _origin?: Origin;
+  private _reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
   private _projectLock?: ProjectLockHandle;
   private readonly _lockOwnerId = makeId("lock");
 
@@ -372,7 +374,12 @@ export class Harness {
       createToolsets(config, createToolContext(this)),
       this._tools,
     );
-    this._chatRuntime = new ChatRuntime(config, this._chatStore, this._tools);
+    this._chatRuntime = new ChatRuntime(
+      config,
+      this._chatStore,
+      this._tools,
+      this._reviewToolCall,
+    );
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
     this._agentMemoryStore = this._storage.agentMemory;
@@ -380,6 +387,7 @@ export class Harness {
     this._taskListener = options.onTaskMessage;
     this._router = options.router ?? new NoopRouter();
     this._origin = options.origin;
+    this._reviewToolCall = options.reviewToolCall;
   }
 
   static load(cwd?: string, options: HarnessOptions = {}): Harness {
@@ -456,7 +464,12 @@ export class Harness {
       createToolsets(nextConfig, createToolContext(this)),
       nextTools,
     );
-    const nextChatRuntime = new ChatRuntime(nextConfig, nextChatStore, nextTools);
+    const nextChatRuntime = new ChatRuntime(
+      nextConfig,
+      nextChatStore,
+      nextTools,
+      this._reviewToolCall,
+    );
     const nextAgentStore = nextStorage.agents;
     const nextAgentInboxStore = nextStorage.agentInbox;
     const nextAgentMemoryStore = nextStorage.agentMemory;
@@ -536,7 +549,12 @@ export class Harness {
       createToolsets(nextConfig, createToolContext(this)),
       this._tools,
     );
-    this._chatRuntime = new ChatRuntime(nextConfig, this._chatStore, this._tools);
+    this._chatRuntime = new ChatRuntime(
+      nextConfig,
+      this._chatStore,
+      this._tools,
+      this._reviewToolCall,
+    );
     this._agentStore = this._storage.agents;
     this._agentInboxStore = this._storage.agentInbox;
     this._agentMemoryStore = this._storage.agentMemory;

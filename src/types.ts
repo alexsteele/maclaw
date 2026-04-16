@@ -214,6 +214,7 @@ export type ProviderRequest = {
   systemPrompt: string;
   tools: Tool[];
   onToolCall?: (entry: ToolCallLogEntry) => void | Promise<void>;
+  reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
 };
 
 export type ProviderUsage = {

@@ -280,14 +280,21 @@ export class ChatRuntime {
   private readonly chatStore: ChatStore;
   private readonly provider: Provider;
   private readonly tools: Tool[];
+  private readonly reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
   private activeChatId: string;
   private previousChatId?: string;
   private activeChat?: ChatRecord;
 
-  constructor(config: ProjectConfig, chatStore: ChatStore, tools: Tool[]) {
+  constructor(
+    config: ProjectConfig,
+    chatStore: ChatStore,
+    tools: Tool[],
+    reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>,
+  ) {
     this.config = config;
     this.chatStore = chatStore;
     this.tools = tools;
+    this.reviewToolCall = reviewToolCall;
     this.provider = createProvider(config);
     this.activeChatId = config.chatId;
   }
@@ -508,6 +515,7 @@ export class ChatRuntime {
           userInput,
           systemPrompt,
           tools: this.getTools(toolsOverride),
+          reviewToolCall: this.reviewToolCall,
           onToolCall: async (entry) => {
             appendMessage(chat, "tool", formatToolCall(entry), entry.name);
             await this.chatStore.saveChat(chat);
@@ -562,6 +570,7 @@ export class ChatRuntime {
           userInput: prompt,
           systemPrompt,
           tools: this.tools,
+          reviewToolCall: this.reviewToolCall,
           onToolCall: async (entry) => {
             appendMessage(chat, "tool", formatToolCall(entry), entry.name);
             await this.chatStore.saveChat(chat);

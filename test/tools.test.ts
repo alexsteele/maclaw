@@ -372,6 +372,9 @@ test("rooted file tools read, write, and list within the project workspace", asy
     assert.equal(readFileTool.permission, "dangerous");
     assert.equal(writeFileTool.permission, "dangerous");
     assert.equal(listDirTool.permission, "dangerous");
+    assert.equal(readFileTool.requiresReview, undefined);
+    assert.equal(writeFileTool.requiresReview, undefined);
+    assert.equal(listDirTool.requiresReview, undefined);
     assert.match(await listTools.execute({}), /- files: Workspace-scoped file and directory tools\./u);
     assert.match(await listTools.execute({}), /read_file \[dangerous\]/u);
 
