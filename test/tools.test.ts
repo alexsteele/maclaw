@@ -433,3 +433,36 @@ test("rooted file tools reject paths outside the project workspace", async () =>
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("shell tools run reviewed commands in the project workspace", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-tools-shell-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read", "dangerous"],
+    });
+
+    const tools = harness.listTools();
+    const runShell = tools.find((tool) => tool.name === "run_shell");
+    const listTools = tools.find((tool) => tool.name === "list_tools");
+
+    assert.ok(runShell);
+    assert.ok(listTools);
+    assert.equal(runShell.permission, "dangerous");
+    assert.equal(runShell.requiresReview, true);
+    assert.match(
+      await listTools.execute({}),
+      /- shell: Reviewed shell command tools for the current workspace\./u,
+    );
+
+    const reply = await runShell.execute({
+      command: 'printf "hello from shell\\n"',
+    });
+
+    assert.match(reply, /^stdout:\nhello from shell$/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

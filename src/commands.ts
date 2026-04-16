@@ -1603,6 +1603,7 @@ const toolCategoryOrder = [
   "Tasks",
   "Notifications",
   "Files",
+  "Shell",
   "Skills",
   "Utilities",
 ] as const;

@@ -1041,10 +1041,13 @@ test("dispatchCommand shows the files toolset when dangerous tools are enabled",
 
     assert.match(reply ?? "", /^permissions: read, dangerous$/mu);
     assert.match(reply ?? "", /- files: Workspace-scoped file and directory tools\./u);
+    assert.match(reply ?? "", /- shell: Reviewed shell command tools for the current workspace\./u);
     assert.match(reply ?? "", /^Files:$/mu);
+    assert.match(reply ?? "", /^Shell:$/mu);
     assert.match(reply ?? "", /read_file \[dangerous\]/u);
     assert.match(reply ?? "", /write_file \[dangerous\]/u);
     assert.match(reply ?? "", /list_dir \[dangerous\]/u);
+    assert.match(reply ?? "", /run_shell \[dangerous\]/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

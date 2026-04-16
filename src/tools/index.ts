@@ -4,6 +4,7 @@ import type { ProjectConfig } from "../config.js";
 import type { Tool, Toolset } from "./types.js";
 import { createFileTools } from "./files.js";
 import { createMaclawTools, type MaclawToolContext } from "./maclaw.js";
+import { createShellTools } from "./shell.js";
 import { createSkillTools } from "./skills.js";
 import { createTimeTools } from "./time.js";
 
@@ -14,6 +15,7 @@ export const createTools = (
   return [
     ...(context ? createMaclawTools(context) : []),
     ...createFileTools(config),
+    ...createShellTools(config),
     ...createSkillTools(config),
     ...createTimeTools(),
   ];
@@ -42,6 +44,11 @@ export const createToolsets = (
       name: "skills",
       description: "Local skill discovery and reading tools.",
       tools: createSkillTools(config).map((tool) => tool.name),
+    },
+    {
+      name: "shell",
+      description: "Reviewed shell command tools for the current workspace.",
+      tools: createShellTools(config).map((tool) => tool.name),
     },
     {
       name: "time",
