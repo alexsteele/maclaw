@@ -460,6 +460,21 @@ test("dispatchCommand supports /chats as an alias for /chat list", async () => {
   }
 });
 
+test("dispatchCommand supports /projects as an alias for /project list", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-projects-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const directReply = await dispatchCommand(harness, "/project list");
+    const aliasReply = await dispatchCommand(harness, "/projects");
+
+    assert.equal(aliasReply, directReply);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand persists a switched chat so it appears in chat list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-switch-list-"));
 
@@ -954,6 +969,31 @@ test("dispatchCommand renders task list output for a scoped chat", async () => {
   }
 });
 
+test("dispatchCommand supports /tasks as an alias for /task list", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-tasks-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.createTask({
+      chatId: "default",
+      title: "Daily Brief",
+      prompt: "Send the brief",
+      schedule: {
+        type: "daily",
+        hour: 9,
+        minute: 0,
+      },
+    });
+
+    const directReply = await dispatchCommand(harness, "/task list");
+    const aliasReply = await dispatchCommand(harness, "/tasks");
+
+    assert.equal(aliasReply, directReply);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand cancels a scheduled task", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-cancel-"));
 
@@ -1164,6 +1204,25 @@ test("dispatchCommand renders agent list output", async () => {
     assert.match(reply ?? "", /\bstatus\b/u);
     assert.match(reply ?? "", /daily-summary/u);
     assert.match(reply ?? "", /maclaw,skills/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand supports /agents as an alias for /agent list", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agents-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.createAgent({
+      name: "daily-summary",
+      prompt: "Write a summary",
+    });
+
+    const directReply = await dispatchCommand(harness, "/agent list");
+    const aliasReply = await dispatchCommand(harness, "/agents");
+
+    assert.equal(aliasReply, directReply);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

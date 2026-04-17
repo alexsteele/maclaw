@@ -64,6 +64,18 @@ type DispatchOptions = {
   teleport?: TeleportControl;
 };
 
+type SubcommandHandler = (
+  harness: Harness,
+  args: string,
+  options: DispatchOptions,
+) => Promise<string>;
+
+type RegisteredSubcommand = {
+  aliases?: string[];
+  help?: string;
+  run: SubcommandHandler;
+};
+
 export const helpText = [
   "Commands:",
   "  /help              Show this help",
@@ -93,6 +105,7 @@ export const helpText = [
 export const projectHelpText = [
   "Command: /project",
   "  /project           Show the active project",
+  "  /project list      Show the active project",
   "  /project show      Show the active project",
   "  /project usage     Show token usage for the project",
   "  /project init      Create .maclaw/maclaw.json for this project",
@@ -212,6 +225,46 @@ const parseAgentPruneAge = (value: string): number | undefined => {
   }
 
   return amount * 24 * 60 * 60 * 1000;
+};
+
+const findRegisteredSubcommand = (
+  registry: Record<string, RegisteredSubcommand>,
+  name: string,
+): RegisteredSubcommand | undefined => {
+  const direct = registry[name];
+  if (direct) {
+    return direct;
+  }
+
+  return Object.values(registry).find((entry) => entry.aliases?.includes(name));
+};
+
+const dispatchRegisteredSubcommand = async (
+  harness: Harness,
+  input: string,
+  options: DispatchOptions,
+  familyCommand: string,
+  familyHelpText: string,
+  registry: Record<string, RegisteredSubcommand>,
+): Promise<string> => {
+  if (input === familyCommand || input === `${familyCommand} help`) {
+    return familyHelpText;
+  }
+
+  const remainder = input.slice(familyCommand.length).trim();
+  if (remainder.length === 0) {
+    return familyHelpText;
+  }
+
+  const firstSpace = remainder.indexOf(" ");
+  const subcommandName = firstSpace < 0 ? remainder : remainder.slice(0, firstSpace);
+  const args = firstSpace < 0 ? "" : remainder.slice(firstSpace + 1).trim();
+  const entry = findRegisteredSubcommand(registry, subcommandName);
+  if (!entry) {
+    return familyHelpText;
+  }
+
+  return entry.run(harness, args, options);
 };
 
 export const toolsHelpText = [
@@ -915,11 +968,15 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
 };
 
 const handleProjectCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/projects") {
+    return handleProjectCommand(harness, "/project list", options);
+  }
+
   if (input === "/project help") {
     return projectHelpText;
   }
 
-  if (input === "/project" || input === "/project show") {
+  if (input === "/project" || input === "/project list" || input === "/project show") {
     return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
 
@@ -1346,6 +1403,10 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
 };
 
 const handleTaskCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/tasks") {
+    return handleTaskCommand(harness, "/task list", options);
+  }
+
   if (input === "/task" || input === "/task help") {
     return taskHelpText;
   }
@@ -1418,246 +1479,273 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
   return taskHelpText;
 };
 
-const handleAgentCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/agent" || input === "/agent help") {
-    return agentHelpText;
-  }
-
-  if (input === "/agent list") {
-    return renderAgentList(harness.listAgents());
-  }
-
-  if (input.startsWith("/agent create ")) {
-    const body = input.slice("/agent create ".length).trim();
-    const segments = body.split("|").map((segment) => segment.trim());
-    if (segments.length < 2) {
-      return "Usage: /agent create <name> | <prompt> [| <json options>]";
-    }
-
-    const name = segments[0];
-    const prompt = segments.length === 2 ? segments[1] : segments.slice(1, -1).join(" | ");
-    if (name.length === 0 || prompt.length === 0) {
-      return "Usage: /agent create <name> | <prompt> [| <json options>]";
-    }
-
-    let agentOptions: Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> = {};
-    if (segments.length >= 3) {
-      const parsedOptions = parseAgentCreateOptions(segments.at(-1) ?? "");
-      if (typeof parsedOptions === "string") {
-        return parsedOptions;
+const agentSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    help: "Usage: /agent list",
+    run: async (harness) => renderAgentList(harness.listAgents()),
+  },
+  create: {
+    help: "Usage: /agent create <name> | <prompt> [| <json options>]",
+    run: async (harness, args, options) => {
+      const segments = args.split("|").map((segment) => segment.trim());
+      if (segments.length < 2) {
+        return "Usage: /agent create <name> | <prompt> [| <json options>]";
       }
-      agentOptions = parsedOptions;
-    }
 
-    const agent = await harness.createAgent({
-      name,
-      prompt,
-      chatId: getScopedChatId(harness, options),
-      sourceChatId: getScopedChatId(harness, options),
-      createdBy: "user",
-      origin: options.origin,
-      ...agentOptions,
-    });
-    if (!agent.agent) {
-      return agent.error ?? "Could not create agent.";
-    }
+      const name = segments[0];
+      const prompt = segments.length === 2 ? segments[1] : segments.slice(1, -1).join(" | ");
+      if (name.length === 0 || prompt.length === 0) {
+        return "Usage: /agent create <name> | <prompt> [| <json options>]";
+      }
 
-    return `started agent: ${agent.agent.id}`;
+      let agentOptions: Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> = {};
+      if (segments.length >= 3) {
+        const parsedOptions = parseAgentCreateOptions(segments.at(-1) ?? "");
+        if (typeof parsedOptions === "string") {
+          return parsedOptions;
+        }
+        agentOptions = parsedOptions;
+      }
+
+      const agent = await harness.createAgent({
+        name,
+        prompt,
+        chatId: getScopedChatId(harness, options),
+        sourceChatId: getScopedChatId(harness, options),
+        createdBy: "user",
+        origin: options.origin,
+        ...agentOptions,
+      });
+      if (!agent.agent) {
+        return agent.error ?? "Could not create agent.";
+      }
+
+      return `started agent: ${agent.agent.id}`;
+    },
+  },
+  show: {
+    help: "Usage: /agent show <name>",
+    run: async (harness, args) => {
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent show <name>";
+      }
+
+      const agent = harness.findAgent(agentRef);
+      return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
+    },
+  },
+  rm: {
+    help: "Usage: /agent rm <name>",
+    run: async (harness, args) => {
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent rm <name>";
+      }
+
+      const removed = await harness.removeAgent(agentRef);
+      return removed ? `deleted agent: ${removed.name}` : `agent not found: ${agentRef}`;
+    },
+  },
+  send: {
+    help: "Usage: /agent send <name> | <message>",
+    run: async (harness, args, options) => {
+      const separatorIndex = args.indexOf("|");
+      if (separatorIndex < 0) {
+        return "Usage: /agent send <name> | <message>";
+      }
+
+      const agentRef = args.slice(0, separatorIndex).trim();
+      const text = args.slice(separatorIndex + 1).trim();
+      if (agentRef.length === 0 || text.length === 0) {
+        return "Usage: /agent send <name> | <message>";
+      }
+
+      const entry = await harness.sendAgentInboxMessage({
+        agentRef,
+        text,
+        sourceType: "user",
+        sourceId: options.origin?.userId ?? "user",
+        sourceName: options.origin?.userId,
+        sourceChatId: getScopedChatId(harness, options),
+      });
+      return entry ? `sent message to agent: ${agentRef}` : `agent not found: ${agentRef}`;
+    },
+  },
+  inbox: {
+    help: "Usage: /agent inbox <name>",
+    run: async (harness, args) => {
+      if (args.startsWith("clear ")) {
+        const agentRef = args.slice("clear ".length).trim();
+        if (agentRef.length === 0) {
+          return "Usage: /agent inbox clear <name>";
+        }
+
+        const cleared = await harness.clearAgentInbox(agentRef);
+        return cleared === undefined
+          ? `agent not found: ${agentRef}`
+          : `cleared agent inbox: ${cleared}`;
+      }
+
+      if (args.startsWith("rm ")) {
+        const body = args.slice("rm ".length).trim();
+        const spaceIndex = body.lastIndexOf(" ");
+        if (spaceIndex < 0) {
+          return "Usage: /agent inbox rm <name> <id>";
+        }
+
+        const agentRef = body.slice(0, spaceIndex).trim();
+        const entryId = body.slice(spaceIndex + 1).trim();
+        if (agentRef.length === 0 || entryId.length === 0) {
+          return "Usage: /agent inbox rm <name> <id>";
+        }
+
+        const deleted = await harness.deleteAgentInboxEntry(agentRef, entryId);
+        return deleted
+          ? `deleted agent inbox entry: ${entryId}`
+          : `agent inbox entry not found: ${entryId}`;
+      }
+
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent inbox <name>";
+      }
+
+      const entries = await harness.listAgentInbox(agentRef);
+      return entries ? renderAgentInbox(entries) : `agent not found: ${agentRef}`;
+    },
+  },
+  prune: {
+    help: "Usage: /agent prune [now|<age like 1h, 30m, 2d>]",
+    run: async (harness, args) => {
+      const trimmed = args.trim();
+      if (trimmed.length === 0) {
+        const pruned = await harness.pruneAgents();
+        return `pruned inactive agents older than 24h: ${pruned}`;
+      }
+
+      const age = parseAgentPruneAge(trimmed);
+      if (age === undefined) {
+        return "Usage: /agent prune [now|<age like 1h, 30m, 2d>]";
+      }
+
+      const pruned = await harness.pruneAgents({ olderThanMs: age });
+      if (age === 0) {
+        return `pruned inactive agents: ${pruned}`;
+      }
+
+      return `pruned inactive agents older than ${trimmed}: ${pruned}`;
+    },
+  },
+  chat: {
+    help: "Usage: /agent chat <name>",
+    run: async (harness, args, options) => {
+      if (options.chatId) {
+        return "/agent chat is not supported in this channel yet.";
+      }
+
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent chat <name>";
+      }
+
+      const result = await harness.attachAgentChat(agentRef);
+      if (!result.agent) {
+        return result.error ?? `agent not found: ${agentRef}`;
+      }
+
+      return `paused agent: ${result.agent.name}\nswitched to chat: ${result.chatId}`;
+    },
+  },
+  return: {
+    help: "Usage: /agent return <name>",
+    run: async (harness, args, options) => {
+      if (options.chatId) {
+        return "/agent return is not supported in this channel yet.";
+      }
+
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent return <name>";
+      }
+
+      const result = await harness.returnAgentChat(agentRef);
+      if (!result.agent) {
+        return result.error ?? `agent not found: ${agentRef}`;
+      }
+
+      return `resumed agent: ${result.agent.name}\nswitched to chat: ${result.chatId}`;
+    },
+  },
+  stop: {
+    help: "Usage: /agent stop <name>",
+    run: async (harness, args) => {
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent stop <name>";
+      }
+
+      const agent = harness.cancelAgent(agentRef);
+      return agent ? `stopped agent: ${agent.name}` : `agent not found: ${agentRef}`;
+    },
+  },
+  pause: {
+    help: "Usage: /agent pause <name>",
+    run: async (harness, args) => {
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent pause <name>";
+      }
+
+      const agent = harness.pauseAgent(agentRef);
+      return agent ? `paused agent: ${agent.name}` : `agent not found: ${agentRef}`;
+    },
+  },
+  resume: {
+    help: "Usage: /agent resume <name>",
+    run: async (harness, args) => {
+      const agentRef = args.trim();
+      if (agentRef.length === 0) {
+        return "Usage: /agent resume <name>";
+      }
+
+      const agent = harness.resumeAgent(agentRef);
+      return agent ? `resumed agent: ${agent.name}` : `agent not found: ${agentRef}`;
+    },
+  },
+  steer: {
+    help: "Usage: /agent steer <name> | <prompt>",
+    run: async (harness, args) => {
+      const separatorIndex = args.indexOf("|");
+      if (separatorIndex < 0) {
+        return "Usage: /agent steer <name> | <prompt>";
+      }
+
+      const agentRef = args.slice(0, separatorIndex).trim();
+      const prompt = args.slice(separatorIndex + 1).trim();
+      if (agentRef.length === 0 || prompt.length === 0) {
+        return "Usage: /agent steer <name> | <prompt>";
+      }
+
+      const agent = await harness.steerAgent(agentRef, prompt);
+      return agent ? `steered agent: ${agent.name}` : `agent not found: ${agentRef}`;
+    },
+  },
+};
+
+const handleAgentCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/agents") {
+    return handleAgentCommand(harness, "/agent list", options);
   }
 
-  if (input.startsWith("/agent show ")) {
-    const agentRef = input.slice("/agent show ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent show <name>";
-    }
-
-    const agent = harness.findAgent(agentRef);
-    return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent rm ")) {
-    const agentRef = input.slice("/agent rm ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent rm <name>";
-    }
-
-    const removed = await harness.removeAgent(agentRef);
-    return removed ? `deleted agent: ${removed.name}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent send ")) {
-    const body = input.slice("/agent send ".length).trim();
-    const separatorIndex = body.indexOf("|");
-    if (separatorIndex < 0) {
-      return "Usage: /agent send <name> | <message>";
-    }
-
-    const agentRef = body.slice(0, separatorIndex).trim();
-    const text = body.slice(separatorIndex + 1).trim();
-    if (agentRef.length === 0 || text.length === 0) {
-      return "Usage: /agent send <name> | <message>";
-    }
-
-    const entry = await harness.sendAgentInboxMessage({
-      agentRef,
-      text,
-      sourceType: "user",
-      sourceId: options.origin?.userId ?? "user",
-      sourceName: options.origin?.userId,
-      sourceChatId: getScopedChatId(harness, options),
-    });
-    return entry ? `sent message to agent: ${agentRef}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent inbox clear ")) {
-    const agentRef = input.slice("/agent inbox clear ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent inbox clear <name>";
-    }
-
-    const cleared = await harness.clearAgentInbox(agentRef);
-    return cleared === undefined
-      ? `agent not found: ${agentRef}`
-      : `cleared agent inbox: ${cleared}`;
-  }
-
-  if (input.startsWith("/agent inbox rm ")) {
-    const body = input.slice("/agent inbox rm ".length).trim();
-    const spaceIndex = body.lastIndexOf(" ");
-    if (spaceIndex < 0) {
-      return "Usage: /agent inbox rm <name> <id>";
-    }
-
-    const agentRef = body.slice(0, spaceIndex).trim();
-    const entryId = body.slice(spaceIndex + 1).trim();
-    if (agentRef.length === 0 || entryId.length === 0) {
-      return "Usage: /agent inbox rm <name> <id>";
-    }
-
-    const deleted = await harness.deleteAgentInboxEntry(agentRef, entryId);
-    return deleted
-      ? `deleted agent inbox entry: ${entryId}`
-      : `agent inbox entry not found: ${entryId}`;
-  }
-
-  if (input.startsWith("/agent inbox ")) {
-    const agentRef = input.slice("/agent inbox ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent inbox <name>";
-    }
-
-    const entries = await harness.listAgentInbox(agentRef);
-    return entries ? renderAgentInbox(entries) : `agent not found: ${agentRef}`;
-  }
-
-  if (input === "/agent prune") {
-    const pruned = await harness.pruneAgents();
-    return `pruned inactive agents older than 24h: ${pruned}`;
-  }
-
-  if (input.startsWith("/agent prune ")) {
-    const age = parseAgentPruneAge(input.slice("/agent prune ".length));
-    if (age === undefined) {
-      return "Usage: /agent prune [now|<age like 1h, 30m, 2d>]";
-    }
-
-    const pruned = await harness.pruneAgents({ olderThanMs: age });
-    if (age === 0) {
-      return `pruned inactive agents: ${pruned}`;
-    }
-
-    const ageText = input.slice("/agent prune ".length).trim();
-    return `pruned inactive agents older than ${ageText}: ${pruned}`;
-  }
-
-  if (input.startsWith("/agent chat ")) {
-    if (options.chatId) {
-      return "/agent chat is not supported in this channel yet.";
-    }
-
-    const agentRef = input.slice("/agent chat ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent chat <name>";
-    }
-
-    const result = await harness.attachAgentChat(agentRef);
-    if (!result.agent) {
-      return result.error ?? `agent not found: ${agentRef}`;
-    }
-
-    return `paused agent: ${result.agent.name}\nswitched to chat: ${result.chatId}`;
-  }
-
-  if (input.startsWith("/agent return ")) {
-    if (options.chatId) {
-      return "/agent return is not supported in this channel yet.";
-    }
-
-    const agentRef = input.slice("/agent return ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent return <name>";
-    }
-
-    const result = await harness.returnAgentChat(agentRef);
-    if (!result.agent) {
-      return result.error ?? `agent not found: ${agentRef}`;
-    }
-
-    return `resumed agent: ${result.agent.name}\nswitched to chat: ${result.chatId}`;
-  }
-
-  if (input.startsWith("/agent stop ")) {
-    const agentRef = input.slice("/agent stop ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent stop <name>";
-    }
-
-    const agent = harness.cancelAgent(agentRef);
-    return agent ? `stopped agent: ${agent.name}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent pause ")) {
-    const agentRef = input.slice("/agent pause ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent pause <name>";
-    }
-
-    const agent = harness.pauseAgent(agentRef);
-    return agent ? `paused agent: ${agent.name}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent resume ")) {
-    const agentRef = input.slice("/agent resume ".length).trim();
-    if (agentRef.length === 0) {
-      return "Usage: /agent resume <name>";
-    }
-
-    const agent = harness.resumeAgent(agentRef);
-    return agent ? `resumed agent: ${agent.name}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent steer ")) {
-    const body = input.slice("/agent steer ".length).trim();
-    const separatorIndex = body.indexOf("|");
-    if (separatorIndex < 0) {
-      return "Usage: /agent steer <name> | <prompt>";
-    }
-
-    const agentRef = body.slice(0, separatorIndex).trim();
-    const prompt = body.slice(separatorIndex + 1).trim();
-    if (agentRef.length === 0 || prompt.length === 0) {
-      return "Usage: /agent steer <name> | <prompt>";
-    }
-
-    const agent = await harness.steerAgent(agentRef, prompt);
-    return agent ? `steered agent: ${agent.name}` : `agent not found: ${agentRef}`;
-  }
-
-  if (input.startsWith("/agent")) {
-    return agentHelpText;
-  }
-
-  return agentHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/agent",
+    agentHelpText,
+    agentSubcommands,
+  );
 };
 
 const handleSkillsCommand: CommandHandler = async (harness, input) => {
@@ -2046,10 +2134,13 @@ const commandHandlers: Record<string, CommandHandler> = {
   usage: handleUsageCommand,
   model: handleModelCommand,
   project: handleProjectCommand,
+  projects: handleProjectCommand,
   config: handleConfigCommand,
   chat: handleChatCommand,
   task: handleTaskCommand,
+  tasks: handleTaskCommand,
   agent: handleAgentCommand,
+  agents: handleAgentCommand,
   tools: handleToolsCommand,
   skills: handleSkillsCommand,
   history: handleHistoryCommand,
