@@ -22,6 +22,7 @@ import {
   type ProjectSnapshot,
   type ProjectStorage,
 } from "./index.js";
+import { logger } from "../logger.js";
 import type {
   AgentInboxEntry,
   AgentRecord,
@@ -136,6 +137,98 @@ const SQLITE_SCHEMA = `
 
 `;
 
+const SQLITE_COLUMNS: Record<string, Record<string, string>> = {
+  chats: {
+    id: "text primary key",
+    created_at: "text not null",
+    updated_at: "text not null",
+    retention_days: "integer not null",
+    compression_mode: "text not null",
+    summary: "text",
+    message_count: "integer not null",
+  },
+  agents: {
+    id: "text primary key",
+    name: "text not null",
+    prompt: "text not null",
+    chat_id: "text not null",
+    toolsets_json: "text",
+    source_chat_id: "text",
+    created_by: "text",
+    created_by_agent_id: "text",
+    origin_json: "text",
+    notify_json: "text",
+    notify_target_json: "text",
+    status: "text not null",
+    max_steps: "integer",
+    timeout_ms: "integer not null",
+    step_interval_ms: "integer",
+    step_count: "integer not null",
+    created_at: "text not null",
+    started_at: "text",
+    finished_at: "text",
+    last_message: "text",
+    last_error: "text",
+  },
+  inbox: {
+    id: "text primary key",
+    kind: "text not null",
+    text: "text not null",
+    origin_json: "text not null",
+    source_type: "text not null",
+    source_id: "text not null",
+    source_name: "text",
+    source_chat_id: "text",
+    created_at: "text not null",
+    sent_at: "text",
+    read_at: "text",
+  },
+  agent_inbox: {
+    id: "text primary key",
+    agent_id: "text not null",
+    text: "text not null",
+    source_type: "text not null",
+    source_id: "text not null",
+    source_name: "text",
+    source_chat_id: "text",
+    created_at: "text not null",
+    read_at: "text",
+  },
+  tasks: {
+    id: "text primary key",
+    chat_id: "text not null",
+    source_chat_id: "text",
+    created_by: "text",
+    created_by_agent_id: "text",
+    origin_json: "text",
+    notify_json: "text",
+    notify_target_json: "text",
+    title: "text not null",
+    prompt: "text not null",
+    schedule_json: "text not null",
+    next_run_at: "text not null",
+    status: "text not null",
+    created_at: "text not null",
+    updated_at: "text not null",
+    last_run_at: "text",
+    last_error: "text",
+  },
+  task_runs: {
+    id: "integer primary key autoincrement",
+    timestamp: "text not null",
+    task_id: "text not null",
+    chat_id: "text not null",
+    title: "text not null",
+    prompt: "text not null",
+    schedule_json: "text not null",
+    scheduled_for: "text not null",
+    started_at: "text not null",
+    finished_at: "text not null",
+    status: "text not null",
+    error: "text",
+  },
+};
+
 const parseJsonField = <T>(value: unknown): T | undefined => {
   if (value === null) {
     return undefined;
@@ -152,10 +245,38 @@ const toText = (value: unknown): string => String(value);
 const toNullableText = (value: unknown): string | null =>
   value === undefined || value === null ? null : String(value);
 
+const loadTableColumns = (database: DatabaseSync, tableName: string): Set<string> => {
+  const rows = database
+    .prepare(`pragma table_info(${tableName})`)
+    .all() as Array<{ name: string }>;
+  return new Set(rows.map((row) => row.name));
+};
+
+const migrateDatabase = (database: DatabaseSync): void => {
+  for (const [tableName, columns] of Object.entries(SQLITE_COLUMNS)) {
+    const existingColumns = loadTableColumns(database, tableName);
+    for (const [columnName, columnType] of Object.entries(columns)) {
+      if (existingColumns.has(columnName)) {
+        continue;
+      }
+
+      logger.debug("storage", "sqlite-add-column", {
+        table: tableName,
+        column: columnName,
+        type: columnType,
+      });
+      database.exec(
+        `alter table ${tableName} add column ${columnName} ${columnType}`,
+      );
+    }
+  }
+};
+
 const openDatabase = (filePath: string): DatabaseSync => {
   mkdirSync(path.dirname(filePath), { recursive: true });
   const database = new DatabaseSync(filePath);
   database.exec(SQLITE_SCHEMA);
+  migrateDatabase(database);
   return database;
 };
 
