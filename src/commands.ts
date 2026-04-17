@@ -179,6 +179,7 @@ export const agentHelpText = [
   "  /agent chat <name>",
   "  /agent return <name>",
   "  /agent show <name>",
+  "  /agent rm <name>",
   "  /agent pause <name>",
   "  /agent resume <name>",
   "  /agent stop <name>",
@@ -1472,6 +1473,16 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
 
     const agent = harness.findAgent(agentRef);
     return agent ? renderAgentInfo(agent) : `agent not found: ${agentRef}`;
+  }
+
+  if (input.startsWith("/agent rm ")) {
+    const agentRef = input.slice("/agent rm ".length).trim();
+    if (agentRef.length === 0) {
+      return "Usage: /agent rm <name>";
+    }
+
+    const removed = await harness.removeAgent(agentRef);
+    return removed ? `deleted agent: ${removed.name}` : `agent not found: ${agentRef}`;
   }
 
   if (input.startsWith("/agent send ")) {

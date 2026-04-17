@@ -1285,6 +1285,22 @@ export class Harness {
     return this._agentInboxStore.clearEntries(agent.id);
   }
 
+  async removeAgent(agentRef: string): Promise<AgentRecord | undefined> {
+    const agent = this.findAgent(agentRef);
+    if (!agent) {
+      return undefined;
+    }
+
+    const active = this._runningAgents.get(agent.id);
+    const latest = active?.cancel() ?? this.findAgent(agent.id) ?? agent;
+    if (this.isLiveAgentStatus(latest.status)) {
+      return undefined;
+    }
+
+    const removed = await this.deleteAgentState(latest);
+    return removed ? latest : undefined;
+  }
+
   async pruneAgents(options: { olderThanMs?: number } = {}): Promise<number> {
     const olderThanMs = options.olderThanMs ?? 24 * 60 * 60 * 1000;
     const cutoff = Date.now() - olderThanMs;
@@ -1299,18 +1315,7 @@ export class Harness {
     let pruned = 0;
 
     for (const agent of agents) {
-      if (this._runningAgents.has(agent.id)) {
-        continue;
-      }
-
-      if (this.getCurrentChatId() === agent.chatId) {
-        await this.switchChat(agent.sourceChatId ?? this.config.chatId);
-      }
-
-      await this._chatStore.deleteChat(agent.chatId);
-      await this._agentInboxStore.clearEntries(agent.id);
-      await this._agentMemoryStore.deleteEntry(agent.id);
-      if (!this._agentStore.deleteAgent(agent.id)) {
+      if (!await this.deleteAgentState(agent)) {
         continue;
       }
 
@@ -1324,6 +1329,21 @@ export class Harness {
     }
 
     return pruned;
+  }
+
+  private async deleteAgentState(agent: AgentRecord): Promise<boolean> {
+    if (this._runningAgents.has(agent.id)) {
+      return false;
+    }
+
+    if (this.getCurrentChatId() === agent.chatId) {
+      await this.switchChat(agent.sourceChatId ?? this.config.chatId);
+    }
+
+    await this._chatStore.deleteChat(agent.chatId);
+    await this._agentInboxStore.clearEntries(agent.id);
+    await this._agentMemoryStore.deleteEntry(agent.id);
+    return this._agentStore.deleteAgent(agent.id);
   }
 
   async readAgentMemory(agentRef: string): Promise<string | undefined> {

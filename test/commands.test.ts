@@ -1376,6 +1376,66 @@ test("dispatchCommand rejects invalid agent prune ages", async () => {
   }
 });
 
+test("dispatchCommand removes a completed agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-rm-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      storage: "json",
+    });
+    const harness = Harness.load(projectDir);
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    const createdAt = new Date().toISOString();
+
+    agentStore.saveAgent({
+      id: "agent_done",
+      name: "done-agent",
+      prompt: "Done already",
+      chatId: "agent_done",
+      sourceChatId: "default",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt,
+      finishedAt: createdAt,
+    });
+    await harness.promptChat("agent_done", "done chat history");
+    await harness.writeAgentMemory("done-agent", "done memory");
+
+    const reply = await dispatchCommand(harness, "/agent rm done-agent");
+
+    assert.equal(reply, "deleted agent: done-agent");
+    assert.equal(harness.getAgent("agent_done"), undefined);
+    assert.equal(await harness.getChatTranscript("agent_done"), "No history yet.");
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, "agent_done")), false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand stops and removes a paused agent", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-rm-paused-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = await harness.createAgent({
+      name: "paused-agent",
+      prompt: "Work on this",
+      maxSteps: 50,
+    });
+    assert.ok(created.agent);
+
+    await dispatchCommand(harness, "/agent pause paused-agent");
+    const reply = await dispatchCommand(harness, "/agent rm paused-agent");
+
+    assert.equal(reply, "deleted agent: paused-agent");
+    assert.equal(harness.getAgent(created.agent.id), undefined);
+    assert.equal(await harness.getChatTranscript(created.agent.chatId), "No history yet.");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand creates an agent for the scoped chat", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-create-"));
 

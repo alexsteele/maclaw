@@ -111,7 +111,7 @@ export class Agent {
 
   cancel(): AgentRecord {
     const record = this.getRecord();
-    if (record.status === "pending" || record.status === "running") {
+    if (record.status === "pending" || record.status === "running" || record.status === "paused") {
       record.status = "cancelled";
       record.finishedAt = new Date().toISOString();
       this.saveRecord(record);
