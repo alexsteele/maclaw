@@ -19,6 +19,7 @@ export type AgentMemoryEntry = {
 export interface AgentStore {
   getAgent(agentId: string): AgentRecord | undefined;
   saveAgent(record: AgentRecord): void;
+  deleteAgent(agentId: string): boolean;
   listAgents(): AgentRecord[];
 }
 
@@ -39,6 +40,10 @@ export class MemoryAgentStore implements AgentStore {
 
   saveAgent(record: AgentRecord): void {
     this.agents.set(record.id, structuredClone(record));
+  }
+
+  deleteAgent(agentId: string): boolean {
+    return this.agents.delete(agentId);
   }
 
   listAgents(): AgentRecord[] {

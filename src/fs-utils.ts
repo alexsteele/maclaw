@@ -29,6 +29,12 @@ export const appendJsonLine = async (filePath: string, value: unknown): Promise<
   await appendFile(filePath, `${JSON.stringify(value)}\n`, "utf8");
 };
 
+export const writeJsonLines = async (filePath: string, values: unknown[]): Promise<void> => {
+  await ensureDir(path.dirname(filePath));
+  const content = values.map((value) => JSON.stringify(value)).join("\n");
+  await writeFile(filePath, content.length > 0 ? `${content}\n` : "", "utf8");
+};
+
 export const readJsonLines = async <T>(filePath: string): Promise<T[]> => {
   try {
     const raw = await readFile(filePath, "utf8");

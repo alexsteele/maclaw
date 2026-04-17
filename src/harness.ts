@@ -1285,6 +1285,47 @@ export class Harness {
     return this._agentInboxStore.clearEntries(agent.id);
   }
 
+  async pruneAgents(options: { olderThanMs?: number } = {}): Promise<number> {
+    const olderThanMs = options.olderThanMs ?? 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - olderThanMs;
+    const agents = this.listAgents().filter((agent) => {
+      if (this.isLiveAgentStatus(agent.status)) {
+        return false;
+      }
+
+      const timestamp = agent.finishedAt ?? agent.createdAt;
+      return Date.parse(timestamp) <= cutoff;
+    });
+    let pruned = 0;
+
+    for (const agent of agents) {
+      if (this._runningAgents.has(agent.id)) {
+        continue;
+      }
+
+      if (this.getCurrentChatId() === agent.chatId) {
+        await this.switchChat(agent.sourceChatId ?? this.config.chatId);
+      }
+
+      await this._chatStore.deleteChat(agent.chatId);
+      await this._agentInboxStore.clearEntries(agent.id);
+      await this._agentMemoryStore.deleteEntry(agent.id);
+      if (!this._agentStore.deleteAgent(agent.id)) {
+        continue;
+      }
+
+      logger.info("agent", "pruned", {
+        project: this._config.name,
+        agentId: agent.id,
+        name: agent.name,
+        status: agent.status,
+      });
+      pruned += 1;
+    }
+
+    return pruned;
+  }
+
   async readAgentMemory(agentRef: string): Promise<string | undefined> {
     const agent = this.findAgent(agentRef);
     if (!agent) {

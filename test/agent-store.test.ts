@@ -44,6 +44,35 @@ test("JsonFileAgentStore persists and reloads agent records", async () => {
   }
 });
 
+test("JsonFileAgentStore deletes persisted agent records", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-store-delete-"));
+
+  try {
+    const filePath = path.join(rootDir, "agents.json");
+    const store = new JsonFileAgentStore(filePath);
+
+    store.saveAgent({
+      id: "agent_delete",
+      name: "delete-agent",
+      prompt: "Do the thing",
+      chatId: "agent_delete",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: "2026-04-16T10:00:00.000Z",
+    });
+
+    assert.equal(store.deleteAgent("agent_delete"), true);
+    assert.equal(store.getAgent("agent_delete"), undefined);
+    assert.equal(
+      existsSync(path.join(rootDir, "agents", "agent_delete", "agent.json")),
+      false,
+    );
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("SqliteAgentStore adds missing agent columns for older databases", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-store-sqlite-"));
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -17,8 +18,13 @@ import {
   teleportHelpText,
   usageHelpText,
 } from "../src/commands.js";
-import { initProjectConfig } from "../src/config.js";
+import {
+  defaultAgentMemoryFile,
+  defaultAgentsFile,
+  initProjectConfig,
+} from "../src/config.js";
 import { Harness } from "../src/harness.js";
+import { JsonFileAgentStore } from "../src/storage/json.js";
 import { useDummyProviderEnv } from "./provider-env.js";
 
 useDummyProviderEnv();
@@ -1158,6 +1164,213 @@ test("dispatchCommand renders agent list output", async () => {
     assert.match(reply ?? "", /\bstatus\b/u);
     assert.match(reply ?? "", /daily-summary/u);
     assert.match(reply ?? "", /maclaw,skills/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand prunes inactive agents older than 24h by default", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-prune-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      storage: "json",
+    });
+    const harness = Harness.load(projectDir);
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    const oldCreatedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const oldFinishedAt = new Date(Date.now() - 47 * 60 * 60 * 1000).toISOString();
+    const recentCreatedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const recentFinishedAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+
+    agentStore.saveAgent({
+      id: "agent_completed",
+      name: "completed-agent",
+      prompt: "Done already",
+      chatId: "agent_completed",
+      sourceChatId: "default",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: oldCreatedAt,
+      finishedAt: oldFinishedAt,
+    });
+    agentStore.saveAgent({
+      id: "agent_stopped",
+      name: "stopped-agent",
+      prompt: "Stopped already",
+      chatId: "agent_stopped",
+      sourceChatId: "default",
+      status: "stopped",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 2,
+      createdAt: oldCreatedAt,
+      finishedAt: oldFinishedAt,
+    });
+    agentStore.saveAgent({
+      id: "agent_recent",
+      name: "recent-agent",
+      prompt: "Done recently",
+      chatId: "agent_recent",
+      sourceChatId: "default",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: recentCreatedAt,
+      finishedAt: recentFinishedAt,
+    });
+    agentStore.saveAgent({
+      id: "agent_running",
+      name: "running-agent",
+      prompt: "Still working",
+      chatId: "agent_running",
+      sourceChatId: "default",
+      status: "running",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: recentCreatedAt,
+      startedAt: recentCreatedAt,
+    });
+
+    await harness.promptChat("agent_completed", "completed chat history");
+    await harness.promptChat("agent_stopped", "stopped chat history");
+    await harness.promptChat("agent_recent", "recent chat history");
+    await harness.sendAgentInboxMessage({
+      agentRef: "completed-agent",
+      text: "saved inbox note",
+      sourceType: "user",
+      sourceId: "alex",
+    });
+    await harness.sendAgentInboxMessage({
+      agentRef: "stopped-agent",
+      text: "stopped inbox note",
+      sourceType: "user",
+      sourceId: "alex",
+    });
+    await harness.writeAgentMemory("completed-agent", "saved memory note");
+    await harness.writeAgentMemory("stopped-agent", "stopped memory note");
+    await harness.writeAgentMemory("recent-agent", "recent memory note");
+
+    const reply = await dispatchCommand(harness, "/agent prune");
+
+    assert.equal(reply, "pruned inactive agents older than 24h: 2");
+    assert.equal(harness.getAgent("completed-agent"), undefined);
+    assert.equal(harness.getAgent("stopped-agent"), undefined);
+    assert.equal(harness.getAgent("agent_recent")?.name, "recent-agent");
+    assert.equal(harness.getAgent("agent_running")?.name, "running-agent");
+    assert.equal(await harness.getChatTranscript("agent_completed"), "No history yet.");
+    assert.equal(await harness.getChatTranscript("agent_stopped"), "No history yet.");
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, "agent_completed")), false);
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, "agent_stopped")), false);
+    assert.equal(existsSync(defaultAgentMemoryFile(projectDir, "agent_recent")), true);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand prunes all inactive agents immediately with now", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-prune-now-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      storage: "json",
+    });
+    const harness = Harness.load(projectDir);
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    const now = new Date().toISOString();
+
+    agentStore.saveAgent({
+      id: "agent_failed",
+      name: "failed-agent",
+      prompt: "Failed recently",
+      chatId: "agent_failed",
+      sourceChatId: "default",
+      status: "failed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: now,
+      finishedAt: now,
+    });
+    agentStore.saveAgent({
+      id: "agent_paused",
+      name: "paused-agent",
+      prompt: "Paused still",
+      chatId: "agent_paused",
+      sourceChatId: "default",
+      status: "paused",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: now,
+      startedAt: now,
+    });
+
+    const reply = await dispatchCommand(harness, "/agent prune now");
+
+    assert.equal(reply, "pruned inactive agents: 1");
+    assert.equal(harness.getAgent("agent_failed"), undefined);
+    assert.equal(harness.getAgent("agent_paused")?.name, "paused-agent");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand prunes inactive agents older than a custom age", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-prune-age-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      storage: "json",
+    });
+    const harness = Harness.load(projectDir);
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const ninetyMinutesAgo = new Date(Date.now() - 90 * 60 * 1000).toISOString();
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    agentStore.saveAgent({
+      id: "agent_old",
+      name: "old-agent",
+      prompt: "Finished earlier",
+      chatId: "agent_old",
+      sourceChatId: "default",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: twoHoursAgo,
+      finishedAt: ninetyMinutesAgo,
+    });
+    agentStore.saveAgent({
+      id: "agent_recent",
+      name: "recent-agent",
+      prompt: "Finished recently",
+      chatId: "agent_recent",
+      sourceChatId: "default",
+      status: "failed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt: thirtyMinutesAgo,
+      finishedAt: thirtyMinutesAgo,
+    });
+
+    const reply = await dispatchCommand(harness, "/agent prune 1h");
+
+    assert.equal(reply, "pruned inactive agents older than 1h: 1");
+    assert.equal(harness.getAgent("agent_old"), undefined);
+    assert.equal(harness.getAgent("agent_recent")?.name, "recent-agent");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand rejects invalid agent prune ages", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-prune-invalid-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/agent prune later");
+
+    assert.equal(reply, "Usage: /agent prune [now|<age like 1h, 30m, 2d>]");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

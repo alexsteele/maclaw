@@ -466,6 +466,14 @@ export class SqliteAgentStore implements AgentStore {
     this.fileStore.saveAgent(record);
   }
 
+  deleteAgent(agentId: string): boolean {
+    const result = this.database
+      .prepare("delete from agents where id = ?")
+      .run(agentId);
+    this.fileStore.deleteAgent(agentId);
+    return result.changes > 0;
+  }
+
   listAgents(): AgentRecord[] {
     const rows = this.database
       .prepare("select * from agents order by created_at asc")

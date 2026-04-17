@@ -1,6 +1,6 @@
 // JSON-backed storage implementations for project data.
 // This keeps the concrete filesystem stores grouped by backend.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import {
@@ -21,6 +21,7 @@ import {
   ensureDir,
   readJsonFile,
   readJsonLines,
+  writeJsonLines,
   writeJsonFile,
 } from "../fs-utils.js";
 import type { InboxStore } from "../inbox.js";
@@ -61,6 +62,18 @@ export class JsonFileAgentStore implements AgentStore {
     agents[record.id] = structuredClone(record);
     this.writeAgents(agents);
     this.writeAgentFile(record);
+  }
+
+  deleteAgent(agentId: string): boolean {
+    const agents = this.readAgents();
+    if (!(agentId in agents)) {
+      return false;
+    }
+
+    delete agents[agentId];
+    this.writeAgents(agents);
+    rmSync(path.join(this.agentsDir, agentId), { recursive: true, force: true });
+    return true;
   }
 
   listAgents(): AgentRecord[] {
@@ -136,13 +149,13 @@ export class JsonFileInboxStore implements InboxStore {
       return false;
     }
 
-    await writeJsonFile(this.filePath, nextEntries);
+    await writeJsonLines(this.filePath, nextEntries);
     return true;
   }
 
   async clearEntries(): Promise<number> {
     const entries = await this.loadEntries();
-    await writeJsonFile(this.filePath, []);
+    await writeJsonLines(this.filePath, []);
     return entries.length;
   }
 }
@@ -172,14 +185,14 @@ export class JsonFileAgentInboxStore implements AgentInboxStore {
       return false;
     }
 
-    await writeJsonFile(this.filePath, nextEntries);
+    await writeJsonLines(this.filePath, nextEntries);
     return true;
   }
 
   async clearEntries(agentId: string): Promise<number> {
     const entries = await readJsonLines<AgentInboxEntry>(this.filePath);
     const nextEntries = entries.filter((entry) => entry.agentId !== agentId);
-    await writeJsonFile(this.filePath, nextEntries);
+    await writeJsonLines(this.filePath, nextEntries);
     return entries.length - nextEntries.length;
   }
 }

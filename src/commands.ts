@@ -175,6 +175,7 @@ export const agentHelpText = [
   "  /agent inbox <name>",
   "  /agent inbox clear <name>",
   "  /agent inbox rm <name> <id>",
+  "  /agent prune [now|<age>]",
   "  /agent chat <name>",
   "  /agent return <name>",
   "  /agent show <name>",
@@ -183,6 +184,34 @@ export const agentHelpText = [
   "  /agent stop <name>",
   "  /agent steer <name> | <prompt>",
 ].join("\n");
+
+const parseAgentPruneAge = (value: string): number | undefined => {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "now") {
+    return 0;
+  }
+
+  const match = /^(\d+)([mhd])$/u.exec(trimmed);
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number.parseInt(match[1] ?? "", 10);
+  const unit = match[2];
+  if (!Number.isFinite(amount)) {
+    return undefined;
+  }
+
+  if (unit === "m") {
+    return amount * 60 * 1000;
+  }
+
+  if (unit === "h") {
+    return amount * 60 * 60 * 1000;
+  }
+
+  return amount * 24 * 60 * 60 * 1000;
+};
 
 export const toolsHelpText = [
   "Command: /tools",
@@ -426,7 +455,26 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     return "No agents.";
   }
 
-  const rows = agents.map((agent) => ({
+  const statusPriority: Record<AgentRecord["status"], number> = {
+    running: 0,
+    paused: 1,
+    pending: 2,
+    failed: 3,
+    stopped: 4,
+    completed: 5,
+    cancelled: 6,
+  };
+
+  const rows = [...agents]
+    .sort((left, right) => {
+      const priorityDelta = statusPriority[left.status] - statusPriority[right.status];
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      return left.createdAt.localeCompare(right.createdAt);
+    })
+    .map((agent) => ({
     id: agent.id,
     name: agent.name,
     toolsets: agent.toolsets?.join(",") ?? "(default)",
@@ -436,7 +484,7 @@ const renderAgentList = (agents: AgentRecord[]): string => {
         ? `${agent.stepCount}`
         : `${agent.stepCount}/${agent.maxSteps}`,
     chat: agent.chatId,
-  }));
+    }));
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
   const nameWidth = Math.max("name".length, ...rows.map((row) => row.name.length));
@@ -1489,6 +1537,26 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
 
     const entries = await harness.listAgentInbox(agentRef);
     return entries ? renderAgentInbox(entries) : `agent not found: ${agentRef}`;
+  }
+
+  if (input === "/agent prune") {
+    const pruned = await harness.pruneAgents();
+    return `pruned inactive agents older than 24h: ${pruned}`;
+  }
+
+  if (input.startsWith("/agent prune ")) {
+    const age = parseAgentPruneAge(input.slice("/agent prune ".length));
+    if (age === undefined) {
+      return "Usage: /agent prune [now|<age like 1h, 30m, 2d>]";
+    }
+
+    const pruned = await harness.pruneAgents({ olderThanMs: age });
+    if (age === 0) {
+      return `pruned inactive agents: ${pruned}`;
+    }
+
+    const ageText = input.slice("/agent prune ".length).trim();
+    return `pruned inactive agents older than ${ageText}: ${pruned}`;
   }
 
   if (input.startsWith("/agent chat ")) {
