@@ -92,6 +92,7 @@ export const helpText = [
   "- `/compress` Compress the current chat",
   "- `/save` Save the current chat transcript to a file",
   "- `/usage` Show token usage for the current chat",
+  "- `/cost` Show the project usage report",
   "- `/model` Show suggested models",
   "- `/config` Project config commands",
   "- `/project` Project information commands",
@@ -397,6 +398,7 @@ export const usageHelpText = [
   "  /usage             Show token usage for the current chat",
   "  /usage <chat>      Show token usage for a named chat",
   "  /usage project     Show token usage for the project",
+  "  /usage report      Show a project usage report by chat, agent, and week",
 ].join("\n");
 
 export const teleportHelpText = [
@@ -754,6 +756,79 @@ const renderUsage = (scope: string, usage: UsageSummary): string =>
     `cachedInputTokens: ${usage.cachedInputTokens}`,
     `reasoningTokens: ${usage.reasoningTokens}`,
   ].join("\n");
+
+const renderUsageReportTable = (
+  headers: string[],
+  rows: string[][],
+): string => {
+  const widths = headers.map((header, index) =>
+    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)));
+
+  const header = headers.map((value, index) => padCell(value, widths[index] ?? value.length)).join("  ");
+  const separator = widths.map((width) => "-".repeat(width)).join("  ");
+  const lines = rows.map((row) =>
+    row.map((value, index) => padCell(value, widths[index] ?? value.length)).join("  "));
+  return [header, separator, ...lines].join("\n");
+};
+
+const renderProjectUsageReport = async (
+  report: Awaited<ReturnType<Harness["getProjectUsageReport"]>>,
+): Promise<string> => {
+  const chatsTable = report.chats.length === 0
+    ? "No chats with usage."
+    : renderUsageReportTable(
+        ["chat", "messages", "totalTokens", "inputTokens", "outputTokens", "lastActivity"],
+        report.chats.map((row) => [
+          row.id,
+          String(row.usage.messageCount),
+          String(row.usage.totalTokens),
+          String(row.usage.inputTokens),
+          String(row.usage.outputTokens),
+          row.updatedAt ? formatChatTimestamp(row.updatedAt) : "(unknown)",
+        ]),
+      );
+
+  const agentsTable = report.agents.length === 0
+    ? "No agents."
+    : renderUsageReportTable(
+        ["agent", "status", "messages", "totalTokens", "inputTokens", "outputTokens"],
+        report.agents.map((row) => [
+          row.name ?? row.id,
+          row.status ?? "(unknown)",
+          String(row.usage.messageCount),
+          String(row.usage.totalTokens),
+          String(row.usage.inputTokens),
+          String(row.usage.outputTokens),
+        ]),
+      );
+
+  const weeksTable = report.weeks.length === 0
+    ? "No usage yet."
+    : renderUsageReportTable(
+        ["weekOf", "messages", "totalTokens", "inputTokens", "outputTokens"],
+        report.weeks.map((row) => [
+          row.weekOf,
+          String(row.usage.messageCount),
+          String(row.usage.totalTokens),
+          String(row.usage.inputTokens),
+          String(row.usage.outputTokens),
+        ]),
+      );
+
+  return [
+    "project usage report",
+    renderUsage("messagesWithUsage", report.usage),
+    "",
+    "Chats",
+    chatsTable,
+    "",
+    "Agents",
+    agentsTable,
+    "",
+    "Weeks",
+    weeksTable,
+  ].join("\n");
+};
 
 const renderChatList = (
   chats: Awaited<ReturnType<Harness["listChats"]>>,
@@ -1270,6 +1345,13 @@ const usageSubcommands: Record<string, RegisteredSubcommand> = {
   },
   project: {
     run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
+  },
+  report: {
+    help: formatSubcommandHelp(
+      "Usage: /usage report",
+      "Show a project-wide usage report with totals plus chat, agent, and weekly breakdowns.",
+    ),
+    run: async (harness) => renderProjectUsageReport(await harness.getProjectUsageReport()),
   },
 };
 
@@ -2397,6 +2479,9 @@ const handleForkCommand: CommandHandler = async (harness, input, options) => {
   return handleChatCommand(harness, "/chat fork", options);
 };
 
+const handleCostCommand: CommandHandler = async (harness, _input, options) =>
+  handleUsageCommand(harness, "/usage report", options);
+
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
   new: handleNewCommand,
@@ -2408,6 +2493,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   save: handleSaveCommand,
   compress: handleCompressCommand,
   usage: handleUsageCommand,
+  cost: handleCostCommand,
   model: handleModelCommand,
   project: handleProjectCommand,
   projects: handleProjectCommand,

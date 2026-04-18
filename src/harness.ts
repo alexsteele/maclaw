@@ -119,6 +119,26 @@ type AgentChatResult =
   | { agent: AgentRecord; chatId: string; error?: undefined }
   | { agent?: undefined; chatId?: undefined; error: string };
 
+export type UsageReportRow = {
+  id: string;
+  name?: string;
+  status?: string;
+  updatedAt?: string;
+  usage: UsageSummary;
+};
+
+export type WeeklyUsageRow = {
+  weekOf: string;
+  usage: UsageSummary;
+};
+
+export type ProjectUsageReport = {
+  usage: UsageSummary;
+  chats: UsageReportRow[];
+  agents: UsageReportRow[];
+  weeks: WeeklyUsageRow[];
+};
+
 const createUsageSummary = (): UsageSummary => ({
   messageCount: 0,
   inputTokens: 0,
@@ -148,6 +168,49 @@ const addUsage = (summary: UsageSummary, chat: ChatRecord): UsageSummary => {
   }
 
   return summary;
+};
+
+const addMessageUsage = (summary: UsageSummary, message: Message): UsageSummary => {
+  if (!message.usage) {
+    return summary;
+  }
+
+  summary.messageCount += 1;
+  summary.inputTokens += message.usage.inputTokens ?? 0;
+  summary.outputTokens += message.usage.outputTokens ?? 0;
+  summary.totalTokens += message.usage.totalTokens ?? 0;
+  summary.cachedInputTokens += message.usage.cachedInputTokens ?? 0;
+  summary.reasoningTokens += message.usage.reasoningTokens ?? 0;
+  return summary;
+};
+
+const sortUsageRows = (rows: UsageReportRow[]): UsageReportRow[] =>
+  rows.sort((left, right) => {
+    const totalDelta = right.usage.totalTokens - left.usage.totalTokens;
+    if (totalDelta !== 0) {
+      return totalDelta;
+    }
+
+    const messageDelta = right.usage.messageCount - left.usage.messageCount;
+    if (messageDelta !== 0) {
+      return messageDelta;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
+
+const getWeekStart = (value: string): string => {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  const weekStart = new Date(timestamp);
+  weekStart.setHours(0, 0, 0, 0);
+  const day = weekStart.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  weekStart.setDate(weekStart.getDate() + offset);
+  return weekStart.toISOString().slice(0, 10);
 };
 
 const isOriginTarget = (value: NotificationTarget): value is Origin => {
@@ -651,6 +714,57 @@ export class Harness {
     }
 
     return summary;
+  }
+
+  async getProjectUsageReport(): Promise<ProjectUsageReport> {
+    const total = createUsageSummary();
+    const chats = await this.listChats();
+    const agents = this.listAgents();
+    const agentByChatId = new Map(agents.map((agent) => [agent.chatId, agent]));
+    const chatRows: UsageReportRow[] = [];
+    const weeks = new Map<string, UsageSummary>();
+
+    for (const chatSummary of chats) {
+      const chat = await this.loadChat(chatSummary.id);
+      const chatUsage = createUsageSummary();
+      for (const message of chat.messages) {
+        addMessageUsage(chatUsage, message);
+        addMessageUsage(total, message);
+        if (!message.usage) {
+          continue;
+        }
+
+        const weekOf = getWeekStart(message.createdAt);
+        const weeklyUsage = weeks.get(weekOf) ?? createUsageSummary();
+        addMessageUsage(weeklyUsage, message);
+        weeks.set(weekOf, weeklyUsage);
+      }
+
+      chatRows.push({
+        id: chat.id,
+        updatedAt: chat.updatedAt,
+        usage: chatUsage,
+      });
+    }
+
+    const agentRows = agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      status: agent.status,
+      updatedAt: agent.finishedAt ?? agent.startedAt ?? agent.createdAt,
+      usage: chatRows.find((row) => row.id === agent.chatId)?.usage ?? createUsageSummary(),
+    }));
+
+    const nonAgentChatRows = chatRows.filter((row) => !agentByChatId.has(row.id));
+    const weeklyRows = Array.from(weeks.entries(), ([weekOf, usage]) => ({ weekOf, usage }))
+      .sort((left, right) => right.weekOf.localeCompare(left.weekOf));
+
+    return {
+      usage: total,
+      chats: sortUsageRows(nonAgentChatRows),
+      agents: sortUsageRows(agentRows),
+      weeks: weeklyRows,
+    };
   }
 
   // Chats

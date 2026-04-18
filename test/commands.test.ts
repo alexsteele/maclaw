@@ -958,6 +958,67 @@ test("dispatchCommand aliases usage to current chat and project usage", async ()
   }
 });
 
+test("dispatchCommand shows a project usage report and aliases /cost", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-usage-report-"));
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.OPENAI_API_KEY;
+
+  try {
+    process.env.OPENAI_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          output_text: "usage reply",
+          usage: {
+            input_tokens: 5,
+            output_tokens: 2,
+            total_tokens: 7,
+          },
+        }),
+      }) as Response) as typeof fetch;
+
+    await initProjectConfig(projectDir, {
+      name: "usage-report-project",
+      model: "openai/test-model",
+      openAiApiKey: "test-key",
+    });
+
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+    await harness.promptChat("branch-a", "hello from branch");
+    const created = await harness.createAgent({
+      name: "planner",
+      prompt: "Do nothing",
+      maxSteps: 0,
+    });
+    assert.ok(created.agent);
+    await harness.promptChat(created.agent.chatId, "hello from agent");
+
+    const reportReply = await dispatchCommand(harness, "/usage report");
+    const costReply = await dispatchCommand(harness, "/cost");
+
+    assert.match(reportReply ?? "", /^project usage report$/mu);
+    assert.match(reportReply ?? "", /^messagesWithUsage: 3$/mu);
+    assert.match(reportReply ?? "", /^totalTokens: 21$/mu);
+    assert.match(reportReply ?? "", /^Chats$/mu);
+    assert.match(reportReply ?? "", /default/u);
+    assert.match(reportReply ?? "", /branch-a/u);
+    assert.match(reportReply ?? "", /^Agents$/mu);
+    assert.match(reportReply ?? "", /planner/u);
+    assert.match(reportReply ?? "", /^Weeks$/mu);
+    assert.equal(costReply, reportReply);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand deletes a non-active chat", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-rm-"));
 
