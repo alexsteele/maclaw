@@ -76,6 +76,11 @@ type RegisteredSubcommand = {
   run: SubcommandHandler;
 };
 
+type SubcommandDispatchOptions = {
+  defaultSubcommand?: string;
+  implicitDefault?: boolean;
+};
+
 export const helpText = [
   "## Commands",
   "- `/help` Show this help",
@@ -283,6 +288,9 @@ const formatChatMessages = (
     ? "No history yet."
     : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
 
+const formatSubcommandHelp = (usage: string, description: string, details?: string[]): string =>
+  [usage, description, ...(details ?? [])].join("\n");
+
 const findRegisteredSubcommand = (
   registry: Record<string, RegisteredSubcommand>,
   name: string,
@@ -302,8 +310,16 @@ const dispatchRegisteredSubcommand = async (
   familyCommand: string,
   familyHelpText: string,
   registry: Record<string, RegisteredSubcommand>,
+  dispatchOptions: SubcommandDispatchOptions = {},
 ): Promise<string> => {
   if (input === familyCommand || input === `${familyCommand} help`) {
+    if (dispatchOptions.defaultSubcommand && input === familyCommand) {
+      const defaultEntry = findRegisteredSubcommand(registry, dispatchOptions.defaultSubcommand);
+      if (defaultEntry) {
+        return defaultEntry.run(harness, "", options);
+      }
+    }
+
     return familyHelpText;
   }
 
@@ -312,15 +328,36 @@ const dispatchRegisteredSubcommand = async (
     return familyHelpText;
   }
 
+  if (remainder.startsWith("help ")) {
+    const helpTarget = remainder.slice("help ".length).trim();
+    if (helpTarget.length === 0) {
+      return familyHelpText;
+    }
+
+    const helpEntry = findRegisteredSubcommand(registry, helpTarget);
+    return helpEntry?.help ?? familyHelpText;
+  }
+
   const firstSpace = remainder.indexOf(" ");
   const subcommandName = firstSpace < 0 ? remainder : remainder.slice(0, firstSpace);
   const args = firstSpace < 0 ? "" : remainder.slice(firstSpace + 1).trim();
   const entry = findRegisteredSubcommand(registry, subcommandName);
+  if (entry) {
+    return entry.run(harness, args, options);
+  }
+
+  if (dispatchOptions.defaultSubcommand && dispatchOptions.implicitDefault) {
+    const defaultEntry = findRegisteredSubcommand(registry, dispatchOptions.defaultSubcommand);
+    if (defaultEntry) {
+      return defaultEntry.run(harness, remainder, options);
+    }
+  }
+
   if (!entry) {
     return familyHelpText;
   }
 
-  return entry.run(harness, args, options);
+  return familyHelpText;
 };
 
 export const toolsHelpText = [
@@ -386,6 +423,22 @@ export const remoteHelpText = [
   "  /remote create           Create a remote interactively when supported",
   "  /remote create <json>    Save one remote config from JSON",
 ].join("\n");
+
+const helpTopics: Record<string, string> = {
+  config: configHelpText,
+  save: saveHelpText,
+  model: modelHelpText,
+  compress: compressHelpText,
+  usage: usageHelpText,
+  project: projectHelpText,
+  chat: chatHelpText,
+  task: taskHelpText,
+  "task schedule": taskScheduleHelpText,
+  agent: agentHelpText,
+  tools: toolsHelpText,
+  teleport: teleportHelpText,
+  remote: remoteHelpText,
+};
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "numeric",
@@ -960,67 +1013,8 @@ type CommandHandler = (
 ) => Promise<string>;
 
 const handleHelpCommand: CommandHandler = async (_harness, input) => {
-  if (input === "/help") {
-    return helpText;
-  }
-
-  if (input === "/help config") {
-    return configHelpText;
-  }
-
-  if (input === "/help save") {
-    return saveHelpText;
-  }
-
-  if (input === "/help model") {
-    return modelHelpText;
-  }
-
-  if (input === "/help compress") {
-    return compressHelpText;
-  }
-
-  if (input === "/help usage") {
-    return usageHelpText;
-  }
-
-  if (input === "/help project") {
-    return projectHelpText;
-  }
-
-  if (input === "/help chat") {
-    return chatHelpText;
-  }
-
-  if (input === "/help task") {
-    return taskHelpText;
-  }
-
-  if (input === "/help task schedule") {
-    return taskScheduleHelpText;
-  }
-
-  if (input === "/help agent") {
-    return agentHelpText;
-  }
-
-  if (input === "/help tools") {
-    return toolsHelpText;
-  }
-
-  if (input === "/help teleport") {
-    return teleportHelpText;
-  }
-
-  if (input === "/help remote") {
-    return remoteHelpText;
-  }
-
-  if (input.startsWith("/help")) {
-    return helpText;
-  }
-
-  return helpText;
+  const topic = input.slice("/help".length).trim();
+  return helpTopics[topic] ?? helpText;
 };
 
 const projectSubcommands: Record<string, RegisteredSubcommand> = {
@@ -1077,10 +1071,6 @@ const handleProjectCommand: CommandHandler = async (harness, input, options) => 
     return handleProjectCommand(harness, "/project list", options);
   }
 
-  if (input === "/project") {
-    return renderProjectInfo(harness, getScopedChatId(harness, options));
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1088,42 +1078,55 @@ const handleProjectCommand: CommandHandler = async (harness, input, options) => 
     "/project",
     projectHelpText,
     projectSubcommands,
+    {
+      defaultSubcommand: "list",
+    },
   );
 };
 
 const handleSaveCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/save") {
-    const savedPath = await harness.saveChatTranscript(undefined, options.chatId);
-    return `saved chat transcript to: ${savedPath}`;
-  }
-
-  if (input === "/save help") {
-    return saveHelpText;
-  }
-
-  if (input.startsWith("/save ")) {
-    const outputPath = input.slice("/save ".length).trim();
-    if (outputPath.length === 0) {
-      return saveHelpText;
-    }
-
-    const savedPath = await harness.saveChatTranscript(outputPath, options.chatId);
-    return `saved chat transcript to: ${savedPath}`;
-  }
-
-  return saveHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/save",
+    saveHelpText,
+    {
+      default: {
+        run: async (saveHarness, args, saveOptions) => {
+          const outputPath = args.trim();
+          const savedPath = await saveHarness.saveChatTranscript(
+            outputPath.length > 0 ? outputPath : undefined,
+            saveOptions.chatId,
+          );
+          return `saved chat transcript to: ${savedPath}`;
+        },
+      },
+    },
+    {
+      defaultSubcommand: "default",
+      implicitDefault: true,
+    },
+  );
 };
 
 const handleCompressCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/compress") {
-    return handleChatCommand(harness, "/chat compress", options);
-  }
-
-  if (input === "/compress help" || input.startsWith("/compress ")) {
-    return compressHelpText;
-  }
-
-  return compressHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/compress",
+    compressHelpText,
+    {
+      default: {
+        run: async (compressHarness, _args, compressOptions) =>
+          handleChatCommand(compressHarness, "/chat compress", compressOptions),
+      },
+    },
+    {
+      defaultSubcommand: "default",
+    },
+  );
 };
 
 const inboxSubcommands: Record<string, RegisteredSubcommand> = {
@@ -1152,10 +1155,6 @@ const inboxSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleInboxCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/inbox") {
-    return renderInbox(await harness.listInbox());
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1163,6 +1162,9 @@ const handleInboxCommand: CommandHandler = async (harness, input, options) => {
     "/inbox",
     inboxHelpText,
     inboxSubcommands,
+    {
+      defaultSubcommand: "list",
+    },
   );
 };
 
@@ -1234,58 +1236,56 @@ const sendSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleSendCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/send") {
-    return sendHelpText;
-  }
-
-  if (input === "/send help") {
-    return sendHelpText;
-  }
-
-  if (input.startsWith("/send ")) {
-    return sendSubcommands.default.run(harness, input.slice("/send ".length), options);
-  }
-
-  return sendHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/send",
+    sendHelpText,
+    sendSubcommands,
+    {
+      defaultSubcommand: "default",
+      implicitDefault: true,
+    },
+  );
 };
 
 const usageSubcommands: Record<string, RegisteredSubcommand> = {
+  default: {
+    run: async (harness, args, options) => {
+      const requestedId = parseChatId(args);
+      if (!args.trim()) {
+        return renderUsage(
+          "messagesWithUsage",
+          await harness.getChatUsage(getScopedChatId(harness, options)),
+        );
+      }
+
+      if (!requestedId) {
+        return usageHelpText;
+      }
+
+      return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
+    },
+  },
   project: {
     run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
   },
 };
 
 const handleUsageCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/usage") {
-    return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
-  }
-
-  if (input === "/usage help") {
-    return usageHelpText;
-  }
-
-  const direct = await dispatchRegisteredSubcommand(
+  return dispatchRegisteredSubcommand(
     harness,
     input,
     options,
     "/usage",
     usageHelpText,
     usageSubcommands,
+    {
+      defaultSubcommand: "default",
+      implicitDefault: true,
+    },
   );
-  if (direct !== usageHelpText) {
-    return direct;
-  }
-
-  if (input.startsWith("/usage ")) {
-    const requestedId = parseChatId(input.slice("/usage ".length));
-    if (!requestedId) {
-      return usageHelpText;
-    }
-
-    return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
-  }
-
-  return usageHelpText;
 };
 
 const modelSubcommands: Record<string, RegisteredSubcommand> = {
@@ -1295,10 +1295,6 @@ const modelSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleModelCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/model") {
-    return renderModelSuggestions();
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1306,6 +1302,9 @@ const handleModelCommand: CommandHandler = async (harness, input, options) => {
     "/model",
     modelHelpText,
     modelSubcommands,
+    {
+      defaultSubcommand: "list",
+    },
   );
 };
 
@@ -1365,10 +1364,6 @@ const configSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleConfigCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/config") {
-    return renderProjectConfig(readCurrentProjectConfig(harness));
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1376,6 +1371,9 @@ const handleConfigCommand: CommandHandler = async (harness, input, options) => {
     "/config",
     configHelpText,
     configSubcommands,
+    {
+      defaultSubcommand: "show",
+    },
   );
 };
 
@@ -1633,11 +1631,18 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
 
 const agentSubcommands: Record<string, RegisteredSubcommand> = {
   list: {
-    help: "Usage: /agent list",
+    help: formatSubcommandHelp(
+      "Usage: /agent list",
+      "List agents in the current project, with running agents shown first.",
+    ),
     run: async (harness) => renderAgentList(harness.listAgents()),
   },
   create: {
-    help: "Usage: /agent create <name> | <prompt> [| <json options>]",
+    help: formatSubcommandHelp(
+      "Usage: /agent create <name> | <prompt> [| <json options>]",
+      "Create a new agent with its own chat, using the current chat as provenance only.",
+      ['JSON options can include `toolsets`, `maxSteps`, `timeoutMs`, `stepIntervalMs`, `notify`, and `notifyTarget`.'],
+    ),
     run: async (harness, args, options) => {
       const segments = args.split("|").map((segment) => segment.trim());
       if (segments.length < 2) {
@@ -1675,7 +1680,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   show: {
-    help: "Usage: /agent show <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent show <name>",
+      "Show detailed metadata for one agent.",
+    ),
     run: async (harness, args) => {
       const agentRef = args.trim();
       if (agentRef.length === 0) {
@@ -1687,7 +1695,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   rm: {
-    help: "Usage: /agent rm <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent rm <name>",
+      "Stop and delete an agent, including its saved chat and memory.",
+    ),
     run: async (harness, args) => {
       const agentRef = args.trim();
       if (agentRef.length === 0) {
@@ -1699,7 +1710,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   send: {
-    help: "Usage: /agent send <name> | <message>",
+    help: formatSubcommandHelp(
+      "Usage: /agent send <name> | <message>",
+      "Send a message into an agent's inbox without switching into its chat.",
+    ),
     run: async (harness, args, options) => {
       const separatorIndex = args.indexOf("|");
       if (separatorIndex < 0) {
@@ -1724,7 +1738,14 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   inbox: {
-    help: "Usage: /agent inbox <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent inbox <name>",
+      "Show or manage one agent's inbox messages.",
+      [
+        "Use `/agent inbox clear <name>` to remove all inbox messages.",
+        "Use `/agent inbox rm <name> <id>` to remove one inbox message.",
+      ],
+    ),
     run: async (harness, args) => {
       if (args.startsWith("clear ")) {
         const agentRef = args.slice("clear ".length).trim();
@@ -1767,7 +1788,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   prune: {
-    help: "Usage: /agent prune [now|<age like 1h, 30m, 2d>]",
+    help: formatSubcommandHelp(
+      "Usage: /agent prune [now|<age like 1h, 30m, 2d>]",
+      "Delete inactive agents, defaulting to agents older than 24 hours.",
+    ),
     run: async (harness, args) => {
       const trimmed = args.trim();
       if (trimmed.length === 0) {
@@ -1789,7 +1813,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   chat: {
-    help: "Usage: /agent chat <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent chat <name>",
+      "Pause an agent and switch the REPL into that agent's chat.",
+    ),
     run: async (harness, args, options) => {
       if (options.chatId) {
         return "/agent chat is not supported in this channel yet.";
@@ -1809,7 +1836,14 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   tail: {
-    help: "Usage: /agent tail [-f] <name> [N]",
+    help: formatSubcommandHelp(
+      "Usage: /agent tail [-f] <name> [N]",
+      "Show the latest messages from one agent's chat.",
+      [
+        "`N` defaults to 10.",
+        "Use `-f` in the REPL to keep following new messages as they arrive.",
+      ],
+    ),
     run: async (harness, args) => {
       const parsed = parseAgentTailArgs(args);
       if (parsed.error || !parsed.agentRef) {
@@ -1830,7 +1864,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   return: {
-    help: "Usage: /agent return <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent return <name>",
+      "Switch back to the previous chat and resume the paused agent.",
+    ),
     run: async (harness, args, options) => {
       if (options.chatId) {
         return "/agent return is not supported in this channel yet.";
@@ -1850,7 +1887,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   stop: {
-    help: "Usage: /agent stop <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent stop <name>",
+      "Cancel a running agent without deleting its records.",
+    ),
     run: async (harness, args) => {
       const agentRef = args.trim();
       if (agentRef.length === 0) {
@@ -1862,7 +1902,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   pause: {
-    help: "Usage: /agent pause <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent pause <name>",
+      "Pause a running agent so it stops taking new steps.",
+    ),
     run: async (harness, args) => {
       const agentRef = args.trim();
       if (agentRef.length === 0) {
@@ -1874,7 +1917,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   resume: {
-    help: "Usage: /agent resume <name>",
+    help: formatSubcommandHelp(
+      "Usage: /agent resume <name>",
+      "Resume a paused agent.",
+    ),
     run: async (harness, args) => {
       const agentRef = args.trim();
       if (agentRef.length === 0) {
@@ -1886,7 +1932,10 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     },
   },
   steer: {
-    help: "Usage: /agent steer <name> | <prompt>",
+    help: formatSubcommandHelp(
+      "Usage: /agent steer <name> | <prompt>",
+      "Queue a steering message for an agent while it keeps working in its own chat.",
+    ),
     run: async (harness, args) => {
       const separatorIndex = args.indexOf("|");
       if (separatorIndex < 0) {
@@ -1932,10 +1981,6 @@ const skillsSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleSkillsCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/skills") {
-    return skillsSubcommands.list.run(harness, "", options);
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1943,6 +1988,9 @@ const handleSkillsCommand: CommandHandler = async (harness, input, options) => {
     "/skills",
     "Usage: /skills",
     skillsSubcommands,
+    {
+      defaultSubcommand: "list",
+    },
   );
 };
 
@@ -2017,10 +2065,6 @@ const toolsSubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleToolsCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/tools") {
-    return toolsSubcommands.list.run(harness, "", options);
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -2028,6 +2072,9 @@ const handleToolsCommand: CommandHandler = async (harness, input, options) => {
     "/tools",
     toolsHelpText,
     toolsSubcommands,
+    {
+      defaultSubcommand: "list",
+    },
   );
 };
 
@@ -2038,10 +2085,6 @@ const historySubcommands: Record<string, RegisteredSubcommand> = {
 };
 
 const handleHistoryCommand: CommandHandler = async (harness, input, options) => {
-  if (input === "/history") {
-    return harness.getChatTranscript(options.chatId);
-  }
-
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -2049,6 +2092,9 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
     "/history",
     "Usage: /history",
     historySubcommands,
+    {
+      defaultSubcommand: "show",
+    },
   );
 };
 
@@ -2094,182 +2140,209 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
     return teleportHelpText;
   }
 
-  if (input === "/teleport status") {
-    return renderTeleportStatus(options.teleport?.getTarget());
-  }
+  const teleportSubcommands: Record<string, RegisteredSubcommand> = {
+    status: {
+      run: async () => renderTeleportStatus(options.teleport?.getTarget()),
+    },
+    list: {
+      run: async () =>
+        options.teleport
+          ? renderTeleportRemotes(options.teleport.listRemotes())
+          : "Teleport is not supported in this interface yet.",
+    },
+    disconnect: {
+      run: async () => {
+        if (!options.teleport) {
+          return "Teleport is not supported in this interface yet.";
+        }
 
-  if (input === "/teleport help") {
-    return teleportHelpText;
-  }
+        await options.teleport.disconnect();
+        return "teleport: disconnected";
+      },
+    },
+    connect: {
+      help: teleportHelpText,
+      run: async (_teleportHarness, args) => {
+        if (!options.teleport) {
+          return "Teleport is not supported in this interface yet.";
+        }
 
-  if (input === "/teleport list") {
-    return options.teleport
-      ? renderTeleportRemotes(options.teleport.listRemotes())
-      : "Teleport is not supported in this interface yet.";
-  }
+        const body = args.trim();
+        const requestedProject = parseTeleportFlagValue(body, "--project");
+        const requestedChatId = parseTeleportFlagValue(body, "--chat");
+        const target = removeTeleportFlag(
+          removeTeleportFlag(body, "--project"),
+          "--chat",
+        ).trim();
+        if (!target) {
+          return teleportHelpText;
+        }
 
-  if (input === "/teleport disconnect") {
-    if (!options.teleport) {
-      return "Teleport is not supported in this interface yet.";
-    }
+        let attachedTarget;
+        try {
+          attachedTarget = await options.teleport.connect(target, {
+            project: requestedProject ?? harness.config.name,
+            chatId: requestedChatId ?? getScopedChatId(harness, options),
+          });
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
 
-    await options.teleport.disconnect();
-    return "teleport: disconnected";
-  }
+        return `attached to remote: ${attachedTarget.target}\n${renderTeleportStatus(attachedTarget)}`;
+      },
+    },
+  };
 
-  if (input.startsWith("/teleport ")) {
-    if (!options.teleport) {
-      return "Teleport is not supported in this interface yet.";
-    }
-
-    const body = input.startsWith("/teleport connect ")
-      ? input.slice("/teleport connect ".length).trim()
-      : input.slice("/teleport ".length).trim();
-    const requestedProject = parseTeleportFlagValue(body, "--project");
-    const requestedChatId = parseTeleportFlagValue(body, "--chat");
-    const target = removeTeleportFlag(
-      removeTeleportFlag(body, "--project"),
-      "--chat",
-    ).trim();
-    if (!target) {
-      return teleportHelpText;
-    }
-
-    let attachedTarget;
-    try {
-      attachedTarget = await options.teleport.connect(target, {
-        project: requestedProject ?? harness.config.name,
-        chatId: requestedChatId ?? getScopedChatId(harness, options),
-      });
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
-    return `attached to remote: ${attachedTarget.target}\n${renderTeleportStatus(attachedTarget)}`;
-  }
-
-  if (input.startsWith("/teleport")) {
-    return teleportHelpText;
-  }
-
-  return teleportHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/teleport",
+    teleportHelpText,
+    teleportSubcommands,
+    {
+      implicitDefault: true,
+      defaultSubcommand: "connect",
+    },
+  );
 };
 
 const handleRemoteCommand: CommandHandler = async (harness, input) => {
-  if (input === "/remote" || input === "/remote help") {
-    return remoteHelpText;
-  }
-
   const serverConfig = await loadEditableServerConfig();
   const remotes = [...(serverConfig.remotes ?? [])];
-
-  if (input === "/remote list") {
-    return renderRemoteList(remotes);
-  }
-
-  if (input.startsWith("/remote show ")) {
-    const name = input.slice("/remote show ".length).trim();
+  const findRemoteConfig = (name: string): RemoteConfig | string => {
     if (!name) {
-      return "Usage: /remote show <name>";
+      return "remote name is required";
     }
 
-    const remote = remotes.find((entry) => entry.name === name);
-    return remote ? renderRemoteInfo(remote) : `remote not found: ${name}`;
-  }
+    return remotes.find((entry) => entry.name === name) ?? `remote not found: ${name}`;
+  };
 
-  if (input.startsWith("/remote bootstrap ")) {
-    const name = input.slice("/remote bootstrap ".length).trim();
-    if (!name) {
-      return "Usage: /remote bootstrap <name>";
-    }
+  const remoteSubcommands: Record<string, RegisteredSubcommand> = {
+    list: {
+      run: async () => renderRemoteList(remotes),
+    },
+    show: {
+      help: "Usage: /remote show <name>",
+      run: async (_remoteHarness, args) => {
+        const name = args.trim();
+        if (!name) {
+          return "Usage: /remote show <name>";
+        }
 
-    const remoteConfig = remotes.find((entry) => entry.name === name);
-    if (!remoteConfig) {
-      return `remote not found: ${name}`;
-    }
+        const remote = findRemoteConfig(name);
+        return typeof remote === "string" ? remote : renderRemoteInfo(remote);
+      },
+    },
+    bootstrap: {
+      help: "Usage: /remote bootstrap <name>",
+      run: async (_remoteHarness, args) => {
+        const name = args.trim();
+        if (!name) {
+          return "Usage: /remote bootstrap <name>";
+        }
 
-    const result = await createRemote(remoteConfig).bootstrap({
-      project: harness.config,
-      server: serverConfig,
-    });
-    return formatRemoteActionResult("bootstrap", name, result);
-  }
+        const remote = findRemoteConfig(name);
+        if (typeof remote === "string") {
+          return remote;
+        }
 
-  if (input.startsWith("/remote start ")) {
-    const name = input.slice("/remote start ".length).trim();
-    if (!name) {
-      return "Usage: /remote start <name>";
-    }
+        const result = await createRemote(remote).bootstrap({
+          project: harness.config,
+          server: serverConfig,
+        });
+        return formatRemoteActionResult("bootstrap", name, result);
+      },
+    },
+    start: {
+      help: "Usage: /remote start <name>",
+      run: async (_remoteHarness, args) => {
+        const name = args.trim();
+        if (!name) {
+          return "Usage: /remote start <name>";
+        }
 
-    const remoteConfig = remotes.find((entry) => entry.name === name);
-    if (!remoteConfig) {
-      return `remote not found: ${name}`;
-    }
+        const remote = findRemoteConfig(name);
+        if (typeof remote === "string") {
+          return remote;
+        }
 
-    const result = await createRemote(remoteConfig).start({
-      project: harness.config,
-      server: serverConfig,
-    });
-    return formatRemoteActionResult("start", name, result);
-  }
+        const result = await createRemote(remote).start({
+          project: harness.config,
+          server: serverConfig,
+        });
+        return formatRemoteActionResult("start", name, result);
+      },
+    },
+    stop: {
+      help: "Usage: /remote stop <name>",
+      run: async (_remoteHarness, args) => {
+        const name = args.trim();
+        if (!name) {
+          return "Usage: /remote stop <name>";
+        }
 
-  if (input.startsWith("/remote stop ")) {
-    const name = input.slice("/remote stop ".length).trim();
-    if (!name) {
-      return "Usage: /remote stop <name>";
-    }
+        const remote = findRemoteConfig(name);
+        if (typeof remote === "string") {
+          return remote;
+        }
 
-    const remoteConfig = remotes.find((entry) => entry.name === name);
-    if (!remoteConfig) {
-      return `remote not found: ${name}`;
-    }
+        const result = await createRemote(remote).stop({
+          project: harness.config,
+          server: serverConfig,
+        });
+        return formatRemoteActionResult("stop", name, result);
+      },
+    },
+    rm: {
+      help: "Usage: /remote rm <name>",
+      run: async (_remoteHarness, args) => {
+        const name = args.trim();
+        if (!name) {
+          return "Usage: /remote rm <name>";
+        }
 
-    const result = await createRemote(remoteConfig).stop({
-      project: harness.config,
-      server: serverConfig,
-    });
-    return formatRemoteActionResult("stop", name, result);
-  }
+        const nextRemotes = remotes.filter((entry) => entry.name !== name);
+        if (nextRemotes.length === remotes.length) {
+          return `remote not found: ${name}`;
+        }
 
-  if (input.startsWith("/remote rm ")) {
-    const name = input.slice("/remote rm ".length).trim();
-    if (!name) {
-      return "Usage: /remote rm <name>";
-    }
+        serverConfig.remotes = nextRemotes.length > 0 ? nextRemotes : undefined;
+        await saveEditableServerConfig(serverConfig);
+        return `deleted remote: ${name}`;
+      },
+    },
+    create: {
+      help: "Usage: /remote create <json>",
+      run: async (_remoteHarness, args) => {
+        const body = args.trim();
+        if (!body) {
+          return "Interactive /remote create is not supported yet. Use /remote create <json>.";
+        }
 
-    const nextRemotes = remotes.filter((entry) => entry.name !== name);
-    if (nextRemotes.length === remotes.length) {
-      return `remote not found: ${name}`;
-    }
+        const remote = parseRemoteCreateJson(body);
+        if (typeof remote === "string") {
+          return remote;
+        }
 
-    serverConfig.remotes = nextRemotes.length > 0 ? nextRemotes : undefined;
-    await saveEditableServerConfig(serverConfig);
-    return `deleted remote: ${name}`;
-  }
+        serverConfig.remotes = [
+          ...remotes.filter((entry) => entry.name !== remote.name),
+          remote,
+        ];
+        await saveEditableServerConfig(serverConfig);
+        return `saved remote: ${remote.name}`;
+      },
+    },
+  };
 
-  if (input === "/remote create") {
-    return "Interactive /remote create is not supported yet. Use /remote create <json>.";
-  }
-
-  if (input.startsWith("/remote create ")) {
-    const body = input.slice("/remote create ".length).trim();
-    const remote = parseRemoteCreateJson(body);
-    if (typeof remote === "string") {
-      return remote;
-    }
-
-    serverConfig.remotes = [
-      ...remotes.filter((entry) => entry.name !== remote.name),
-      remote,
-    ];
-    await saveEditableServerConfig(serverConfig);
-    return `saved remote: ${remote.name}`;
-  }
-
-  if (input.startsWith("/remote")) {
-    return remoteHelpText;
-  }
-
-  return remoteHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    {},
+    "/remote",
+    remoteHelpText,
+    remoteSubcommands,
+  );
 };
 
 const handleNewCommand: CommandHandler = async (harness, input, options) => {

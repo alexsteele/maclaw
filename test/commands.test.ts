@@ -2062,6 +2062,15 @@ test("dispatchCommand treats /command help like /help command", async () => {
     assert.equal(await dispatchCommand(harness, "/task help"), await dispatchCommand(harness, "/help task"));
     assert.equal(await dispatchCommand(harness, "/task schedule help"), await dispatchCommand(harness, "/help task schedule"));
     assert.equal(await dispatchCommand(harness, "/agent help"), await dispatchCommand(harness, "/help agent"));
+    assert.equal(
+      await dispatchCommand(harness, "/agent help tail"),
+      [
+        "Usage: /agent tail [-f] <name> [N]",
+        "Show the latest messages from one agent's chat.",
+        "`N` defaults to 10.",
+        "Use `-f` in the REPL to keep following new messages as they arrive.",
+      ].join("\n"),
+    );
     assert.equal(await dispatchCommand(harness, "/model help"), await dispatchCommand(harness, "/help model"));
     assert.equal(await dispatchCommand(harness, "/compress help"), compressHelpText);
     assert.equal(await dispatchCommand(harness, "/save help"), saveHelpText);
