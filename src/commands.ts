@@ -967,64 +967,72 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
   return helpText;
 };
 
+const projectSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    aliases: ["show"],
+    run: async (harness, _args, options) =>
+      renderProjectInfo(harness, getScopedChatId(harness, options)),
+  },
+  usage: {
+    run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
+  },
+  init: {
+    run: async (harness) => {
+      if (harness.isProjectInitialized()) {
+        return `project already initialized: ${harness.config.projectConfigFile}`;
+      }
+
+      await harness.initProject();
+      return (
+        `initialized project: ${harness.config.projectConfigFile}\n` +
+        `current chat: ${harness.getCurrentChatId()}\n` +
+        "switched this REPL into persistent project mode"
+      );
+    },
+  },
+  wipeout: {
+    run: async (harness, args) => {
+      if (args === "confirm") {
+        const wiped = await harness.wipeProject();
+        if (!wiped) {
+          return "project is not initialized";
+        }
+
+        return (
+          "deleted project data: .maclaw\n" +
+          `project is now headless at: ${harness.config.projectFolder}`
+        );
+      }
+
+      if (!harness.isProjectInitialized()) {
+        return "project is not initialized";
+      }
+
+      return (
+        "This will delete the project's .maclaw folder, including chats, tasks, agents, and config.\n" +
+        "Run /project wipeout confirm to continue."
+      );
+    },
+  },
+};
+
 const handleProjectCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/projects") {
     return handleProjectCommand(harness, "/project list", options);
   }
 
-  if (input === "/project help") {
-    return projectHelpText;
-  }
-
-  if (input === "/project" || input === "/project list" || input === "/project show") {
+  if (input === "/project") {
     return renderProjectInfo(harness, getScopedChatId(harness, options));
   }
 
-  if (input === "/project usage") {
-    return renderUsage("messagesWithUsage", await harness.getProjectUsage());
-  }
-
-  if (input === "/project init") {
-    if (harness.isProjectInitialized()) {
-      return `project already initialized: ${harness.config.projectConfigFile}`;
-    }
-
-    await harness.initProject();
-    return (
-      `initialized project: ${harness.config.projectConfigFile}\n` +
-      `current chat: ${harness.getCurrentChatId()}\n` +
-      "switched this REPL into persistent project mode"
-    );
-  }
-
-  if (input === "/project wipeout") {
-    if (!harness.isProjectInitialized()) {
-      return "project is not initialized";
-    }
-
-    return (
-      "This will delete the project's .maclaw folder, including chats, tasks, agents, and config.\n" +
-      "Run /project wipeout confirm to continue."
-    );
-  }
-
-  if (input === "/project wipeout confirm") {
-    const wiped = await harness.wipeProject();
-    if (!wiped) {
-      return "project is not initialized";
-    }
-
-    return (
-      "deleted project data: .maclaw\n" +
-      `project is now headless at: ${harness.config.projectFolder}`
-    );
-  }
-
-  if (input.startsWith("/project")) {
-    return projectHelpText;
-  }
-
-  return projectHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/project",
+    projectHelpText,
+    projectSubcommands,
+  );
 };
 
 const handleSaveCommand: CommandHandler = async (harness, input, options) => {
@@ -1062,32 +1070,111 @@ const handleCompressCommand: CommandHandler = async (harness, input, options) =>
   return compressHelpText;
 };
 
-const handleInboxCommand: CommandHandler = async (harness, input) => {
+const inboxSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    run: async (harness) => renderInbox(await harness.listInbox()),
+  },
+  clear: {
+    run: async (harness) => {
+      const cleared = await harness.clearInbox();
+      return `cleared inbox: ${cleared}`;
+    },
+  },
+  rm: {
+    help: "Usage: /inbox rm <id>",
+    run: async (harness, args) => {
+      const entryId = args.trim();
+      if (entryId.length === 0) {
+        return "Usage: /inbox rm <id>";
+      }
+
+      return (await harness.deleteInboxEntry(entryId))
+        ? `deleted inbox entry: ${entryId}`
+        : `inbox entry not found: ${entryId}`;
+    },
+  },
+};
+
+const handleInboxCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/inbox") {
     return renderInbox(await harness.listInbox());
   }
 
-  if (input === "/inbox clear") {
-    const cleared = await harness.clearInbox();
-    return `cleared inbox: ${cleared}`;
-  }
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/inbox",
+    inboxHelpText,
+    inboxSubcommands,
+  );
+};
 
-  if (input.startsWith("/inbox rm ")) {
-    const entryId = input.slice("/inbox rm ".length).trim();
-    if (entryId.length === 0) {
-      return "Usage: /inbox rm <id>";
-    }
+const sendSubcommands: Record<string, RegisteredSubcommand> = {
+  default: {
+    run: async (harness, args, options) => {
+      const body = args.trim();
+      if (body.length === 0 || body === "help") {
+        return sendHelpText;
+      }
 
-    return (await harness.deleteInboxEntry(entryId))
-      ? `deleted inbox entry: ${entryId}`
-      : `inbox entry not found: ${entryId}`;
-  }
+      const separator = body.indexOf("|");
+      if (separator < 0) {
+        await harness.notify({
+          destination: "inbox",
+          text: body,
+          origin: options.origin,
+          saveToInbox: true,
+        });
+        return "saved notification to inbox";
+      }
 
-  if (input === "/inbox help" || input.startsWith("/inbox ")) {
-    return inboxHelpText;
-  }
+      const target = body.slice(0, separator).trim();
+      const text = body.slice(separator + 1).trim();
+      if (target.length === 0 || text.length === 0) {
+        return sendHelpText;
+      }
 
-  return inboxHelpText;
+      if (target === "inbox") {
+        await harness.notify({
+          destination: "inbox",
+          text,
+          origin: options.origin,
+          saveToInbox: true,
+        });
+        return "saved notification to inbox";
+      }
+
+      if (target === "origin") {
+        if (!options.origin) {
+          return "No current origin available for /send origin.";
+        }
+
+        const result = await harness.notify({
+          destination: "origin",
+          text,
+          origin: options.origin,
+          saveToInbox: true,
+        });
+        if (!result.delivered || !result.target) {
+          return "No current origin available for /send origin.";
+        }
+        return `sent notification to ${result.target.channel}/${result.target.userId}`;
+      }
+
+      const result = await harness.notify({
+        destination: target,
+        text,
+        origin: options.origin,
+        saveToInbox: true,
+      });
+      if (!result.delivered || !result.target) {
+        return `Cannot route to channel: ${target}`;
+      }
+
+      return `sent notification to ${result.target.channel}/${result.target.userId}`;
+    },
+  },
 };
 
 const handleSendCommand: CommandHandler = async (harness, input, options) => {
@@ -1095,70 +1182,21 @@ const handleSendCommand: CommandHandler = async (harness, input, options) => {
     return sendHelpText;
   }
 
-  if (input === "/send help" || input.startsWith("/send ")) {
-    const body = input.slice("/send".length).trim();
-    if (body.length === 0 || body === "help") {
-      return sendHelpText;
-    }
+  if (input === "/send help") {
+    return sendHelpText;
+  }
 
-    const separator = body.indexOf("|");
-    if (separator < 0) {
-      await harness.notify({
-        destination: "inbox",
-        text: body,
-        origin: options.origin,
-        saveToInbox: true,
-      });
-      return "saved notification to inbox";
-    }
-
-    const target = body.slice(0, separator).trim();
-    const text = body.slice(separator + 1).trim();
-    if (target.length === 0 || text.length === 0) {
-      return sendHelpText;
-    }
-
-    if (target === "inbox") {
-      await harness.notify({
-        destination: "inbox",
-        text,
-        origin: options.origin,
-        saveToInbox: true,
-      });
-      return "saved notification to inbox";
-    }
-
-    if (target === "origin") {
-      if (!options.origin) {
-        return "No current origin available for /send origin.";
-      }
-
-      const result = await harness.notify({
-        destination: "origin",
-        text,
-        origin: options.origin,
-        saveToInbox: true,
-      });
-      if (!result.delivered || !result.target) {
-        return "No current origin available for /send origin.";
-      }
-      return `sent notification to ${result.target.channel}/${result.target.userId}`;
-    }
-
-    const result = await harness.notify({
-      destination: target,
-      text,
-      origin: options.origin,
-      saveToInbox: true,
-    });
-    if (!result.delivered || !result.target) {
-      return `Cannot route to channel: ${target}`;
-    }
-
-    return `sent notification to ${result.target.channel}/${result.target.userId}`;
+  if (input.startsWith("/send ")) {
+    return sendSubcommands.default.run(harness, input.slice("/send ".length), options);
   }
 
   return sendHelpText;
+};
+
+const usageSubcommands: Record<string, RegisteredSubcommand> = {
+  project: {
+    run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
+  },
 };
 
 const handleUsageCommand: CommandHandler = async (harness, input, options) => {
@@ -1170,8 +1208,16 @@ const handleUsageCommand: CommandHandler = async (harness, input, options) => {
     return usageHelpText;
   }
 
-  if (input === "/usage project") {
-    return renderUsage("messagesWithUsage", await harness.getProjectUsage());
+  const direct = await dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/usage",
+    usageHelpText,
+    usageSubcommands,
+  );
+  if (direct !== usageHelpText) {
+    return direct;
   }
 
   if (input.startsWith("/usage ")) {
@@ -1186,74 +1232,231 @@ const handleUsageCommand: CommandHandler = async (harness, input, options) => {
   return usageHelpText;
 };
 
-const handleModelCommand: CommandHandler = async (_harness, input) => {
-  if (input === "/model" || input === "/model list") {
+const modelSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    run: async () => renderModelSuggestions(),
+  },
+};
+
+const handleModelCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/model") {
     return renderModelSuggestions();
   }
 
-  if (input === "/model help" || input.startsWith("/model ")) {
-    return modelHelpText;
-  }
-
-  return modelHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/model",
+    modelHelpText,
+    modelSubcommands,
+  );
 };
 
-const handleConfigCommand: CommandHandler = async (harness, input) => {
-  if (input === "/config help") {
-    return configHelpText;
-  }
+const configSubcommands: Record<string, RegisteredSubcommand> = {
+  show: {
+    run: async (harness) => renderProjectConfig(readCurrentProjectConfig(harness)),
+  },
+  get: {
+    help: "Usage: /config get <key>",
+    run: async (harness, args) => {
+      const key = args.trim();
+      if (key.length === 0) {
+        return "Usage: /config get <key>";
+      }
 
-  if (input === "/config" || input === "/config show") {
+      const config = readCurrentProjectConfig(harness);
+      if (!(key in config)) {
+        return `Unknown config key: ${key}`;
+      }
+
+      return String(config[key as keyof typeof config]);
+    },
+  },
+  set: {
+    help: "Usage: /config set <key> <value>",
+    run: async (harness, args) => {
+      const firstSpace = args.indexOf(" ");
+      if (firstSpace <= 0) {
+        return "Usage: /config set <key> <value>";
+      }
+
+      const key = args.slice(0, firstSpace);
+      const value = args.slice(firstSpace + 1).trim();
+      if (value.length === 0) {
+        return "Usage: /config set <key> <value>";
+      }
+
+      if (!editableProjectConfigKeys.has(key)) {
+        return `Unknown or non-editable config key: ${key}`;
+      }
+
+      const parsedValue = parseProjectConfigValue(key, value);
+      if (typeof parsedValue === "string") {
+        return parsedValue;
+      }
+
+      let config;
+      try {
+        config = await harness.updateProjectConfig(parsedValue);
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+
+      return `${key} = ${String(config[key as keyof typeof config])}`;
+    },
+  },
+};
+
+const handleConfigCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/config") {
     return renderProjectConfig(readCurrentProjectConfig(harness));
   }
 
-  if (input.startsWith("/config get ")) {
-    const key = input.slice("/config get ".length).trim();
-    if (key.length === 0) {
-      return "Usage: /config get <key>";
-    }
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/config",
+    configHelpText,
+    configSubcommands,
+  );
+};
 
-    const config = readCurrentProjectConfig(harness);
-    if (!(key in config)) {
-      return `Unknown config key: ${key}`;
-    }
+const chatSubcommands: Record<string, RegisteredSubcommand> = {
+  show: {
+    run: async (harness, args, options) => {
+      if (args.length === 0) {
+        return renderChatInfo(
+          await harness.loadChat(getScopedChatId(harness, options)),
+          harness.config.model,
+          harness.config.contextMessages,
+        );
+      }
 
-    return String(config[key as keyof typeof config]);
-  }
+      const requestedId = parseChatId(args);
+      if (!requestedId) {
+        return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+      }
 
-  if (input.startsWith("/config set ")) {
-    const body = input.slice("/config set ".length).trim();
-    const firstSpace = body.indexOf(" ");
-    if (firstSpace <= 0) {
-      return "Usage: /config set <key> <value>";
-    }
+      return renderChatInfo(
+        await harness.loadChat(requestedId),
+        harness.config.model,
+        harness.config.contextMessages,
+      );
+    },
+  },
+  usage: {
+    run: async (harness, args, options) => {
+      if (args.length === 0) {
+        return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
+      }
 
-    const key = body.slice(0, firstSpace);
-    const value = body.slice(firstSpace + 1).trim();
-    if (value.length === 0) {
-      return "Usage: /config set <key> <value>";
-    }
+      const requestedId = parseChatId(args);
+      if (!requestedId) {
+        return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+      }
 
-    if (!editableProjectConfigKeys.has(key)) {
-      return `Unknown or non-editable config key: ${key}`;
-    }
+      return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
+    },
+  },
+  list: {
+    run: async (harness, _args, options) =>
+      renderChatList(await harness.listChats(), getScopedChatId(harness, options)),
+  },
+  new: {
+    run: async (harness, args, options) => {
+      if (isPinnedChannelContext(options)) {
+        return "/chat new is not supported in this channel yet.";
+      }
 
-    const parsedValue = parseProjectConfigValue(key, value);
-    if (typeof parsedValue === "string") {
-      return parsedValue;
-    }
+      const result = await harness.createChat(args.length > 0 ? args : undefined);
+      if (result.error) {
+        return result.error;
+      }
+      if (!result.chat) {
+        return "Could not create chat.";
+      }
 
-    let config;
-    try {
-      config = await harness.updateProjectConfig(parsedValue);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
+      const chat = await harness.switchChat(result.chat.id);
+      return `switched to chat: ${chat.id}`;
+    },
+  },
+  switch: {
+    run: async (harness, args, options) => {
+      if (isPinnedChannelContext(options)) {
+        return "/chat switch is not supported in this channel yet.";
+      }
 
-    return `${key} = ${String(config[key as keyof typeof config])}`;
-  }
+      const requestedId = parseChatId(args);
+      if (!requestedId) {
+        return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+      }
 
-  return configHelpText;
+      const chat = await harness.switchChat(requestedId);
+      return `switched to chat: ${chat.id}`;
+    },
+  },
+  fork: {
+    run: async (harness, args, options) => {
+      if (isPinnedChannelContext(options)) {
+        return "/chat fork is not supported in this channel yet.";
+      }
+
+      const result = await harness.forkChat(args.trim());
+      if (result.error) {
+        return result.error;
+      }
+      if (!result.chat) {
+        return "Could not fork chat.";
+      }
+
+      return `forked current chat to: ${result.chat.id}`;
+    },
+  },
+  reset: {
+    run: async (harness, _args, options) => {
+      const chat = await harness.resetChat(getScopedChatId(harness, options));
+      return `reset chat: ${chat.id}`;
+    },
+  },
+  compress: {
+    run: async (harness, _args, options) => {
+      let result;
+      try {
+        result = await harness.compressChat(getScopedChatId(harness, options));
+      } catch (error) {
+        return `failed to compress chat: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
+
+      if (result.removedMessages === 0) {
+        return `nothing to compress in chat: ${result.chat.id}`;
+      }
+
+      return [
+        `compressed chat: ${result.chat.id}`,
+        `removedMessages: ${result.removedMessages}`,
+        `keptMessages: ${result.keptMessages}`,
+      ].join("\n");
+    },
+  },
+  rm: {
+    run: async (harness, args, options) => {
+      const requestedId = parseChatId(args);
+      if (!requestedId) {
+        return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
+      }
+
+      if (requestedId === getScopedChatId(harness, options)) {
+        return "Cannot delete the current chat. Switch to another chat first.";
+      }
+
+      const deleted = await harness.deleteChat(requestedId);
+      return deleted ? `deleted chat: ${requestedId}` : `chat not found: ${requestedId}`;
+    },
+  },
 };
 
 const handleChatCommand: CommandHandler = async (harness, input, options) => {
@@ -1261,145 +1464,80 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     return handleChatCommand(harness, "/chat list", options);
   }
 
-  if (input === "/chat help") {
-    return chatHelpText;
-  }
-
   if (input === "/chat") {
     return getScopedChatId(harness, options);
   }
 
-  if (input === "/chat show") {
-    return renderChatInfo(
-      await harness.loadChat(getScopedChatId(harness, options)),
-      harness.config.model,
-      harness.config.contextMessages,
-    );
-  }
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/chat",
+    chatHelpText,
+    chatSubcommands,
+  );
+};
 
-  if (input === "/chat usage") {
-    return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
-  }
+const taskSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    run: async (harness, _args, options) =>
+      renderTaskList(await harness.listTasks(getScopedChatId(harness, options))),
+  },
+  schedule: {
+    run: async (harness, args, options) => {
+      if (args === "help") {
+        return taskScheduleHelpText;
+      }
 
-  if (input.startsWith("/chat show ")) {
-    const requestedId = parseChatId(input.slice("/chat show ".length));
-    if (!requestedId) {
-      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
-    }
+      let parsed = parseTaskSchedule(args, harness.config.defaultTaskTime);
+      let taskOptions: NotificationOverride = {};
 
-    return renderChatInfo(
-      await harness.loadChat(requestedId),
-      harness.config.model,
-      harness.config.contextMessages,
-    );
-  }
+      if (!parsed) {
+        const segments = args.split("|").map((segment) => segment.trim());
+        if (segments.length >= 4) {
+          const parsedOptions = parseTaskScheduleOptions(segments.at(-1) ?? "");
+          if (typeof parsedOptions === "string") {
+            return parsedOptions;
+          }
 
-  if (input.startsWith("/chat usage ")) {
-    const requestedId = parseChatId(input.slice("/chat usage ".length));
-    if (!requestedId) {
-      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
-    }
+          parsed = parseTaskSchedule(
+            segments.slice(0, -1).join(" | "),
+            harness.config.defaultTaskTime,
+          );
+          taskOptions = parsedOptions;
+        }
+      }
 
-    return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
-  }
+      if (!parsed) {
+        return taskScheduleHelpText;
+      }
 
-  if (input === "/chat list") {
-    return renderChatList(await harness.listChats(), getScopedChatId(harness, options));
-  }
+      const task = await harness.createTask({
+        chatId: getScopedChatId(harness, options),
+        sourceChatId: getScopedChatId(harness, options),
+        createdBy: "user",
+        origin: options.origin,
+        ...taskOptions,
+        title: parsed.title,
+        prompt: parsed.prompt,
+        schedule: parsed.schedule,
+      });
 
-  if (input === "/chat new" || input.startsWith("/chat new ")) {
-    if (isPinnedChannelContext(options)) {
-      return "/chat new is not supported in this channel yet.";
-    }
+      return `scheduled task: ${task.id}`;
+    },
+  },
+  delete: {
+    aliases: ["cancel"],
+    run: async (harness, args, options) => {
+      const taskId = args.trim();
+      if (taskId.length === 0) {
+        return "Usage: /task delete <task id>";
+      }
 
-    const requestedId = input.slice("/chat new".length).trim();
-    const result = await harness.createChat(requestedId.length > 0 ? requestedId : undefined);
-    if (result.error) {
-      return result.error;
-    }
-    if (!result.chat) {
-      return "Could not create chat.";
-    }
-
-    const chat = await harness.switchChat(result.chat.id);
-    return `switched to chat: ${chat.id}`;
-  }
-
-  if (input.startsWith("/chat switch ")) {
-    if (isPinnedChannelContext(options)) {
-      return "/chat switch is not supported in this channel yet.";
-    }
-
-    const requestedId = parseChatId(input.slice("/chat switch ".length));
-    if (!requestedId) {
-      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
-    }
-
-    const chat = await harness.switchChat(requestedId);
-    return `switched to chat: ${chat.id}`;
-  }
-
-  if (input === "/chat fork" || input.startsWith("/chat fork ")) {
-    if (isPinnedChannelContext(options)) {
-      return "/chat fork is not supported in this channel yet.";
-    }
-
-    const result = await harness.forkChat(input.slice("/chat fork".length).trim());
-    if (result.error) {
-      return result.error;
-    }
-    if (!result.chat) {
-      return "Could not fork chat.";
-    }
-
-    return `forked current chat to: ${result.chat.id}`;
-  }
-
-  if (input === "/chat reset") {
-    const chat = await harness.resetChat(getScopedChatId(harness, options));
-    return `reset chat: ${chat.id}`;
-  }
-
-  if (input === "/chat compress") {
-    let result;
-    try {
-      result = await harness.compressChat(getScopedChatId(harness, options));
-    } catch (error) {
-      return `failed to compress chat: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-    }
-
-    if (result.removedMessages === 0) {
-      return `nothing to compress in chat: ${result.chat.id}`;
-    }
-
-    return [
-      `compressed chat: ${result.chat.id}`,
-      `removedMessages: ${result.removedMessages}`,
-      `keptMessages: ${result.keptMessages}`,
-    ].join("\n");
-  }
-
-  if (input.startsWith("/chat rm ")) {
-    const requestedId = parseChatId(input.slice("/chat rm ".length));
-    if (!requestedId) {
-      return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
-    }
-
-    if (requestedId === getScopedChatId(harness, options)) {
-      return "Cannot delete the current chat. Switch to another chat first.";
-    }
-
-    const deleted = await harness.deleteChat(requestedId);
-    return deleted ? `deleted chat: ${requestedId}` : `chat not found: ${requestedId}`;
-  }
-
-  if (input.startsWith("/chat")) {
-    return chatHelpText;
-  }
-
-  return chatHelpText;
+      const deleted = await harness.deleteTask(taskId, getScopedChatId(harness, options));
+      return deleted ? `cancelled task: ${taskId}` : `task not found: ${taskId}`;
+    },
+  },
 };
 
 const handleTaskCommand: CommandHandler = async (harness, input, options) => {
@@ -1407,76 +1545,14 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
     return handleTaskCommand(harness, "/task list", options);
   }
 
-  if (input === "/task" || input === "/task help") {
-    return taskHelpText;
-  }
-
-  if (input === "/task schedule help") {
-    return taskScheduleHelpText;
-  }
-
-  if (input === "/task list") {
-    return renderTaskList(await harness.listTasks(getScopedChatId(harness, options)));
-  }
-
-  if (input.startsWith("/task schedule ")) {
-    const body = input.slice("/task schedule ".length).trim();
-    let parsed = parseTaskSchedule(body, harness.config.defaultTaskTime);
-    let taskOptions: NotificationOverride = {};
-
-    if (!parsed) {
-      const segments = body.split("|").map((segment) => segment.trim());
-      if (segments.length >= 4) {
-        const parsedOptions = parseTaskScheduleOptions(segments.at(-1) ?? "");
-        if (typeof parsedOptions === "string") {
-          return parsedOptions;
-        }
-
-        parsed = parseTaskSchedule(
-          segments.slice(0, -1).join(" | "),
-          harness.config.defaultTaskTime,
-        );
-        taskOptions = parsedOptions;
-      }
-    }
-
-    if (!parsed) {
-      return taskScheduleHelpText;
-    }
-
-    const task = await harness.createTask({
-      chatId: getScopedChatId(harness, options),
-      sourceChatId: getScopedChatId(harness, options),
-      createdBy: "user",
-      origin: options.origin,
-      ...taskOptions,
-      title: parsed.title,
-      prompt: parsed.prompt,
-      schedule: parsed.schedule,
-    });
-
-    return `scheduled task: ${task.id}`;
-  }
-
-  if (input.startsWith("/task delete ") || input.startsWith("/task cancel ")) {
-    const taskId = input.startsWith("/task delete ")
-      ? input.slice("/task delete ".length).trim()
-      : input.slice("/task cancel ".length).trim();
-    if (taskId.length === 0) {
-      return input.startsWith("/task delete ")
-        ? "Usage: /task delete <task id>"
-        : "Usage: /task cancel <task id>";
-    }
-
-    const deleted = await harness.deleteTask(taskId, getScopedChatId(harness, options));
-    return deleted ? `cancelled task: ${taskId}` : `task not found: ${taskId}`;
-  }
-
-  if (input.startsWith("/task")) {
-    return taskHelpText;
-  }
-
-  return taskHelpText;
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/task",
+    taskHelpText,
+    taskSubcommands,
+  );
 };
 
 const agentSubcommands: Record<string, RegisteredSubcommand> = {
@@ -1748,19 +1824,30 @@ const handleAgentCommand: CommandHandler = async (harness, input, options) => {
   );
 };
 
-const handleSkillsCommand: CommandHandler = async (harness, input) => {
+const skillsSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    run: async (harness) => {
+      const skills = await harness.listSkills();
+      return skills.length === 0
+        ? "No skills found."
+        : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+    },
+  },
+};
+
+const handleSkillsCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/skills") {
-    const skills = await harness.listSkills();
-    return skills.length === 0
-      ? "No skills found."
-      : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+    return skillsSubcommands.list.run(harness, "", options);
   }
 
-  if (input.startsWith("/skills")) {
-    return "Usage: /skills";
-  }
-
-  return "Usage: /skills";
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/skills",
+    "Usage: /skills",
+    skillsSubcommands,
+  );
 };
 
 const toolCategoryOrder = [
@@ -1822,19 +1909,36 @@ const renderTools = (
   ].join("\n");
 };
 
-const handleToolsCommand: CommandHandler = async (harness, input) => {
+const toolsSubcommands: Record<string, RegisteredSubcommand> = {
+  list: {
+    run: async (harness) => {
+      const tools = harness.listTools();
+      const toolsets = harness.listToolsets();
+      const permissions = harness.config.tools.join(", ");
+      return renderTools(permissions, toolsets, tools);
+    },
+  },
+};
+
+const handleToolsCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/tools") {
-    const tools = harness.listTools();
-    const toolsets = harness.listToolsets();
-    const permissions = harness.config.tools.join(", ");
-    return renderTools(permissions, toolsets, tools);
+    return toolsSubcommands.list.run(harness, "", options);
   }
 
-  if (input === "/tools help" || input.startsWith("/tools ")) {
-    return toolsHelpText;
-  }
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/tools",
+    toolsHelpText,
+    toolsSubcommands,
+  );
+};
 
-  return toolsHelpText;
+const historySubcommands: Record<string, RegisteredSubcommand> = {
+  show: {
+    run: async (harness, _args, options) => harness.getChatTranscript(options.chatId),
+  },
 };
 
 const handleHistoryCommand: CommandHandler = async (harness, input, options) => {
@@ -1842,11 +1946,14 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
     return harness.getChatTranscript(options.chatId);
   }
 
-  if (input.startsWith("/history")) {
-    return "Usage: /history";
-  }
-
-  return "Usage: /history";
+  return dispatchRegisteredSubcommand(
+    harness,
+    input,
+    options,
+    "/history",
+    "Usage: /history",
+    historySubcommands,
+  );
 };
 
 const parseTeleportFlagValue = (value: string, name: string): string | undefined => {
