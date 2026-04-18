@@ -129,6 +129,7 @@ export const chatHelpText = [
   "  /chat show [X]     Show the current or named chat",
   "  /chat usage [X]    Show token usage for the current or named chat",
   "  /chat list         List saved chats",
+  "  /chat prune        Delete expired chats using retentionDays",
   "  /chat new [X]      Create and switch to a new chat",
   "  /chat switch X     Switch to chat X",
   "  /chat fork [X]     Fork the current chat and switch to it",
@@ -146,6 +147,7 @@ export const modelHelpText = [
 export const taskHelpText = [
   "Command: /task",
   "  /task list",
+  "  /task prune",
   "  /task schedule <date> | <title> | <prompt> [| <json options>]",
   "  /task delete <task id>",
   "  /task cancel <task id>",
@@ -1364,6 +1366,12 @@ const chatSubcommands: Record<string, RegisteredSubcommand> = {
     run: async (harness, _args, options) =>
       renderChatList(await harness.listChats(), getScopedChatId(harness, options)),
   },
+  prune: {
+    run: async (harness) => {
+      const pruned = await harness.pruneExpiredChats();
+      return `pruned expired chats: ${pruned}`;
+    },
+  },
   new: {
     run: async (harness, args, options) => {
       if (isPinnedChannelContext(options)) {
@@ -1464,6 +1472,10 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
     return handleChatCommand(harness, "/chat list", options);
   }
 
+  if (input.startsWith("/chats ")) {
+    return handleChatCommand(harness, `/chat ${input.slice("/chats ".length)}`, options);
+  }
+
   if (input === "/chat") {
     return getScopedChatId(harness, options);
   }
@@ -1482,6 +1494,12 @@ const taskSubcommands: Record<string, RegisteredSubcommand> = {
   list: {
     run: async (harness, _args, options) =>
       renderTaskList(await harness.listTasks(getScopedChatId(harness, options))),
+  },
+  prune: {
+    run: async (harness, _args, options) => {
+      const pruned = await harness.pruneTasks(getScopedChatId(harness, options));
+      return `pruned inactive tasks: ${pruned}`;
+    },
   },
   schedule: {
     run: async (harness, args, options) => {
@@ -1543,6 +1561,10 @@ const taskSubcommands: Record<string, RegisteredSubcommand> = {
 const handleTaskCommand: CommandHandler = async (harness, input, options) => {
   if (input === "/tasks") {
     return handleTaskCommand(harness, "/task list", options);
+  }
+
+  if (input.startsWith("/tasks ")) {
+    return handleTaskCommand(harness, `/task ${input.slice("/tasks ".length)}`, options);
   }
 
   return dispatchRegisteredSubcommand(
@@ -2244,6 +2266,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   projects: handleProjectCommand,
   config: handleConfigCommand,
   chat: handleChatCommand,
+  chats: handleChatCommand,
   task: handleTaskCommand,
   tasks: handleTaskCommand,
   agent: handleAgentCommand,

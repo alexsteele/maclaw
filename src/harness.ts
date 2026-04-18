@@ -858,6 +858,10 @@ export class Harness {
     return this._scheduler.deleteTask(taskId, chatId);
   }
 
+  async pruneTasks(chatId?: string): Promise<number> {
+    return this._scheduler.pruneTasks(chatId);
+  }
+
   async deleteTaskForCurrentChat(taskId: string): Promise<boolean> {
     return this.deleteTask(taskId, this.getCurrentChatId());
   }

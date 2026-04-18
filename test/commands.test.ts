@@ -460,6 +460,63 @@ test("dispatchCommand supports /chats as an alias for /chat list", async () => {
   }
 });
 
+test("dispatchCommand prunes expired chats", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-prune-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      retentionDays: 1,
+    });
+    const harness = Harness.load(projectDir);
+    await harness.promptChat("stale", "old chat");
+    await harness.promptChat("fresh", "fresh chat");
+
+    const stalePath = path.join(projectDir, ".maclaw", "chats", "stale.json");
+    const stale = JSON.parse(await readFile(stalePath, "utf8")) as { updatedAt: string };
+    stale.updatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    await writeFile(stalePath, `${JSON.stringify(stale, null, 2)}\n`, "utf8");
+
+    const reply = await dispatchCommand(harness, "/chat prune");
+
+    assert.equal(reply, "pruned expired chats: 1");
+    assert.equal((await harness.listChats()).some((chat) => chat.id === "stale"), false);
+    assert.equal((await harness.listChats()).some((chat) => chat.id === "fresh"), true);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand supports /chats prune as an alias for /chat prune", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chats-prune-alias-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      retentionDays: 1,
+    });
+    const harness = Harness.load(projectDir);
+    await harness.promptChat("stale", "old chat");
+
+    const stalePath = path.join(projectDir, ".maclaw", "chats", "stale.json");
+    const stale = JSON.parse(await readFile(stalePath, "utf8")) as { updatedAt: string };
+    stale.updatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    await writeFile(stalePath, `${JSON.stringify(stale, null, 2)}\n`, "utf8");
+
+    const directReply = await dispatchCommand(harness, "/chat prune");
+    await harness.promptChat("stale-again", "old chat");
+    const staleAgainPath = path.join(projectDir, ".maclaw", "chats", "stale-again.json");
+    const staleAgain = JSON.parse(await readFile(staleAgainPath, "utf8")) as { updatedAt: string };
+    staleAgain.updatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    await writeFile(staleAgainPath, `${JSON.stringify(staleAgain, null, 2)}\n`, "utf8");
+
+    const aliasReply = await dispatchCommand(harness, "/chats prune");
+
+    assert.equal(directReply, "pruned expired chats: 1");
+    assert.equal(aliasReply, "pruned expired chats: 1");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand supports /projects as an alias for /project list", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-projects-alias-"));
 
@@ -989,6 +1046,80 @@ test("dispatchCommand supports /tasks as an alias for /task list", async () => {
     const aliasReply = await dispatchCommand(harness, "/tasks");
 
     assert.equal(aliasReply, directReply);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand prunes inactive tasks for the current chat", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-task-prune-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const pendingTask = await harness.createTask({
+      chatId: "default",
+      title: "Pending",
+      prompt: "Keep me",
+      runAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const completedTask = await harness.createTask({
+      chatId: "default",
+      title: "Completed",
+      prompt: "Remove me",
+      runAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    const tasks = await harness.listTasks("default");
+    const completed = tasks.find((task) => task.id === completedTask.id);
+    assert.ok(completed);
+    await harness.replaceTasks(tasks.map((task) =>
+      task.id === completedTask.id ? { ...task, status: "completed" as const } : task,
+    ));
+
+    const reply = await dispatchCommand(harness, "/task prune");
+    const remaining = await harness.listTasks("default");
+
+    assert.equal(reply, "pruned inactive tasks: 1");
+    assert.equal(remaining.some((task) => task.id === pendingTask.id), true);
+    assert.equal(remaining.some((task) => task.id === completedTask.id), false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand supports /tasks prune as an alias for /task prune", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-tasks-prune-alias-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const task = await harness.createTask({
+      chatId: "default",
+      title: "Completed",
+      prompt: "Remove me",
+      runAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const tasks = await harness.listTasks("default");
+    await harness.replaceTasks(tasks.map((entry) =>
+      entry.id === task.id ? { ...entry, status: "failed" as const } : entry,
+    ));
+
+    const directReply = await dispatchCommand(harness, "/task prune");
+
+    const task2 = await harness.createTask({
+      chatId: "default",
+      title: "Completed 2",
+      prompt: "Remove me too",
+      runAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const tasks2 = await harness.listTasks("default");
+    await harness.replaceTasks(tasks2.map((entry) =>
+      entry.id === task2.id ? { ...entry, status: "completed" as const } : entry,
+    ));
+
+    const aliasReply = await dispatchCommand(harness, "/tasks prune");
+
+    assert.equal(directReply, "pruned inactive tasks: 1");
+    assert.equal(aliasReply, "pruned inactive tasks: 1");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

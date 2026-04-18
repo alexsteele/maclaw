@@ -246,6 +246,25 @@ export class TaskScheduler {
     return true;
   }
 
+  async pruneTasks(chatId?: string): Promise<number> {
+    const tasks = await this.readTasks();
+    const filtered = tasks.filter((task) => {
+      if (chatId && task.chatId !== chatId) {
+        return true;
+      }
+
+      return task.status === "pending" || task.status === "running";
+    });
+
+    const removed = tasks.length - filtered.length;
+    if (removed === 0) {
+      return 0;
+    }
+
+    await this.writeTasks(filtered);
+    return removed;
+  }
+
   async markTask(
     taskId: string,
     patch: Partial<
