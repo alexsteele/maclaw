@@ -141,6 +141,8 @@ test("initProjectConfig creates a new project config with createdAt", async () =
     assert.deepEqual(projectConfig.tools, ["read"]);
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
+    assert.equal(projectConfig.defaultAgentMaxSteps, 10);
+    assert.equal(projectConfig.defaultAgentTimeout, "1h");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
@@ -177,6 +179,8 @@ test("initProjectConfig backfills missing createdAt without dropping project set
     assert.deepEqual(projectConfig.tools, ["read"]);
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
+    assert.equal(projectConfig.defaultAgentMaxSteps, 10);
+    assert.equal(projectConfig.defaultAgentTimeout, "1h");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {
@@ -202,6 +206,8 @@ test("initProjectConfig merges overrides into the saved project config", async (
     assert.deepEqual(projectConfig.tools, ["read"]);
     assert.equal(projectConfig.notifications, "all");
     assert.equal(projectConfig.defaultTaskTime, "9:00 AM");
+    assert.equal(projectConfig.defaultAgentMaxSteps, 10);
+    assert.equal(projectConfig.defaultAgentTimeout, "1h");
     assert.equal(projectConfig.contextMessages, 20);
     assert.equal(projectConfig.maxToolIterations, 8);
   } finally {

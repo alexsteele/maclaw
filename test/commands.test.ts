@@ -1379,6 +1379,8 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
     const showReply = await dispatchCommand(harness, "/config");
     const showAliasReply = await dispatchCommand(harness, "/config show");
     assert.match(showReply ?? "", /name: config-project/u);
+    assert.match(showReply ?? "", /defaultAgentMaxSteps: 10/u);
+    assert.match(showReply ?? "", /defaultAgentTimeout: 1h/u);
     assert.match(showReply ?? "", /contextMessages: 20/u);
     assert.equal(showAliasReply, showReply);
 
@@ -1390,6 +1392,27 @@ test("dispatchCommand shows, gets, and sets project config", async () => {
 
     const updatedReply = await dispatchCommand(harness, "/config get contextMessages");
     assert.equal(updatedReply, "12");
+
+    const setAgentStepsReply = await dispatchCommand(harness, "/config set defaultAgentMaxSteps 25");
+    assert.equal(setAgentStepsReply, "defaultAgentMaxSteps = 25");
+
+    const updatedAgentStepsReply = await dispatchCommand(
+      harness,
+      "/config get defaultAgentMaxSteps",
+    );
+    assert.equal(updatedAgentStepsReply, "25");
+
+    const setAgentTimeoutReply = await dispatchCommand(
+      harness,
+      "/config set defaultAgentTimeout 90s",
+    );
+    assert.equal(setAgentTimeoutReply, "defaultAgentTimeout = 90s");
+
+    const updatedAgentTimeoutReply = await dispatchCommand(
+      harness,
+      "/config get defaultAgentTimeout",
+    );
+    assert.equal(updatedAgentTimeoutReply, "90s");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -1830,6 +1853,56 @@ test("dispatchCommand creates an agent with JSON options", async () => {
   }
 });
 
+test("dispatchCommand creates an agent using the project's defaultAgentMaxSteps", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-default-steps-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      defaultAgentMaxSteps: 25,
+    });
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      "/agent create planner | work through the task",
+    );
+
+    assert.match(reply ?? "", /^started agent: agent_/u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.ok(agent);
+    assert.equal(agent.maxSteps, 25);
+    await harness.teardown();
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand creates an agent using the project's defaultAgentTimeout", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-default-timeout-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      defaultAgentTimeout: "90s",
+    });
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(
+      harness,
+      "/agent create planner | work through the task",
+    );
+
+    assert.match(reply ?? "", /^started agent: agent_/u);
+
+    const agent = harness.listAgents().find((entry) => entry.name === "planner");
+    assert.ok(agent);
+    assert.equal(agent.timeoutMs, 90_000);
+    await harness.teardown();
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand creates an agent with toolsets", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-toolsets-"));
 
@@ -1869,7 +1942,7 @@ test("dispatchCommand shows agent toolsets", async () => {
     assert.match(reply ?? "", /^sourceChatId: default$/mu);
     assert.match(reply ?? "", /^createdBy: user$/mu);
     assert.match(reply ?? "", /^notify: \(default\)$/mu);
-    assert.match(reply ?? "", /^maxSteps: 100$/mu);
+    assert.match(reply ?? "", /^maxSteps: 10$/mu);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

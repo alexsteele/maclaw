@@ -154,6 +154,8 @@ function buildRemoteProjectConfig(project?: ProjectConfig): Partial<ProjectConfi
   return {
     compressionMode: project?.compressionMode ?? "none",
     contextMessages: project?.contextMessages ?? 20,
+    defaultAgentMaxSteps: project?.defaultAgentMaxSteps ?? 10,
+    defaultAgentTimeout: project?.defaultAgentTimeout ?? "1h",
     defaultTaskTime: project?.defaultTaskTime ?? "09:00",
     maxToolIterations: project?.maxToolIterations ?? 8,
     model: project?.model ?? "openai/gpt-5.4-mini",

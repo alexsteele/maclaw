@@ -10,6 +10,7 @@ import {
   parseConfiguredModel,
   type ProjectConfig,
 } from "./config.js";
+import { parseDuration } from "./duration.js";
 import { parseTimeOfDay } from "./task.js";
 
 export const editableProjectConfigKeys = new Set([
@@ -19,6 +20,8 @@ export const editableProjectConfigKeys = new Set([
   "tools",
   "notifications",
   "defaultTaskTime",
+  "defaultAgentMaxSteps",
+  "defaultAgentTimeout",
   "contextMessages",
   "maxToolIterations",
   "retentionDays",
@@ -39,6 +42,8 @@ export const renderProjectConfig = (config: ProjectConfig): string =>
     `tools: ${JSON.stringify(config.tools)}`,
     `notifications: ${JSON.stringify(config.notifications)}`,
     `defaultTaskTime: ${config.defaultTaskTime}`,
+    `defaultAgentMaxSteps: ${config.defaultAgentMaxSteps}`,
+    `defaultAgentTimeout: ${config.defaultAgentTimeout}`,
     `contextMessages: ${config.contextMessages}`,
     `maxToolIterations: ${config.maxToolIterations}`,
     `retentionDays: ${config.retentionDays}`,
@@ -128,7 +133,17 @@ export const parseProjectConfigValue = (
     return { defaultTaskTime: trimmed };
   }
 
+  if (key === "defaultAgentTimeout") {
+    const trimmed = value.trim();
+    if (!trimmed || parseDuration(trimmed) === null) {
+      return "defaultAgentTimeout must be a duration like '30s', '15m', '1h', or '2d'";
+    }
+
+    return { defaultAgentTimeout: trimmed.toLowerCase() };
+  }
+
   if (
+    key === "defaultAgentMaxSteps" ||
     key === "contextMessages" ||
     key === "maxToolIterations" ||
     key === "retentionDays" ||
@@ -137,6 +152,10 @@ export const parseProjectConfigValue = (
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       return `${key} must be a positive integer`;
+    }
+
+    if (key === "defaultAgentMaxSteps") {
+      return { defaultAgentMaxSteps: parsed };
     }
 
     if (key === "contextMessages") {

@@ -756,6 +756,8 @@ const renderProjectInfo = (harness: Harness, currentChatId: string): string => {
     `tools: ${JSON.stringify(projectConfig.tools)}`,
     `notifications: ${JSON.stringify(projectConfig.notifications)}`,
     `defaultTaskTime: ${projectConfig.defaultTaskTime}`,
+    `defaultAgentMaxSteps: ${projectConfig.defaultAgentMaxSteps}`,
+    `defaultAgentTimeout: ${projectConfig.defaultAgentTimeout}`,
     `contextMessages: ${projectConfig.contextMessages}`,
     `maxToolIterations: ${projectConfig.maxToolIterations}`,
     `retentionDays: ${projectConfig.retentionDays}`,

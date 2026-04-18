@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJsonFile } from "./fs-utils.js";
+import { parseDuration } from "./duration.js";
 import { DEFAULT_MODEL } from "./models.js";
 import { normalizeNotifications } from "./notifications.js";
 import { loadServerSecrets } from "./server-config.js";
@@ -63,6 +64,8 @@ export type ProjectConfig = {
   tools: ToolPermission[];
   notifications: NotificationPolicy;
   defaultTaskTime: string;
+  defaultAgentMaxSteps: number;
+  defaultAgentTimeout: string;
   contextMessages: number;
   maxToolIterations: number;
   retentionDays: number;
@@ -78,6 +81,12 @@ export type ProjectConfig = {
 };
 
 const defaultTools: ToolPermission[] = ["read"];
+const DEFAULT_AGENT_TIMEOUT = "1h";
+
+const normalizeDefaultAgentTimeout = (value: string | undefined): string => {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed && parseDuration(trimmed) !== null ? trimmed : DEFAULT_AGENT_TIMEOUT;
+};
 
 export const normalizeToolPermissions = (value: unknown): ToolPermission[] => {
   const parsed =
@@ -154,6 +163,8 @@ export const initProjectConfig = async (
     tools: normalizeToolPermissions(mergedConfig.tools),
     notifications: normalizeNotifications(mergedConfig.notifications),
     defaultTaskTime: normalizeDefaultTaskTime(mergedConfig.defaultTaskTime),
+    defaultAgentMaxSteps: mergedConfig.defaultAgentMaxSteps ?? 10,
+    defaultAgentTimeout: normalizeDefaultAgentTimeout(mergedConfig.defaultAgentTimeout),
     contextMessages: mergedConfig.contextMessages ?? 20,
     maxToolIterations: mergedConfig.maxToolIterations ?? 8,
     skillsDir: mergedConfig.skillsDir ?? ".maclaw/skills",
@@ -196,6 +207,8 @@ export const loadConfig = (cwd: string = process.cwd()): ProjectConfig => {
     tools: normalizeToolPermissions(projectFileConfig.tools),
     notifications: normalizeNotifications(projectFileConfig.notifications),
     defaultTaskTime: normalizeDefaultTaskTime(projectFileConfig.defaultTaskTime),
+    defaultAgentMaxSteps: projectFileConfig.defaultAgentMaxSteps ?? 10,
+    defaultAgentTimeout: normalizeDefaultAgentTimeout(projectFileConfig.defaultAgentTimeout),
     contextMessages: projectFileConfig.contextMessages ?? 20,
     maxToolIterations: projectFileConfig.maxToolIterations ?? 8,
     retentionDays: projectFileConfig.retentionDays ?? 30,

@@ -34,6 +34,7 @@ import { expandNotificationPolicy } from "./notifications.js";
 import { resolvePromptText } from "./prompt.js";
 import { acquireProjectLock, type ProjectLockHandle } from "./project-lock.js";
 import { createProjectStorage, type ProjectStorage } from "./storage/index.js";
+import { parseDuration } from "./duration.js";
 import { createTools, createToolsets } from "./tools/index.js";
 import type { MaclawToolContext } from "./tools/maclaw.js";
 import type { Tool, ToolPermission, Toolset } from "./tools/types.js";
@@ -1155,8 +1156,8 @@ export class Harness {
       notify: input.notify,
       notifyTarget: input.notifyTarget,
       status: "pending",
-      maxSteps: input.maxSteps ?? 100,
-      timeoutMs: input.timeoutMs ?? 60 * 60 * 1000,
+      maxSteps: input.maxSteps ?? this.config.defaultAgentMaxSteps,
+      timeoutMs: input.timeoutMs ?? parseDuration(this.config.defaultAgentTimeout) ?? 60 * 60 * 1000,
       stepIntervalMs: input.stepIntervalMs ?? 0,
       stepCount: 0,
       createdAt: now,
