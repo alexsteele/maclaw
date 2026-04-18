@@ -11,7 +11,6 @@ import {
   defaultServerConfigFile,
   type EditableServerConfig,
   type RemoteConfig,
-  type TeleportRemoteConfig,
   validateRemoteConfig,
 } from "./server-config.js";
 import { readJsonFile, writeJsonFile } from "./fs-utils.js";
@@ -52,7 +51,7 @@ type TeleportControl = {
     project?: string;
     target: string;
   } | undefined;
-  listRemotes(): TeleportRemoteConfig[];
+  listRemotes(): RemoteConfig[];
 };
 
 type DispatchOptions = {

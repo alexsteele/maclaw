@@ -41,6 +41,7 @@ export const ec2RemoteRecipe: RemoteRecipe = {
   exampleConfig: {
     name: "remote",
     provider: "aws-ec2",
+    client: "http",
     metadata: {
       region: "us-west-2",
       instanceId: "i-1234567890abcdef0",
@@ -80,6 +81,7 @@ export const ec2RemoteRecipe: RemoteRecipe = {
     return {
       name,
       provider: "aws-ec2",
+      client: config?.client ?? "http",
       metadata: {
         region,
         instanceId,

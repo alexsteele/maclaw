@@ -28,6 +28,8 @@ export type HttpConfig = {
   url: string;
 };
 
+export type RemoteClient = "http" | "shell";
+
 export type HostRemoteRuntime = {
   kind: "host";
 };
@@ -46,13 +48,12 @@ export type RemoteRuntimeConfig = HostRemoteRuntime | DockerRemoteRuntime;
 export type RemoteConfig = {
   name: string;
   provider: string;
+  client?: RemoteClient;
   localForwardPort?: number;
   remoteServerPort?: number;
   metadata: Ec2Config | HttpConfig | SshConfig;
   runtime?: RemoteRuntimeConfig;
 };
-
-export type TeleportRemoteConfig = RemoteConfig;
 
 export type WhatsAppConfig = {
   enabled: boolean;
@@ -92,7 +93,7 @@ export type ServerConfig = {
   logging: ServerLoggingConfig;
   port?: number;
   projects: ServerProjectConfig[];
-  remotes?: TeleportRemoteConfig[];
+  remotes?: RemoteConfig[];
   channels?: {
     discord?: DiscordConfig;
     email?: EmailConfig;
@@ -230,6 +231,14 @@ const assertValidRemoteRuntime = (runtime: RemoteRuntimeConfig | undefined): voi
 const assertValidRemoteConfig = (remote: RemoteConfig): void => {
   if (!remote?.name || !remote?.provider || !remote?.metadata) {
     throw new Error("Invalid remote config");
+  }
+
+  if (
+    remote.client !== undefined &&
+    remote.client !== "http" &&
+    remote.client !== "shell"
+  ) {
+    throw new Error("Invalid remote client");
   }
 
   assertValidRemoteRuntime(remote.runtime);

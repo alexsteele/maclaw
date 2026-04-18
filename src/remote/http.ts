@@ -29,6 +29,7 @@ export const httpRemoteRecipe: RemoteRecipe = {
   exampleConfig: {
     name: "local-http",
     provider: "http",
+    client: "http",
     metadata: {
       url: "http://127.0.0.1:4001",
     },
@@ -92,6 +93,7 @@ export const createHttpTargetRemote = (url: string): Remote =>
   createHttpRemote({
     name: url,
     provider: "http",
+    client: "http",
     metadata: {
       url,
     },

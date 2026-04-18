@@ -41,6 +41,7 @@ export const sshRemoteRecipe: RemoteRecipe = {
   exampleConfig: {
     name: "remote",
     provider: "ssh",
+    client: "http",
     metadata: {
       host: "example.com",
       user: "alex",
@@ -83,6 +84,7 @@ export const sshRemoteRecipe: RemoteRecipe = {
     return {
       name,
       provider: "ssh",
+      client: config?.client ?? "http",
       metadata: {
         host,
         ...(user ? { user } : {}),
