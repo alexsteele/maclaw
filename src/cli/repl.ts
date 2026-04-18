@@ -283,7 +283,7 @@ class Repl {
   }
 
   private writeLine(text: string): void {
-    output.write(`${this.formatForDisplay(text)}\n\n`);
+    output.write(`${renderMarkdownForTerminal(text, this.wrapWidth)}\n\n`);
   }
 
   private writeAssistantReply(text: string, result?: ProviderResult): void {

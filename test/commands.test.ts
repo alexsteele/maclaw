@@ -1180,17 +1180,17 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     const helpReply = await dispatchCommand(harness, "/tools help");
     const sharedHelpReply = await dispatchCommand(harness, "/help tools");
 
-    assert.match(reply ?? "", /^permissions: read$/mu);
-    assert.match(reply ?? "", /^Toolsets:$/mu);
+    assert.match(reply ?? "", /^\*\*Permissions:\*\* read$/mu);
+    assert.match(reply ?? "", /^## Toolsets$/mu);
     assert.match(reply ?? "", /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
     assert.match(reply ?? "", /- files: Workspace-scoped file inspection and editing tools\./u);
-    assert.match(reply ?? "", /^Project:$/mu);
-    assert.match(reply ?? "", /^Chats:$/mu);
-    assert.match(reply ?? "", /^Agents:$/mu);
-    assert.match(reply ?? "", /^Tasks:$/mu);
-    assert.match(reply ?? "", /^Files:$/mu);
-    assert.match(reply ?? "", /^Skills:$/mu);
-    assert.match(reply ?? "", /^Utilities:$/mu);
+    assert.match(reply ?? "", /^## Project$/mu);
+    assert.match(reply ?? "", /^## Chats$/mu);
+    assert.match(reply ?? "", /^## Agents$/mu);
+    assert.match(reply ?? "", /^## Tasks$/mu);
+    assert.match(reply ?? "", /^## Files$/mu);
+    assert.match(reply ?? "", /^## Skills$/mu);
+    assert.match(reply ?? "", /^## Utilities$/mu);
     assert.match(reply ?? "", /find_files/u);
     assert.match(reply ?? "", /search_files/u);
     assert.match(reply ?? "", /read_files/u);
@@ -1223,14 +1223,13 @@ test("dispatchCommand shows the files toolset when dangerous tools are enabled",
 
     const reply = await dispatchCommand(harness, "/tools");
 
-    assert.match(reply ?? "", /^permissions: read, dangerous$/mu);
+    assert.match(reply ?? "", /^\*\*Permissions:\*\* read, dangerous$/mu);
     assert.match(reply ?? "", /- files: Workspace-scoped file inspection and editing tools\./u);
     assert.match(reply ?? "", /- shell: Reviewed shell command tools for the current workspace\./u);
-    assert.match(reply ?? "", /^Files:$/mu);
-    assert.match(reply ?? "", /^Shell:$/mu);
+    assert.match(reply ?? "", /^## Files$/mu);
+    assert.match(reply ?? "", /^## Shell$/mu);
     assert.match(reply ?? "", /find_files \[read\]/u);
     assert.match(reply ?? "", /search_files \[read\]/u);
-    assert.match(reply ?? "", /output:/u);
     assert.match(reply ?? "", /read_files \[read\]/u);
     assert.match(reply ?? "", /list_dir \[read\]/u);
     assert.match(reply ?? "", /tree \[read\]/u);
@@ -1300,10 +1299,10 @@ test("dispatchCommand refreshes the live tool list after /config set tools", asy
     const setReply = await dispatchCommand(harness, "/config set tools read act");
     const afterReply = await dispatchCommand(harness, "/tools");
 
-    assert.match(beforeReply ?? "", /^permissions: read$/mu);
+    assert.match(beforeReply ?? "", /^\*\*Permissions:\*\* read$/mu);
     assert.doesNotMatch(beforeReply ?? "", /create_agent/u);
     assert.equal(setReply, 'tools = read,act');
-    assert.match(afterReply ?? "", /^permissions: read, act$/mu);
+    assert.match(afterReply ?? "", /^\*\*Permissions:\*\* read, act$/mu);
     assert.match(afterReply ?? "", /create_agent/u);
     assert.match(afterReply ?? "", /create_task/u);
   } finally {
