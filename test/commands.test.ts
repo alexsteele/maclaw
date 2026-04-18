@@ -1318,7 +1318,7 @@ test("dispatchCommand config help lists editable keys", async () => {
 
     const reply = await dispatchCommand(harness, "/help config");
 
-    assert.match(reply ?? "", /Editable keys:/u);
+    assert.match(reply ?? "", /### Editable keys/u);
     assert.match(reply ?? "", /\bnotifications\b/u);
     assert.match(reply ?? "", /\bcontextMessages\b/u);
     assert.match(reply ?? "", /\bmaxToolIterations\b/u);

@@ -105,6 +105,14 @@ export const wrapReplLine = (line: string, width: number): string => {
   return wrapped.join("\n");
 };
 
+export const looksLikeMarkdown = (text: string): boolean => {
+  return /(^|\n)#{1,6}\s/u.test(text)
+    || /(^|\n)-\s/u.test(text)
+    || /(^|\n)\d+\.\s/u.test(text)
+    || text.includes("```")
+    || /`[^`\n]+`/u.test(text);
+};
+
 export const loadReplHarness = (
   cwd?: string,
   options: HarnessOptions = {},
@@ -283,7 +291,10 @@ class Repl {
   }
 
   private writeLine(text: string): void {
-    output.write(`${renderMarkdownForTerminal(text, this.wrapWidth)}\n\n`);
+    const body = looksLikeMarkdown(text)
+      ? renderMarkdownForTerminal(text, this.wrapWidth)
+      : this.formatForDisplay(text);
+    output.write(`${body}\n\n`);
   }
 
   private writeAssistantReply(text: string, result?: ProviderResult): void {

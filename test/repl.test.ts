@@ -9,6 +9,7 @@ import {
   loadReplChannels,
   loadReplServerConfig,
   loadReplHarness,
+  looksLikeMarkdown,
   wrapReplLine,
 } from "../src/cli/repl.js";
 import { renderMarkdownForTerminal } from "../src/cli/render.js";
@@ -49,6 +50,13 @@ test("renderMarkdownForTerminal preserves markdown structure for lists", () => {
   assert.match(rendered, /alpha/u);
   assert.match(rendered, /beta/u);
   assert.match(rendered, /\n/u);
+});
+
+test("looksLikeMarkdown detects markdown-oriented command output", () => {
+  assert.equal(looksLikeMarkdown("## Files\n- item"), true);
+  assert.equal(looksLikeMarkdown("Use `code` here"), true);
+  assert.equal(looksLikeMarkdown("id: default\nstatus: ready"), false);
+  assert.equal(looksLikeMarkdown("name: home\nfolder: /tmp/home"), false);
 });
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {

@@ -6,6 +6,7 @@
  * terminal. This uses `marked` + `marked-terminal`.
  */
 import { Marked } from "marked";
+import chalk from "chalk";
 import { markedTerminal } from "marked-terminal";
 
 const createMarkdownRenderer = (width: number): Marked =>
@@ -14,7 +15,11 @@ const createMarkdownRenderer = (width: number): Marked =>
       reflowText: width > 0,
       width: width > 0 ? width : 80,
       showSectionPrefix: false,
-    }),
+      heading: chalk.green.bold,
+      firstHeading: chalk.green.bold,
+      codespan: chalk.green,
+      strong: chalk.green.bold,
+    } as Record<string, unknown>),
   );
 
 export const renderMarkdownForTerminal = (
