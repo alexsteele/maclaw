@@ -10,6 +10,7 @@ import {
   loadReplServerConfig,
   loadReplHarness,
   looksLikeMarkdown,
+  parseAgentTailFollow,
   wrapReplLine,
 } from "../src/cli/repl.js";
 import { renderMarkdownForTerminal } from "../src/cli/render.js";
@@ -57,6 +58,18 @@ test("looksLikeMarkdown detects markdown-oriented command output", () => {
   assert.equal(looksLikeMarkdown("Use `code` here"), true);
   assert.equal(looksLikeMarkdown("id: default\nstatus: ready"), false);
   assert.equal(looksLikeMarkdown("name: home\nfolder: /tmp/home"), false);
+});
+
+test("parseAgentTailFollow parses follow mode arguments", () => {
+  assert.deepEqual(parseAgentTailFollow("/agent tail -f poet"), {
+    agentRef: "poet",
+    count: 10,
+  });
+  assert.deepEqual(parseAgentTailFollow("/agent tail -f poet 25"), {
+    agentRef: "poet",
+    count: 25,
+  });
+  assert.equal(parseAgentTailFollow("/agent tail poet"), undefined);
 });
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {

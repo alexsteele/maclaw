@@ -1637,11 +1637,12 @@ test("dispatchCommand stops and removes a paused agent", async () => {
   }
 });
 
-test("dispatchCommand creates an agent for the scoped chat", async () => {
+test("dispatchCommand creates an agent from the scoped chat without reusing its transcript", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-create-"));
 
   try {
     const harness = Harness.load(projectDir);
+    await harness.promptChat("whatsapp-15551234567", "remember this source chat");
 
     const reply = await dispatchCommand(
       harness,
@@ -1652,7 +1653,12 @@ test("dispatchCommand creates an agent for the scoped chat", async () => {
     assert.match(reply ?? "", /started agent: /u);
     const agent = harness.listAgents()[0];
     assert.equal(agent?.name, "stock-updates");
-    assert.equal(agent?.chatId, "whatsapp-15551234567");
+    assert.notEqual(agent?.chatId, "whatsapp-15551234567");
+    assert.equal(agent?.sourceChatId, "whatsapp-15551234567");
+
+    const transcript = await harness.getChatTranscript(agent?.chatId);
+    assert.equal(transcript === "No history yet." || transcript.length > 0, true);
+    assert.doesNotMatch(transcript, /remember this source chat/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -1921,6 +1927,45 @@ test("dispatchCommand can pause an agent and switch into its chat", async () => 
     );
     assert.equal(harness.getCurrentChatId(), created.agent.chatId);
     assert.equal(harness.getAgent(created.agent.id)?.status, "paused");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand tails recent agent chat messages", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-tail-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const created = await harness.createAgent({
+      name: "poet-agent",
+      prompt: "Write a poem",
+    });
+    assert.ok(created.agent);
+
+    await harness.promptChat(created.agent.chatId, "first line");
+    await harness.promptChat(created.agent.chatId, "second line");
+    await harness.promptChat(created.agent.chatId, "third line");
+
+    const reply = await dispatchCommand(harness, "/agent tail poet-agent 4");
+
+    assert.match(reply ?? "", /second line/u);
+    assert.match(reply ?? "", /third line/u);
+    assert.doesNotMatch(reply ?? "", /first line/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand reports unsupported follow mode for agent tail outside the repl", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-tail-follow-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const reply = await dispatchCommand(harness, "/agent tail -f poet-agent");
+
+    assert.equal(reply, "/agent tail -f is only supported in the REPL right now.");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

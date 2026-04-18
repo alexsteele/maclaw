@@ -194,6 +194,8 @@ export const agentHelpText = [
   "- `/agent chat <name>`",
   "- `/agent return <name>`",
   "- `/agent show <name>`",
+  "- `/agent tail <name> [N]`",
+  "- `/agent tail -f <name> [N]`",
   "- `/agent rm <name>`",
   "- `/agent pause <name>`",
   "- `/agent resume <name>`",
@@ -228,6 +230,58 @@ const parseAgentPruneAge = (value: string): number | undefined => {
 
   return amount * 24 * 60 * 60 * 1000;
 };
+
+const parseAgentTailArgs = (
+  value: string,
+): {
+  agentRef?: string;
+  count: number;
+  follow: boolean;
+  error?: string;
+} => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return { count: 10, follow: false, error: "Usage: /agent tail [-f] <name> [N]" };
+  }
+
+  let remainder = trimmed;
+  let follow = false;
+  if (remainder.startsWith("-f ")) {
+    follow = true;
+    remainder = remainder.slice(3).trim();
+  } else if (remainder === "-f") {
+    return { count: 10, follow: true, error: "Usage: /agent tail [-f] <name> [N]" };
+  }
+
+  const parts = remainder.split(/\s+/u).filter((part) => part.length > 0);
+  if (parts.length === 0) {
+    return { count: 10, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+  }
+
+  let count = 10;
+  const maybeCount = parts[parts.length - 1];
+  if (maybeCount && /^\d+$/u.test(maybeCount)) {
+    count = Number.parseInt(maybeCount, 10);
+    parts.pop();
+  }
+
+  if (!Number.isFinite(count) || count <= 0 || parts.length === 0) {
+    return { count: 10, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+  }
+
+  return {
+    agentRef: parts.join(" "),
+    count,
+    follow,
+  };
+};
+
+const formatChatMessages = (
+  messages: Array<{ role: string; content: string }>,
+): string =>
+  messages.length === 0
+    ? "No history yet."
+    : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
 
 const findRegisteredSubcommand = (
   registry: Record<string, RegisteredSubcommand>,
@@ -1608,7 +1662,6 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       const agent = await harness.createAgent({
         name,
         prompt,
-        chatId: getScopedChatId(harness, options),
         sourceChatId: getScopedChatId(harness, options),
         createdBy: "user",
         origin: options.origin,
@@ -1753,6 +1806,27 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       return `paused agent: ${result.agent.name}\nswitched to chat: ${result.chatId}`;
+    },
+  },
+  tail: {
+    help: "Usage: /agent tail [-f] <name> [N]",
+    run: async (harness, args) => {
+      const parsed = parseAgentTailArgs(args);
+      if (parsed.error || !parsed.agentRef) {
+        return "Usage: /agent tail [-f] <name> [N]";
+      }
+
+      if (parsed.follow) {
+        return "/agent tail -f is only supported in the REPL right now.";
+      }
+
+      const agent = harness.findAgent(parsed.agentRef);
+      if (!agent) {
+        return `agent not found: ${parsed.agentRef}`;
+      }
+
+      const chat = await harness.loadChat(agent.chatId);
+      return formatChatMessages(chat.messages.slice(-parsed.count));
     },
   },
   return: {

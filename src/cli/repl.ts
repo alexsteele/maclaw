@@ -113,6 +113,40 @@ export const looksLikeMarkdown = (text: string): boolean => {
     || /`[^`\n]+`/u.test(text);
 };
 
+export const parseAgentTailFollow = (
+  line: string,
+): { agentRef: string; count: number } | undefined => {
+  if (!line.startsWith("/agent tail -f")) {
+    return undefined;
+  }
+
+  const remainder = line.slice("/agent tail -f".length).trim();
+  if (remainder.length === 0) {
+    return undefined;
+  }
+
+  const parts = remainder.split(/\s+/u).filter((part) => part.length > 0);
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  let count = 10;
+  const maybeCount = parts[parts.length - 1];
+  if (maybeCount && /^\d+$/u.test(maybeCount)) {
+    count = Number.parseInt(maybeCount, 10);
+    parts.pop();
+  }
+
+  if (!Number.isFinite(count) || count <= 0 || parts.length === 0) {
+    return undefined;
+  }
+
+  return {
+    agentRef: parts.join(" "),
+    count,
+  };
+};
+
 export const loadReplHarness = (
   cwd?: string,
   options: HarnessOptions = {},
@@ -309,6 +343,12 @@ class Repl {
     return formatReplPrompt(this.teleport.getTarget());
   }
 
+  private formatMessages(messages: Message[]): string {
+    return messages.length === 0
+      ? "No history yet."
+      : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+  }
+
   private formatForDisplay(text: string): string {
     if (this.wrapWidth <= 0) {
       return text;
@@ -341,6 +381,37 @@ class Repl {
     ].filter((value): value is string => value !== null);
 
     return parts.length > 0 ? `[usage] ${parts.join(" ")}` : null;
+  }
+
+  private async followAgentTail(agentRef: string, count: number): Promise<void> {
+    const agent = this.harness.findAgent(agentRef);
+    if (!agent) {
+      this.writeLine(`agent not found: ${agentRef}`);
+      return;
+    }
+
+    const initialChat = await this.harness.loadChat(agent.chatId);
+    this.writeLine(this.formatMessages(initialChat.messages.slice(-count)));
+
+    let seenMessages = initialChat.messages.length;
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const currentAgent = this.harness.findAgent(agent.id);
+      const chat = await this.harness.loadChat(agent.chatId);
+      const nextMessages = chat.messages.slice(seenMessages);
+      if (nextMessages.length > 0) {
+        this.writeLine(this.formatMessages(nextMessages));
+        seenMessages = chat.messages.length;
+      }
+
+      if (!currentAgent || (currentAgent.status !== "running" && currentAgent.status !== "pending")) {
+        if (currentAgent) {
+          this.writeLine(`agent ${currentAgent.name}: ${currentAgent.status}`);
+        }
+        return;
+      }
+    }
   }
 
   private async switchProject(requestedFolder: string): Promise<string> {
@@ -446,6 +517,12 @@ class Repl {
       this.writeLine(
         await this.switchProject(line.slice("/project switch ".length)),
       );
+      return false;
+    }
+
+    const followTail = parseAgentTailFollow(line);
+    if (followTail) {
+      await this.followAgentTail(followTail.agentRef, followTail.count);
       return false;
     }
 
