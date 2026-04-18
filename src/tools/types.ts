@@ -13,6 +13,7 @@ export type Tool = {
   permission: ToolPermission;
   requiresReview?: boolean;
   inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   execute: (input: unknown) => Promise<string>;
 };
 

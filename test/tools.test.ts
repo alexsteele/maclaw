@@ -43,13 +43,16 @@ test("starter tools parse their own input", async () => {
     const listSkills = tools.find((tool) => tool.name === "list_skills");
     const readSkill = tools.find((tool) => tool.name === "read_skill");
     const getTime = tools.find((tool) => tool.name === "get_time");
+    const findFiles = tools.find((tool) => tool.name === "find_files");
 
     assert.ok(listSkills);
     assert.ok(readSkill);
     assert.ok(getTime);
+    assert.ok(findFiles);
     assert.equal(listSkills.permission, "read");
     assert.equal(readSkill.permission, "read");
     assert.equal(getTime.permission, "read");
+    assert.equal(findFiles.permission, "read");
 
     const skills = await listSkills.execute({});
     assert.match(skills, /daily_summary/u);
@@ -371,15 +374,16 @@ test("rooted file tools read, write, and list within the project workspace", asy
     assert.ok(listTools);
     assert.equal(readFileTool.permission, "dangerous");
     assert.equal(writeFileTool.permission, "dangerous");
-    assert.equal(listDirTool.permission, "dangerous");
+    assert.equal(listDirTool.permission, "read");
     assert.equal(readFileTool.requiresReview, undefined);
     assert.equal(writeFileTool.requiresReview, undefined);
     assert.equal(listDirTool.requiresReview, undefined);
-    assert.match(await listTools.execute({}), /- files: Workspace-scoped file and directory tools\./u);
+    assert.match(await listTools.execute({}), /- files: Workspace-scoped file inspection and editing tools\./u);
     assert.match(await listTools.execute({}), /read_file \[dangerous\]/u);
 
     assert.equal(await readFileTool.execute({ path: "notes/todo.txt" }), "alpha\n");
-    assert.equal(await listDirTool.execute({ path: "notes" }), "file todo.txt");
+    assert.match(await listDirTool.execute({ path: "notes" }), /file todo\.txt/u);
+    assert.doesNotMatch(await listDirTool.execute({}), /\.maclaw/u);
     assert.equal(
       await writeFileTool.execute({ path: "notes/out.txt", content: "beta\n" }),
       "wrote file: notes/out.txt",
@@ -428,6 +432,88 @@ test("rooted file tools reject paths outside the project workspace", async () =>
     await assert.rejects(
       listDirTool.execute({ path: "../" }),
       /Path escapes the workspace root/u,
+    );
+    await assert.rejects(
+      readFileTool.execute({ path: ".maclaw/maclaw.json" }),
+      /Path is reserved for maclaw metadata/u,
+    );
+    await assert.rejects(
+      writeFileTool.execute({ path: ".maclaw/notes.txt", content: "nope" }),
+      /Path is reserved for maclaw metadata/u,
+    );
+    await assert.rejects(
+      listDirTool.execute({ path: ".maclaw" }),
+      /Path is reserved for maclaw metadata/u,
+    );
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("repo tools inspect the project workspace and exclude .maclaw", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-tools-repo-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.initProject({
+      model: "dummy/test-model",
+      tools: ["read"],
+    });
+
+    await mkdir(path.join(projectDir, "src"), { recursive: true });
+    await mkdir(path.join(projectDir, "notes"), { recursive: true });
+    await writeFile(path.join(projectDir, "src", "main.ts"), "export const message = 'hello world';\n", "utf8");
+    await writeFile(path.join(projectDir, "notes", "todo.md"), "# TODO\n\nremember hello world\n", "utf8");
+    await writeFile(path.join(projectDir, ".maclaw", "secret.txt"), "do not show me\n", "utf8");
+
+    const tools = harness.listTools();
+    const listTools = tools.find((tool) => tool.name === "list_tools");
+    const findFiles = tools.find((tool) => tool.name === "find_files");
+    const searchFiles = tools.find((tool) => tool.name === "search_files");
+    const readFiles = tools.find((tool) => tool.name === "read_files");
+    const listDir = tools.find((tool) => tool.name === "list_dir");
+    const tree = tools.find((tool) => tool.name === "tree");
+
+    assert.ok(listTools);
+    assert.ok(findFiles);
+    assert.ok(searchFiles);
+    assert.ok(readFiles);
+    assert.ok(listDir);
+    assert.ok(tree);
+    assert.equal(findFiles.permission, "read");
+    assert.equal(searchFiles.permission, "read");
+    assert.equal(readFiles.permission, "read");
+    assert.equal(listDir.permission, "read");
+    assert.equal(tree.permission, "read");
+
+    const toolsReply = await listTools.execute({});
+    assert.match(toolsReply, /- files: Workspace-scoped file inspection and editing tools\./u);
+    assert.match(toolsReply, /find_files \[read\]/u);
+    assert.match(toolsReply, /search_files \[read\]/u);
+    assert.match(toolsReply, /read_files \[read\]/u);
+    assert.match(toolsReply, /list_dir \[read\]/u);
+    assert.match(toolsReply, /tree \[read\]/u);
+    assert.match(toolsReply, /output:/u);
+
+    assert.match(await findFiles.execute({ query: "main" }), /src\/main\.ts/u);
+    assert.doesNotMatch(await findFiles.execute({ query: "secret" }), /\.maclaw/u);
+    assert.match(await searchFiles.execute({ query: "hello world" }), /src\/main\.ts:1:/u);
+    assert.doesNotMatch(await searchFiles.execute({ query: "do not show me" }), /\.maclaw/u);
+    assert.match(await readFiles.execute({ paths: ["src/main.ts", "notes/todo.md"] }), /==> src\/main\.ts <==/u);
+    assert.match(await listDir.execute({}), /notes\//u);
+    assert.match(await listDir.execute({}), /src\//u);
+    const treeReply = await tree.execute({ maxDepth: 2 });
+    assert.match(treeReply, /notes/u);
+    assert.match(treeReply, /src/u);
+    assert.doesNotMatch(treeReply, /\.maclaw/u);
+
+    await assert.rejects(
+      readFiles.execute({ paths: [".maclaw/secret.txt"] }),
+      /Path is reserved for maclaw metadata/u,
+    );
+    await assert.rejects(
+      tree.execute({ path: ".maclaw" }),
+      /Path is reserved for maclaw metadata/u,
     );
   } finally {
     await rm(projectDir, { recursive: true, force: true });

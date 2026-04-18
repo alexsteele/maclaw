@@ -1183,12 +1183,19 @@ test("dispatchCommand lists current tools and shows tools help", async () => {
     assert.match(reply ?? "", /^permissions: read$/mu);
     assert.match(reply ?? "", /^Toolsets:$/mu);
     assert.match(reply ?? "", /- maclaw: Built-in tools for chats, agents, tasks, and notifications\./u);
+    assert.match(reply ?? "", /- files: Workspace-scoped file inspection and editing tools\./u);
     assert.match(reply ?? "", /^Project:$/mu);
     assert.match(reply ?? "", /^Chats:$/mu);
     assert.match(reply ?? "", /^Agents:$/mu);
     assert.match(reply ?? "", /^Tasks:$/mu);
+    assert.match(reply ?? "", /^Files:$/mu);
     assert.match(reply ?? "", /^Skills:$/mu);
     assert.match(reply ?? "", /^Utilities:$/mu);
+    assert.match(reply ?? "", /find_files/u);
+    assert.match(reply ?? "", /search_files/u);
+    assert.match(reply ?? "", /read_files/u);
+    assert.match(reply ?? "", /list_dir/u);
+    assert.match(reply ?? "", /tree/u);
     assert.match(reply ?? "", /list_chats/u);
     assert.match(reply ?? "", /show_chat/u);
     assert.match(reply ?? "", /list_agents/u);
@@ -1217,13 +1224,18 @@ test("dispatchCommand shows the files toolset when dangerous tools are enabled",
     const reply = await dispatchCommand(harness, "/tools");
 
     assert.match(reply ?? "", /^permissions: read, dangerous$/mu);
-    assert.match(reply ?? "", /- files: Workspace-scoped file and directory tools\./u);
+    assert.match(reply ?? "", /- files: Workspace-scoped file inspection and editing tools\./u);
     assert.match(reply ?? "", /- shell: Reviewed shell command tools for the current workspace\./u);
     assert.match(reply ?? "", /^Files:$/mu);
     assert.match(reply ?? "", /^Shell:$/mu);
+    assert.match(reply ?? "", /find_files \[read\]/u);
+    assert.match(reply ?? "", /search_files \[read\]/u);
+    assert.match(reply ?? "", /output:/u);
+    assert.match(reply ?? "", /read_files \[read\]/u);
+    assert.match(reply ?? "", /list_dir \[read\]/u);
+    assert.match(reply ?? "", /tree \[read\]/u);
     assert.match(reply ?? "", /read_file \[dangerous\]/u);
     assert.match(reply ?? "", /write_file \[dangerous\]/u);
-    assert.match(reply ?? "", /list_dir \[dangerous\]/u);
     assert.match(reply ?? "", /run_shell \[dangerous\]/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });

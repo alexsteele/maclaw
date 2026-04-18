@@ -37,7 +37,7 @@ export const createToolsets = (
     },
     {
       name: "files",
-      description: "Workspace-scoped file and directory tools.",
+      description: "Workspace-scoped file inspection and editing tools.",
       tools: createFileTools(config).map((tool) => tool.name),
     },
     {

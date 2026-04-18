@@ -1908,6 +1908,9 @@ const renderTools = (
     grouped.get(category)?.push(tool);
   }
 
+  const formatToolSchema = (label: string, schema: Record<string, unknown> | undefined): string =>
+    schema ? `${label}: ${JSON.stringify(schema)}` : `${label}: (unspecified)`;
+
   return [
     `permissions: ${permissions}`,
     ...(toolsets.length > 0
@@ -1925,7 +1928,11 @@ const renderTools = (
       return [
         "",
         `${category}:`,
-        ...entries.map((tool) => `- ${tool.name} [${tool.permission}]: ${tool.description}`),
+        ...entries.flatMap((tool) => [
+          `- ${tool.name} [${tool.permission}]: ${tool.description}`,
+          `  ${formatToolSchema("input", tool.inputSchema)}`,
+          `  ${formatToolSchema("output", tool.outputSchema)}`,
+        ]),
       ];
     }),
   ].join("\n");

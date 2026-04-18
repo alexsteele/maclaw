@@ -290,8 +290,15 @@ const formatTask = (task: ScheduledTask): string =>
     `lastError: ${task.lastError ?? "(none)"}`,
   ].join("\n");
 
+const formatToolSchema = (label: string, schema: Record<string, unknown> | undefined): string =>
+  schema ? `${label}: ${JSON.stringify(schema)}` : `${label}: (unspecified)`;
+
 const formatTool = (tool: Tool): string =>
-  `- ${tool.name} [${tool.permission}]: ${tool.description}`;
+  [
+    `- ${tool.name} [${tool.permission}]: ${tool.description}`,
+    `  ${formatToolSchema("input", tool.inputSchema)}`,
+    `  ${formatToolSchema("output", tool.outputSchema)}`,
+  ].join("\n");
 
 const formatToolset = (toolset: Toolset): string =>
   `- ${toolset.name}: ${toolset.description}`;
