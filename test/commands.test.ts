@@ -164,6 +164,7 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
       '/remote create {"name":"local-api","provider":"http","metadata":{"url":"http://127.0.0.1:4100"}}',
     );
     const listReply = await dispatchCommand(harness, "/remote list");
+    const aliasListReply = await dispatchCommand(harness, "/remotes");
     const showReply = await dispatchCommand(harness, "/remote show aws-dev");
     const bootstrapReply = await dispatchCommand(harness, "/remote bootstrap local-api");
     const startReply = await dispatchCommand(harness, "/remote start local-api");
@@ -182,6 +183,7 @@ test("dispatchCommand can create, show, list, and delete remotes", async () => {
       listReply,
       "- gpu-box: gpu.example.com:2222\n- aws-dev: aws-ec2 i-0d4a7b8d1b15e49c4 (us-west-2) [docker]\n- local-api: http://127.0.0.1:4100",
     );
+    assert.equal(aliasListReply, listReply);
     assert.match(showReply, /"name": "aws-dev"/u);
     assert.match(showReply, /"provider": "aws-ec2"/u);
     assert.match(showReply, /"instanceId": "i-0d4a7b8d1b15e49c4"/u);
@@ -265,6 +267,49 @@ test("dispatchCommand can connect and disconnect teleport through a controller",
       "connect:remote-box:work:branch-a",
       "disconnect",
     ]);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand lets teleport use the remote default project when none is provided", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-teleport-default-project-"));
+  const calls: string[] = [];
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    const controller = {
+      async connect(target: string, options: { project?: string; chatId: string }) {
+        calls.push(`connect:${target}:${options.project}:${options.chatId}`);
+        return {
+          target,
+          project: options.project,
+          chatId: options.chatId,
+        };
+      },
+      async disconnect() {
+        return true;
+      },
+      getTarget() {
+        return undefined;
+      },
+      listRemotes() {
+        return [];
+      },
+    };
+
+    const reply = await dispatchCommand(
+      harness,
+      "/teleport aws-dev",
+      { teleport: controller },
+    );
+
+    assert.equal(
+      reply,
+      "attached to remote: aws-dev\nteleport: connected\ntarget: aws-dev\nproject: (default)\nchat: default",
+    );
+    assert.deepEqual(calls, ["connect:aws-dev:undefined:default"]);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -1405,8 +1450,45 @@ test("dispatchCommand renders agent list output", async () => {
     assert.match(reply ?? "", /\bname\b/u);
     assert.match(reply ?? "", /\btoolsets\b/u);
     assert.match(reply ?? "", /\bstatus\b/u);
+    assert.match(reply ?? "", /\bstarted\b/u);
+    assert.match(reply ?? "", /\bfinished\b/u);
     assert.match(reply ?? "", /daily-summary/u);
     assert.match(reply ?? "", /maclaw,skills/u);
+    assert.doesNotMatch(reply ?? "", /\bchat\b/u);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand renders completed agents as done in the list output", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-agent-list-done-"));
+
+  try {
+    await initProjectConfig(projectDir, {
+      storage: "json",
+    });
+    const harness = Harness.load(projectDir);
+    const agentStore = new JsonFileAgentStore(defaultAgentsFile(projectDir));
+    const createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const finishedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    agentStore.saveAgent({
+      id: "agent_done",
+      name: "done-agent",
+      prompt: "Finished work",
+      chatId: "agent_done",
+      sourceChatId: "default",
+      status: "completed",
+      timeoutMs: 60 * 60 * 1000,
+      stepCount: 1,
+      createdAt,
+      finishedAt,
+    });
+
+    const reply = await dispatchCommand(harness, "/agent list");
+
+    assert.match(reply ?? "", /\bdone\b/u);
+    assert.doesNotMatch(reply ?? "", /\bcompleted\b/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -1783,6 +1865,11 @@ test("dispatchCommand shows agent toolsets", async () => {
     const reply = await dispatchCommand(harness, "/agent show planner");
 
     assert.match(reply ?? "", /^toolsets: maclaw, skills$/mu);
+    assert.match(reply ?? "", /^chatId: /mu);
+    assert.match(reply ?? "", /^sourceChatId: default$/mu);
+    assert.match(reply ?? "", /^createdBy: user$/mu);
+    assert.match(reply ?? "", /^notify: \(default\)$/mu);
+    assert.match(reply ?? "", /^maxSteps: 100$/mu);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

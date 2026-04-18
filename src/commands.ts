@@ -620,6 +620,9 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     return "No agents.";
   }
 
+  const renderAgentStatus = (status: AgentRecord["status"]): string =>
+    status === "completed" ? "done" : status;
+
   const statusPriority: Record<AgentRecord["status"], number> = {
     running: 0,
     paused: 1,
@@ -643,12 +646,13 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     id: agent.id,
     name: agent.name,
     toolsets: agent.toolsets?.join(",") ?? "(default)",
-    status: agent.status,
+    status: renderAgentStatus(agent.status),
     steps:
       agent.maxSteps === undefined
         ? `${agent.stepCount}`
         : `${agent.stepCount}/${agent.maxSteps}`,
-    chat: agent.chatId,
+    started: agent.startedAt ? formatTaskTimestamp(agent.startedAt) : "(not started)",
+    finished: agent.finishedAt ? formatTaskTimestamp(agent.finishedAt) : "(running)",
     }));
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
@@ -656,7 +660,8 @@ const renderAgentList = (agents: AgentRecord[]): string => {
   const toolsetsWidth = Math.max("toolsets".length, ...rows.map((row) => row.toolsets.length));
   const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
   const stepsWidth = Math.max("steps".length, ...rows.map((row) => row.steps.length));
-  const chatWidth = Math.max("chat".length, ...rows.map((row) => row.chat.length));
+  const startedWidth = Math.max("started".length, ...rows.map((row) => row.started.length));
+  const finishedWidth = Math.max("finished".length, ...rows.map((row) => row.finished.length));
 
   const header = [
     padCell("id", idWidth),
@@ -664,7 +669,8 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     padCell("toolsets", toolsetsWidth),
     padCell("status", statusWidth),
     padCell("steps", stepsWidth),
-    padCell("chat", chatWidth),
+    padCell("started", startedWidth),
+    padCell("finished", finishedWidth),
   ].join("  ");
 
   const separator = [
@@ -673,7 +679,8 @@ const renderAgentList = (agents: AgentRecord[]): string => {
     "-".repeat(toolsetsWidth),
     "-".repeat(statusWidth),
     "-".repeat(stepsWidth),
-    "-".repeat(chatWidth),
+    "-".repeat(startedWidth),
+    "-".repeat(finishedWidth),
   ].join("  ");
 
   const lines = rows.map((row) =>
@@ -683,7 +690,8 @@ const renderAgentList = (agents: AgentRecord[]): string => {
       padCell(row.toolsets, toolsetsWidth),
       padCell(row.status, statusWidth),
       padCell(row.steps, stepsWidth),
-      padCell(row.chat, chatWidth),
+      padCell(row.started, startedWidth),
+      padCell(row.finished, finishedWidth),
     ].join("  "),
   );
 
@@ -694,19 +702,28 @@ const renderAgentInfo = (agent: AgentRecord): string =>
   [
     `id: ${agent.id}`,
     `name: ${agent.name}`,
+    `prompt: ${agent.prompt}`,
     `toolsets: ${agent.toolsets?.join(", ") ?? "(default)"}`,
     `status: ${agent.status}`,
     `chatId: ${agent.chatId}`,
+    `sourceChatId: ${agent.sourceChatId ?? "(none)"}`,
+    `createdBy: ${agent.createdBy ?? "(unknown)"}`,
+    `createdByAgentId: ${agent.createdByAgentId ?? "(none)"}`,
+    `origin: ${agent.origin ? JSON.stringify(agent.origin) : "(none)"}`,
+    `notify: ${agent.notify ? JSON.stringify(agent.notify) : "(default)"}`,
+    `notifyTarget: ${agent.notifyTarget ? JSON.stringify(agent.notifyTarget) : "(default)"}`,
     `steps: ${
       agent.maxSteps === undefined
         ? `${agent.stepCount}`
         : `${agent.stepCount}/${agent.maxSteps}`
     }`,
+    `maxSteps: ${agent.maxSteps ?? "(none)"}`,
     `timeoutMs: ${agent.timeoutMs}`,
     `stepIntervalMs: ${agent.stepIntervalMs ?? 0}`,
     `createdAt: ${agent.createdAt}`,
     `startedAt: ${agent.startedAt ?? "(not started)"}`,
     `finishedAt: ${agent.finishedAt ?? "(not finished)"}`,
+    `lastMessage: ${agent.lastMessage ?? "(none)"}`,
     `lastError: ${agent.lastError ?? "(none)"}`,
   ].join("\n");
 
@@ -2263,7 +2280,7 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
         let attachedTarget;
         try {
           attachedTarget = await options.teleport.connect(target, {
-            project: requestedProject ?? harness.config.name,
+            project: requestedProject,
             chatId: requestedChatId ?? getScopedChatId(harness, options),
           });
         } catch (error) {
@@ -2289,7 +2306,15 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
   );
 };
 
-const handleRemoteCommand: CommandHandler = async (harness, input) => {
+const handleRemoteCommand: CommandHandler = async (harness, input, options) => {
+  if (input === "/remotes") {
+    return handleRemoteCommand(harness, "/remote list", options);
+  }
+
+  if (input.startsWith("/remotes ")) {
+    return handleRemoteCommand(harness, `/remote ${input.slice("/remotes ".length)}`, options);
+  }
+
   const serverConfig = await loadEditableServerConfig();
   const remotes = [...(serverConfig.remotes ?? [])];
   const findRemoteConfig = (name: string): RemoteConfig | string => {
@@ -2508,6 +2533,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   skills: handleSkillsCommand,
   history: handleHistoryCommand,
   remote: handleRemoteCommand,
+  remotes: handleRemoteCommand,
   teleport: handleTeleportCommand,
 };
 
