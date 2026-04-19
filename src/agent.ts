@@ -98,7 +98,7 @@ export class Agent {
   private readonly agentStore: AgentStore;
   private readonly runStep: RunStep;
   private readonly record: AgentRecord;
-  private readonly steerQueue: string[] = [];
+  private readonly steerPrompts: string[] = [];
   private readonly onStopped?: () => void;
 
   constructor(
@@ -161,7 +161,7 @@ export class Agent {
       return this.info;
     }
 
-    this.steerQueue.push(trimmed);
+    this.steerPrompts.push(trimmed);
     return this.info;
   }
 
@@ -192,7 +192,7 @@ export class Agent {
   }
 
   private consumeSteerPrompt(): string | undefined {
-    return this.steerQueue.shift();
+    return this.steerPrompts.shift();
   }
 
   private getRecord(): AgentRecord {
