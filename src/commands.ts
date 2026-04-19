@@ -40,17 +40,22 @@ type TeleportCommandOptions = {
 };
 
 type TeleportControl = {
-  connect(target: string, options: TeleportCommandOptions): Promise<{
+  connect(
+    target: string,
+    options: TeleportCommandOptions,
+  ): Promise<{
     chatId: string;
     project?: string;
     target: string;
   }>;
   disconnect(): Promise<boolean>;
-  getTarget(): {
-    chatId: string;
-    project?: string;
-    target: string;
-  } | undefined;
+  getTarget():
+    | {
+        chatId: string;
+        project?: string;
+        target: string;
+      }
+    | undefined;
   listRemotes(): RemoteConfig[];
 };
 
@@ -241,72 +246,77 @@ const parseAgentTailArgs = (
 ): {
   agentRef?: string;
   count: number;
-  explicitCount: boolean;
   follow: boolean;
   error?: string;
 } => {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    return { count: 10, explicitCount: false, follow: false, error: "Usage: /agent tail [-f] <name> [N]" };
+  const tokens = value.trim().split(/\s+/u).filter((part) => part.length > 0);
+  if (tokens.length === 0) {
+    return {
+      count: 10,
+      follow: false,
+      error: "Usage: /agent tail [-f] <name> [N]",
+    };
   }
 
-  let remainder = trimmed;
   let follow = false;
-  if (remainder.startsWith("-f ")) {
+  if (tokens[0] === "-f") {
     follow = true;
-    remainder = remainder.slice(3).trim();
-  } else if (remainder === "-f") {
-    return { count: 10, explicitCount: false, follow: true, error: "Usage: /agent tail [-f] <name> [N]" };
+    tokens.shift();
   }
 
-  const parts = remainder.split(/\s+/u).filter((part) => part.length > 0);
-  if (parts.length === 0) {
-    return { count: 10, explicitCount: false, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+  if (tokens.length === 0) {
+    return {
+      count: 10,
+      follow,
+      error: "Usage: /agent tail [-f] <name> [N]",
+    };
   }
 
   let count = 10;
-  let explicitCount = false;
-  const maybeCount = parts[parts.length - 1];
+  const maybeCount = tokens[tokens.length - 1];
   if (maybeCount && /^\d+$/u.test(maybeCount)) {
     count = Number.parseInt(maybeCount, 10);
-    explicitCount = true;
-    parts.pop();
+    tokens.pop();
   }
 
-  if (!Number.isFinite(count) || count <= 0 || parts.length === 0) {
-    return { count: 10, explicitCount: false, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+  if (!Number.isFinite(count) || count <= 0 || tokens.length === 0) {
+    return {
+      count: 10,
+      follow,
+      error: "Usage: /agent tail [-f] <name> [N]",
+    };
   }
 
   return {
-    agentRef: parts.join(" "),
+    agentRef: tokens.join(" "),
     count,
-    explicitCount,
     follow,
   };
 };
 
-const formatChatMessages = (
-  messages: Array<{ role: string; content: string }>,
-): string =>
-  messages.length === 0
-    ? "No history yet."
-    : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+const stripAgentDoneMarker = (content: string): string =>
+  content
+    .split("\n")
+    .filter((line) => line.trim() !== "<AGENT_DONE>")
+    .join("\n")
+    .trimEnd();
 
-const getAgentTailMessages = (
+const tailAgentMessages = (
   messages: Array<{ role: string; content: string }>,
   count: number,
-  explicitCount: boolean,
-): Array<{ role: string; content: string }> => {
-  if (explicitCount) {
-    return messages.slice(-count);
-  }
+): string =>
+  messages
+    .filter((m) => m.role === "assistant")
+    .slice(-count)
+    .map((m) => stripAgentDoneMarker(m.content))
+    .filter((content) => content.length > 0)
+    .join("\n\n");
 
-  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  return latestAssistant ? [latestAssistant] : [];
-};
-
-const formatSubcommandHelp = (usage: string, description: string, details?: string[]): string =>
-  [usage, description, ...(details ?? [])].join("\n");
+const formatSubcommandHelp = (
+  usage: string,
+  description: string,
+  details?: string[],
+): string => [usage, description, ...(details ?? [])].join("\n");
 
 const findRegisteredSubcommand = (
   registry: Record<string, RegisteredSubcommand>,
@@ -331,7 +341,10 @@ const dispatchRegisteredSubcommand = async (
 ): Promise<string> => {
   if (input === familyCommand || input === `${familyCommand} help`) {
     if (dispatchOptions.defaultSubcommand && input === familyCommand) {
-      const defaultEntry = findRegisteredSubcommand(registry, dispatchOptions.defaultSubcommand);
+      const defaultEntry = findRegisteredSubcommand(
+        registry,
+        dispatchOptions.defaultSubcommand,
+      );
       if (defaultEntry) {
         return defaultEntry.run(harness, "", options);
       }
@@ -356,7 +369,8 @@ const dispatchRegisteredSubcommand = async (
   }
 
   const firstSpace = remainder.indexOf(" ");
-  const subcommandName = firstSpace < 0 ? remainder : remainder.slice(0, firstSpace);
+  const subcommandName =
+    firstSpace < 0 ? remainder : remainder.slice(0, firstSpace);
   const args = firstSpace < 0 ? "" : remainder.slice(firstSpace + 1).trim();
   const entry = findRegisteredSubcommand(registry, subcommandName);
   if (entry) {
@@ -364,7 +378,10 @@ const dispatchRegisteredSubcommand = async (
   }
 
   if (dispatchOptions.defaultSubcommand && dispatchOptions.implicitDefault) {
-    const defaultEntry = findRegisteredSubcommand(registry, dispatchOptions.defaultSubcommand);
+    const defaultEntry = findRegisteredSubcommand(
+      registry,
+      dispatchOptions.defaultSubcommand,
+    );
     if (defaultEntry) {
       return defaultEntry.run(harness, remainder, options);
     }
@@ -485,9 +502,14 @@ const serverConfigFallback = (): ServerConfigData => ({
 });
 
 const loadEditableServerConfig = async (): Promise<ServerConfigData> =>
-  await readJsonFile<ServerConfigData>(defaultServerConfigFile(), serverConfigFallback());
+  await readJsonFile<ServerConfigData>(
+    defaultServerConfigFile(),
+    serverConfigFallback(),
+  );
 
-const saveEditableServerConfig = async (serverConfig: ServerConfigData): Promise<void> => {
+const saveEditableServerConfig = async (
+  serverConfig: ServerConfigData,
+): Promise<void> => {
   await writeJsonFile(defaultServerConfigFile(), serverConfig);
 };
 
@@ -497,7 +519,9 @@ const renderRemoteInfo = (remote: RemoteConfig): string =>
 const renderRemoteList = (remotes: RemoteConfig[]): string =>
   remotes.length === 0
     ? "No remotes configured."
-    : remotes.map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`).join("\n");
+    : remotes
+        .map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`)
+        .join("\n");
 
 const formatRemoteActionResult = (
   action: string,
@@ -540,10 +564,13 @@ const formatChatTimestamp = (value: string): string => {
     timestamp.getMonth() === now.getMonth() &&
     timestamp.getDate() === now.getDate();
 
-  return isToday ? timeFormatter.format(timestamp) : dateFormatter.format(timestamp);
+  return isToday
+    ? timeFormatter.format(timestamp)
+    : dateFormatter.format(timestamp);
 };
 
-const padCell = (value: string, width: number): string => value.padEnd(width, " ");
+const padCell = (value: string, width: number): string =>
+  value.padEnd(width, " ");
 
 const formatTaskTimestamp = (value: string): string => {
   const timestamp = new Date(value);
@@ -597,10 +624,22 @@ const renderTaskList = async (
   }));
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
-  const titleWidth = Math.max("title".length, ...rows.map((row) => row.title.length));
-  const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
-  const nextRunWidth = Math.max("next run".length, ...rows.map((row) => row.nextRunAt.length));
-  const scheduleWidth = Math.max("schedule".length, ...rows.map((row) => row.schedule.length));
+  const titleWidth = Math.max(
+    "title".length,
+    ...rows.map((row) => row.title.length),
+  );
+  const statusWidth = Math.max(
+    "status".length,
+    ...rows.map((row) => row.status.length),
+  );
+  const nextRunWidth = Math.max(
+    "next run".length,
+    ...rows.map((row) => row.nextRunAt.length),
+  );
+  const scheduleWidth = Math.max(
+    "schedule".length,
+    ...rows.map((row) => row.schedule.length),
+  );
 
   const header = [
     padCell("id", idWidth),
@@ -651,7 +690,8 @@ const renderAgentList = (agents: AgentRecord[]): string => {
 
   const rows = [...agents]
     .sort((left, right) => {
-      const priorityDelta = statusPriority[left.status] - statusPriority[right.status];
+      const priorityDelta =
+        statusPriority[left.status] - statusPriority[right.status];
       if (priorityDelta !== 0) {
         return priorityDelta;
       }
@@ -659,25 +699,47 @@ const renderAgentList = (agents: AgentRecord[]): string => {
       return left.createdAt.localeCompare(right.createdAt);
     })
     .map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    toolsets: agent.toolsets?.join(",") ?? "(default)",
-    status: renderAgentStatus(agent.status),
-    steps:
-      agent.maxSteps === undefined
-        ? `${agent.stepCount}`
-        : `${agent.stepCount}/${agent.maxSteps}`,
-    started: agent.startedAt ? formatTaskTimestamp(agent.startedAt) : "(not started)",
-    finished: agent.finishedAt ? formatTaskTimestamp(agent.finishedAt) : "(running)",
+      id: agent.id,
+      name: agent.name,
+      toolsets: agent.toolsets?.join(",") ?? "(default)",
+      status: renderAgentStatus(agent.status),
+      steps:
+        agent.maxSteps === undefined
+          ? `${agent.stepCount}`
+          : `${agent.stepCount}/${agent.maxSteps}`,
+      started: agent.startedAt
+        ? formatTaskTimestamp(agent.startedAt)
+        : "(not started)",
+      finished: agent.finishedAt
+        ? formatTaskTimestamp(agent.finishedAt)
+        : "(running)",
     }));
 
   const idWidth = Math.max("id".length, ...rows.map((row) => row.id.length));
-  const nameWidth = Math.max("name".length, ...rows.map((row) => row.name.length));
-  const toolsetsWidth = Math.max("toolsets".length, ...rows.map((row) => row.toolsets.length));
-  const statusWidth = Math.max("status".length, ...rows.map((row) => row.status.length));
-  const stepsWidth = Math.max("steps".length, ...rows.map((row) => row.steps.length));
-  const startedWidth = Math.max("started".length, ...rows.map((row) => row.started.length));
-  const finishedWidth = Math.max("finished".length, ...rows.map((row) => row.finished.length));
+  const nameWidth = Math.max(
+    "name".length,
+    ...rows.map((row) => row.name.length),
+  );
+  const toolsetsWidth = Math.max(
+    "toolsets".length,
+    ...rows.map((row) => row.toolsets.length),
+  );
+  const statusWidth = Math.max(
+    "status".length,
+    ...rows.map((row) => row.status.length),
+  );
+  const stepsWidth = Math.max(
+    "steps".length,
+    ...rows.map((row) => row.steps.length),
+  );
+  const startedWidth = Math.max(
+    "started".length,
+    ...rows.map((row) => row.started.length),
+  );
+  const finishedWidth = Math.max(
+    "finished".length,
+    ...rows.map((row) => row.finished.length),
+  );
 
   const header = [
     padCell("id", idWidth),
@@ -749,11 +811,13 @@ const renderAgentInbox = (entries: AgentInboxEntry[]): string => {
   }
 
   return entries
-    .map((entry) => [
-      `${entry.id} [${entry.sourceType}] ${entry.createdAt}`,
-      `from: ${entry.sourceType} ${entry.sourceName ?? entry.sourceId}`,
-      entry.text,
-    ].join("\n"))
+    .map((entry) =>
+      [
+        `${entry.id} [${entry.sourceType}] ${entry.createdAt}`,
+        `from: ${entry.sourceType} ${entry.sourceName ?? entry.sourceId}`,
+        entry.text,
+      ].join("\n"),
+    )
     .join("\n\n");
 };
 
@@ -797,58 +861,81 @@ const renderUsageReportTable = (
   rows: string[][],
 ): string => {
   const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)));
+    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
+  );
 
-  const header = headers.map((value, index) => padCell(value, widths[index] ?? value.length)).join("  ");
+  const header = headers
+    .map((value, index) => padCell(value, widths[index] ?? value.length))
+    .join("  ");
   const separator = widths.map((width) => "-".repeat(width)).join("  ");
   const lines = rows.map((row) =>
-    row.map((value, index) => padCell(value, widths[index] ?? value.length)).join("  "));
+    row
+      .map((value, index) => padCell(value, widths[index] ?? value.length))
+      .join("  "),
+  );
   return [header, separator, ...lines].join("\n");
 };
 
 const renderProjectUsageReport = async (
   report: Awaited<ReturnType<Harness["getProjectUsageReport"]>>,
 ): Promise<string> => {
-  const chatsTable = report.chats.length === 0
-    ? "No chats with usage."
-    : renderUsageReportTable(
-        ["chat", "messages", "totalTokens", "inputTokens", "outputTokens", "lastActivity"],
-        report.chats.map((row) => [
-          row.id,
-          String(row.usage.messageCount),
-          String(row.usage.totalTokens),
-          String(row.usage.inputTokens),
-          String(row.usage.outputTokens),
-          row.updatedAt ? formatChatTimestamp(row.updatedAt) : "(unknown)",
-        ]),
-      );
+  const chatsTable =
+    report.chats.length === 0
+      ? "No chats with usage."
+      : renderUsageReportTable(
+          [
+            "chat",
+            "messages",
+            "totalTokens",
+            "inputTokens",
+            "outputTokens",
+            "lastActivity",
+          ],
+          report.chats.map((row) => [
+            row.id,
+            String(row.usage.messageCount),
+            String(row.usage.totalTokens),
+            String(row.usage.inputTokens),
+            String(row.usage.outputTokens),
+            row.updatedAt ? formatChatTimestamp(row.updatedAt) : "(unknown)",
+          ]),
+        );
 
-  const agentsTable = report.agents.length === 0
-    ? "No agents."
-    : renderUsageReportTable(
-        ["agent", "status", "messages", "totalTokens", "inputTokens", "outputTokens"],
-        report.agents.map((row) => [
-          row.name ?? row.id,
-          row.status ?? "(unknown)",
-          String(row.usage.messageCount),
-          String(row.usage.totalTokens),
-          String(row.usage.inputTokens),
-          String(row.usage.outputTokens),
-        ]),
-      );
+  const agentsTable =
+    report.agents.length === 0
+      ? "No agents."
+      : renderUsageReportTable(
+          [
+            "agent",
+            "status",
+            "messages",
+            "totalTokens",
+            "inputTokens",
+            "outputTokens",
+          ],
+          report.agents.map((row) => [
+            row.name ?? row.id,
+            row.status ?? "(unknown)",
+            String(row.usage.messageCount),
+            String(row.usage.totalTokens),
+            String(row.usage.inputTokens),
+            String(row.usage.outputTokens),
+          ]),
+        );
 
-  const weeksTable = report.weeks.length === 0
-    ? "No usage yet."
-    : renderUsageReportTable(
-        ["weekOf", "messages", "totalTokens", "inputTokens", "outputTokens"],
-        report.weeks.map((row) => [
-          row.weekOf,
-          String(row.usage.messageCount),
-          String(row.usage.totalTokens),
-          String(row.usage.inputTokens),
-          String(row.usage.outputTokens),
-        ]),
-      );
+  const weeksTable =
+    report.weeks.length === 0
+      ? "No usage yet."
+      : renderUsageReportTable(
+          ["weekOf", "messages", "totalTokens", "inputTokens", "outputTokens"],
+          report.weeks.map((row) => [
+            row.weekOf,
+            String(row.usage.messageCount),
+            String(row.usage.totalTokens),
+            String(row.usage.inputTokens),
+            String(row.usage.outputTokens),
+          ]),
+        );
 
   return [
     "project usage report",
@@ -883,8 +970,14 @@ const renderChatList = (
 
   const markerWidth = 1;
   const idWidth = Math.max("chat".length, ...rows.map((row) => row.id.length));
-  const messagesWidth = Math.max("messages".length, ...rows.map((row) => row.messages.length));
-  const createdWidth = Math.max("created".length, ...rows.map((row) => row.created.length));
+  const messagesWidth = Math.max(
+    "messages".length,
+    ...rows.map((row) => row.messages.length),
+  );
+  const createdWidth = Math.max(
+    "created".length,
+    ...rows.map((row) => row.created.length),
+  );
   const activityWidth = Math.max(
     "last activity".length,
     ...rows.map((row) => row.lastActivity.length),
@@ -956,14 +1049,13 @@ const renderInbox = (entries: InboxEntry[]): string => {
 
   return [...entries]
     .reverse()
-    .map(
-      (entry) =>
-        [
-          `id: ${entry.id}`,
-          `${entry.kind} ${formatTaskTimestamp(entry.createdAt)}`,
-          `to: ${entry.origin.channel}/${entry.origin.userId}`,
-          entry.text,
-        ].join("\n"),
+    .map((entry) =>
+      [
+        `id: ${entry.id}`,
+        `${entry.kind} ${formatTaskTimestamp(entry.createdAt)}`,
+        `to: ${entry.origin.channel}/${entry.origin.userId}`,
+        entry.text,
+      ].join("\n"),
     )
     .join("\n\n");
 };
@@ -993,7 +1085,10 @@ const parseNotifyTarget = (value: unknown): NotificationTarget | undefined => {
     conversationId?: unknown;
     threadId?: unknown;
   };
-  if (typeof object.channel !== "string" || object.channel.trim().length === 0) {
+  if (
+    typeof object.channel !== "string" ||
+    object.channel.trim().length === 0
+  ) {
     return undefined;
   }
 
@@ -1008,12 +1103,18 @@ const parseNotifyTarget = (value: unknown): NotificationTarget | undefined => {
   return {
     channel: object.channel,
     userId: object.userId,
-    ...(typeof object.conversationId === "string" ? { conversationId: object.conversationId } : {}),
-    ...(typeof object.threadId === "string" ? { threadId: object.threadId } : {}),
+    ...(typeof object.conversationId === "string"
+      ? { conversationId: object.conversationId }
+      : {}),
+    ...(typeof object.threadId === "string"
+      ? { threadId: object.threadId }
+      : {}),
   };
 };
 
-const parseNotificationOverride = (value: unknown): NotificationOverride | string => {
+const parseNotificationOverride = (
+  value: unknown,
+): NotificationOverride | string => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
@@ -1048,10 +1149,17 @@ const parseNotificationOverride = (value: unknown): NotificationOverride | strin
 
 const parseAgentCreateOptions = (
   value: string,
-): Pick<
-  AgentCreateOptions,
-  "maxSteps" | "timeoutMs" | "stepIntervalMs" | "notify" | "notifyTarget" | "toolsets"
-> | string => {
+):
+  | Pick<
+      AgentCreateOptions,
+      | "maxSteps"
+      | "timeoutMs"
+      | "stepIntervalMs"
+      | "notify"
+      | "notifyTarget"
+      | "toolsets"
+    >
+  | string => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -1065,17 +1173,24 @@ const parseAgentCreateOptions = (
 
   const optionsObject = parsed as Record<string, unknown>;
   for (const key of Object.keys(optionsObject)) {
-    if (!["maxSteps", "timeoutMs", "stepIntervalMs", "notify", "notifyTarget", "toolsets"].includes(key)) {
+    if (
+      ![
+        "maxSteps",
+        "timeoutMs",
+        "stepIntervalMs",
+        "notify",
+        "notifyTarget",
+        "toolsets",
+      ].includes(key)
+    ) {
       return `Unknown agent option: ${key}`;
     }
   }
 
   if (
     optionsObject.toolsets !== undefined &&
-    (
-      !Array.isArray(optionsObject.toolsets) ||
-      optionsObject.toolsets.some((value) => typeof value !== "string")
-    )
+    (!Array.isArray(optionsObject.toolsets) ||
+      optionsObject.toolsets.some((value) => typeof value !== "string"))
   ) {
     return "toolsets must be an array of toolset names";
   }
@@ -1088,13 +1203,16 @@ const parseAgentCreateOptions = (
   return {
     maxSteps: optionsObject.maxSteps as AgentCreateOptions["maxSteps"],
     timeoutMs: optionsObject.timeoutMs as AgentCreateOptions["timeoutMs"],
-    stepIntervalMs: optionsObject.stepIntervalMs as AgentCreateOptions["stepIntervalMs"],
+    stepIntervalMs:
+      optionsObject.stepIntervalMs as AgentCreateOptions["stepIntervalMs"],
     toolsets: optionsObject.toolsets as AgentCreateOptions["toolsets"],
     ...notificationOverride,
   };
 };
 
-const parseTaskScheduleOptions = (value: string): NotificationOverride | string => {
+const parseTaskScheduleOptions = (
+  value: string,
+): NotificationOverride | string => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -1134,7 +1252,8 @@ const projectSubcommands: Record<string, RegisteredSubcommand> = {
       renderProjectInfo(harness, getScopedChatId(harness, options)),
   },
   usage: {
-    run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
+    run: async (harness) =>
+      renderUsage("messagesWithUsage", await harness.getProjectUsage()),
   },
   init: {
     run: async (harness) => {
@@ -1176,7 +1295,11 @@ const projectSubcommands: Record<string, RegisteredSubcommand> = {
   },
 };
 
-const handleProjectCommand: CommandHandler = async (harness, input, options) => {
+const handleProjectCommand: CommandHandler = async (
+  harness,
+  input,
+  options,
+) => {
   if (input === "/projects") {
     return handleProjectCommand(harness, "/project list", options);
   }
@@ -1220,7 +1343,11 @@ const handleSaveCommand: CommandHandler = async (harness, input, options) => {
   );
 };
 
-const handleCompressCommand: CommandHandler = async (harness, input, options) => {
+const handleCompressCommand: CommandHandler = async (
+  harness,
+  input,
+  options,
+) => {
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -1375,18 +1502,23 @@ const usageSubcommands: Record<string, RegisteredSubcommand> = {
         return usageHelpText;
       }
 
-      return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
+      return renderUsage(
+        "messagesWithUsage",
+        await harness.getChatUsage(requestedId),
+      );
     },
   },
   project: {
-    run: async (harness) => renderUsage("messagesWithUsage", await harness.getProjectUsage()),
+    run: async (harness) =>
+      renderUsage("messagesWithUsage", await harness.getProjectUsage()),
   },
   report: {
     help: formatSubcommandHelp(
       "Usage: /usage report",
       "Show a project-wide usage report with totals plus chat, agent, and weekly breakdowns.",
     ),
-    run: async (harness) => renderProjectUsageReport(await harness.getProjectUsageReport()),
+    run: async (harness) =>
+      renderProjectUsageReport(await harness.getProjectUsageReport()),
   },
 };
 
@@ -1427,7 +1559,8 @@ const handleModelCommand: CommandHandler = async (harness, input, options) => {
 
 const configSubcommands: Record<string, RegisteredSubcommand> = {
   show: {
-    run: async (harness) => renderProjectConfig(readCurrentProjectConfig(harness)),
+    run: async (harness) =>
+      renderProjectConfig(readCurrentProjectConfig(harness)),
   },
   get: {
     help: "Usage: /config get <key>",
@@ -1520,7 +1653,10 @@ const chatSubcommands: Record<string, RegisteredSubcommand> = {
   usage: {
     run: async (harness, args, options) => {
       if (args.length === 0) {
-        return renderUsage("messagesWithUsage", await harness.getChatUsage(getScopedChatId(harness, options)));
+        return renderUsage(
+          "messagesWithUsage",
+          await harness.getChatUsage(getScopedChatId(harness, options)),
+        );
       }
 
       const requestedId = parseChatId(args);
@@ -1528,12 +1664,18 @@ const chatSubcommands: Record<string, RegisteredSubcommand> = {
         return "Chat ids may only contain letters, numbers, dots, underscores, and hyphens.";
       }
 
-      return renderUsage("messagesWithUsage", await harness.getChatUsage(requestedId));
+      return renderUsage(
+        "messagesWithUsage",
+        await harness.getChatUsage(requestedId),
+      );
     },
   },
   list: {
     run: async (harness, _args, options) =>
-      renderChatList(await harness.listChats(), getScopedChatId(harness, options)),
+      renderChatList(
+        await harness.listChats(),
+        getScopedChatId(harness, options),
+      ),
   },
   prune: {
     run: async (harness) => {
@@ -1547,7 +1689,9 @@ const chatSubcommands: Record<string, RegisteredSubcommand> = {
         return "/chat new is not supported in this channel yet.";
       }
 
-      const result = await harness.createChat(args.length > 0 ? args : undefined);
+      const result = await harness.createChat(
+        args.length > 0 ? args : undefined,
+      );
       if (result.error) {
         return result.error;
       }
@@ -1631,7 +1775,9 @@ const chatSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const deleted = await harness.deleteChat(requestedId);
-      return deleted ? `deleted chat: ${requestedId}` : `chat not found: ${requestedId}`;
+      return deleted
+        ? `deleted chat: ${requestedId}`
+        : `chat not found: ${requestedId}`;
     },
   },
 };
@@ -1642,7 +1788,11 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/chats ")) {
-    return handleChatCommand(harness, `/chat ${input.slice("/chats ".length)}`, options);
+    return handleChatCommand(
+      harness,
+      `/chat ${input.slice("/chats ".length)}`,
+      options,
+    );
   }
 
   if (input === "/chat") {
@@ -1662,11 +1812,15 @@ const handleChatCommand: CommandHandler = async (harness, input, options) => {
 const taskSubcommands: Record<string, RegisteredSubcommand> = {
   list: {
     run: async (harness, _args, options) =>
-      renderTaskList(await harness.listTasks(getScopedChatId(harness, options))),
+      renderTaskList(
+        await harness.listTasks(getScopedChatId(harness, options)),
+      ),
   },
   prune: {
     run: async (harness, _args, options) => {
-      const pruned = await harness.pruneTasks(getScopedChatId(harness, options));
+      const pruned = await harness.pruneTasks(
+        getScopedChatId(harness, options),
+      );
       return `pruned inactive tasks: ${pruned}`;
     },
   },
@@ -1721,8 +1875,13 @@ const taskSubcommands: Record<string, RegisteredSubcommand> = {
         return "Usage: /task delete <task id>";
       }
 
-      const deleted = await harness.deleteTask(taskId, getScopedChatId(harness, options));
-      return deleted ? `cancelled task: ${taskId}` : `task not found: ${taskId}`;
+      const deleted = await harness.deleteTask(
+        taskId,
+        getScopedChatId(harness, options),
+      );
+      return deleted
+        ? `cancelled task: ${taskId}`
+        : `task not found: ${taskId}`;
     },
   },
 };
@@ -1733,7 +1892,11 @@ const handleTaskCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/tasks ")) {
-    return handleTaskCommand(harness, `/task ${input.slice("/tasks ".length)}`, options);
+    return handleTaskCommand(
+      harness,
+      `/task ${input.slice("/tasks ".length)}`,
+      options,
+    );
   }
 
   return dispatchRegisteredSubcommand(
@@ -1758,7 +1921,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
     help: formatSubcommandHelp(
       "Usage: /agent create <name> | <prompt> [| <json options>]",
       "Create a new agent with its own chat, using the current chat as provenance only.",
-      ['JSON options can include `toolsets`, `maxSteps`, `timeoutMs`, `stepIntervalMs`, `notify`, and `notifyTarget`.'],
+      [
+        "JSON options can include `toolsets`, `maxSteps`, `timeoutMs`, `stepIntervalMs`, `notify`, and `notifyTarget`.",
+      ],
     ),
     run: async (harness, args, options) => {
       const segments = args.split("|").map((segment) => segment.trim());
@@ -1767,12 +1932,16 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const name = segments[0];
-      const prompt = segments.length === 2 ? segments[1] : segments.slice(1, -1).join(" | ");
+      const prompt =
+        segments.length === 2 ? segments[1] : segments.slice(1, -1).join(" | ");
       if (name.length === 0 || prompt.length === 0) {
         return "Usage: /agent create <name> | <prompt> [| <json options>]";
       }
 
-      let agentOptions: Pick<AgentCreateOptions, "maxSteps" | "timeoutMs" | "stepIntervalMs"> = {};
+      let agentOptions: Pick<
+        AgentCreateOptions,
+        "maxSteps" | "timeoutMs" | "stepIntervalMs"
+      > = {};
       if (segments.length >= 3) {
         const parsedOptions = parseAgentCreateOptions(segments.at(-1) ?? "");
         if (typeof parsedOptions === "string") {
@@ -1823,7 +1992,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const removed = await harness.removeAgent(agentRef);
-      return removed ? `deleted agent: ${removed.name}` : `agent not found: ${agentRef}`;
+      return removed
+        ? `deleted agent: ${removed.name}`
+        : `agent not found: ${agentRef}`;
     },
   },
   send: {
@@ -1851,7 +2022,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
         sourceName: options.origin?.userId,
         sourceChatId: getScopedChatId(harness, options),
       });
-      return entry ? `sent message to agent: ${agentRef}` : `agent not found: ${agentRef}`;
+      return entry
+        ? `sent message to agent: ${agentRef}`
+        : `agent not found: ${agentRef}`;
     },
   },
   inbox: {
@@ -1901,7 +2074,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const entries = await harness.listAgentInbox(agentRef);
-      return entries ? renderAgentInbox(entries) : `agent not found: ${agentRef}`;
+      return entries
+        ? renderAgentInbox(entries)
+        : `agent not found: ${agentRef}`;
     },
   },
   prune: {
@@ -1957,8 +2132,7 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       "Usage: /agent tail [-f] <name> [N]",
       "Show the latest messages from one agent's chat.",
       [
-        "Without `N`, this shows the latest agent reply.",
-        "With `N`, this shows the latest `N` chat messages.",
+        "`N` defaults to 1 assistant message.",
         "Use `-f` in the REPL to keep following new messages as they arrive.",
       ],
     ),
@@ -1978,9 +2152,7 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const chat = await harness.loadChat(agent.chatId);
-      return formatChatMessages(
-        getAgentTailMessages(chat.messages, parsed.count, parsed.explicitCount),
-      );
+      return tailAgentMessages(chat.messages, parsed.count);
     },
   },
   return: {
@@ -2018,7 +2190,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const agent = harness.cancelAgent(agentRef);
-      return agent ? `stopped agent: ${agent.name}` : `agent not found: ${agentRef}`;
+      return agent
+        ? `stopped agent: ${agent.name}`
+        : `agent not found: ${agentRef}`;
     },
   },
   pause: {
@@ -2033,7 +2207,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const agent = harness.pauseAgent(agentRef);
-      return agent ? `paused agent: ${agent.name}` : `agent not found: ${agentRef}`;
+      return agent
+        ? `paused agent: ${agent.name}`
+        : `agent not found: ${agentRef}`;
     },
   },
   resume: {
@@ -2048,7 +2224,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const agent = harness.resumeAgent(agentRef);
-      return agent ? `resumed agent: ${agent.name}` : `agent not found: ${agentRef}`;
+      return agent
+        ? `resumed agent: ${agent.name}`
+        : `agent not found: ${agentRef}`;
     },
   },
   steer: {
@@ -2069,7 +2247,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const agent = await harness.steerAgent(agentRef, prompt);
-      return agent ? `steered agent: ${agent.name}` : `agent not found: ${agentRef}`;
+      return agent
+        ? `steered agent: ${agent.name}`
+        : `agent not found: ${agentRef}`;
     },
   },
 };
@@ -2095,7 +2275,9 @@ const skillsSubcommands: Record<string, RegisteredSubcommand> = {
       const skills = await harness.listSkills();
       return skills.length === 0
         ? "No skills found."
-        : skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+        : skills
+            .map((skill) => `- ${skill.name}: ${skill.description}`)
+            .join("\n");
     },
   },
 };
@@ -2156,7 +2338,9 @@ const renderTools = (
       ? [
           "",
           "## Toolsets",
-          ...toolsets.map((toolset) => `- ${toolset.name}: ${toolset.description}`),
+          ...toolsets.map(
+            (toolset) => `- ${toolset.name}: ${toolset.description}`,
+          ),
         ]
       : []),
     ...Array.from(grouped.entries()).flatMap(([category, entries]) => {
@@ -2167,7 +2351,9 @@ const renderTools = (
       return [
         "",
         `## ${category}`,
-        ...entries.map((tool) => `- ${tool.name} [${tool.permission}]: ${tool.description}`),
+        ...entries.map(
+          (tool) => `- ${tool.name} [${tool.permission}]: ${tool.description}`,
+        ),
       ];
     }),
   ].join("\n");
@@ -2200,11 +2386,16 @@ const handleToolsCommand: CommandHandler = async (harness, input, options) => {
 
 const historySubcommands: Record<string, RegisteredSubcommand> = {
   show: {
-    run: async (harness, _args, options) => harness.getChatTranscript(options.chatId),
+    run: async (harness, _args, options) =>
+      harness.getChatTranscript(options.chatId),
   },
 };
 
-const handleHistoryCommand: CommandHandler = async (harness, input, options) => {
+const handleHistoryCommand: CommandHandler = async (
+  harness,
+  input,
+  options,
+) => {
   return dispatchRegisteredSubcommand(
     harness,
     input,
@@ -2218,7 +2409,10 @@ const handleHistoryCommand: CommandHandler = async (harness, input, options) => 
   );
 };
 
-const parseTeleportFlagValue = (value: string, name: string): string | undefined => {
+const parseTeleportFlagValue = (
+  value: string,
+  name: string,
+): string | undefined => {
   const index = value.indexOf(name);
   if (index < 0) {
     return undefined;
@@ -2234,7 +2428,10 @@ const parseTeleportFlagValue = (value: string, name: string): string | undefined
 };
 
 const removeTeleportFlag = (value: string, name: string): string => {
-  const pattern = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s+\\S+`, "u");
+  const pattern = new RegExp(
+    `${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s+\\S+`,
+    "u",
+  );
   return value.replace(pattern, "").trim();
 };
 
@@ -2244,10 +2441,11 @@ export const parseTeleportConnectArgs = (
   const body = args.trim();
   const requestedProject = parseTeleportFlagValue(body, "--project");
   const requestedChatId = parseTeleportFlagValue(body, "--chat");
-  const target = removeTeleportFlag(
-    removeTeleportFlag(body, "--project"),
-    "--chat",
-  ).trim() || undefined;
+  const target =
+    removeTeleportFlag(
+      removeTeleportFlag(body, "--project"),
+      "--chat",
+    ).trim() || undefined;
 
   return {
     requestedChatId,
@@ -2256,7 +2454,9 @@ export const parseTeleportConnectArgs = (
   };
 };
 
-const renderTeleportStatus = (target: ReturnType<TeleportControl["getTarget"]>): string =>
+const renderTeleportStatus = (
+  target: ReturnType<TeleportControl["getTarget"]>,
+): string =>
   !target
     ? "teleport: disconnected"
     : [
@@ -2266,14 +2466,20 @@ const renderTeleportStatus = (target: ReturnType<TeleportControl["getTarget"]>):
         `chat: ${target.chatId}`,
       ].join("\n");
 
-const renderTeleportRemotes = (remotes: ReturnType<TeleportControl["listRemotes"]>): string =>
+const renderTeleportRemotes = (
+  remotes: ReturnType<TeleportControl["listRemotes"]>,
+): string =>
   remotes.length === 0
     ? "No remotes configured."
     : remotes
-      .map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`)
-      .join("\n");
+        .map((remote) => `- ${remote.name}: ${summarizeRemote(remote)}`)
+        .join("\n");
 
-const handleTeleportCommand: CommandHandler = async (harness, input, options) => {
+const handleTeleportCommand: CommandHandler = async (
+  harness,
+  input,
+  options,
+) => {
   if (input === "/teleport") {
     return teleportHelpText;
   }
@@ -2305,7 +2511,8 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
           return "Teleport is not supported in this interface yet.";
         }
 
-        const { requestedProject, requestedChatId, target } = parseTeleportConnectArgs(args);
+        const { requestedProject, requestedChatId, target } =
+          parseTeleportConnectArgs(args);
         if (!target) {
           return teleportHelpText;
         }
@@ -2345,7 +2552,11 @@ const handleRemoteCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/remotes ")) {
-    return handleRemoteCommand(harness, `/remote ${input.slice("/remotes ".length)}`, options);
+    return handleRemoteCommand(
+      harness,
+      `/remote ${input.slice("/remotes ".length)}`,
+      options,
+    );
   }
 
   const serverConfig = await loadEditableServerConfig();
@@ -2355,7 +2566,10 @@ const handleRemoteCommand: CommandHandler = async (harness, input, options) => {
       return "remote name is required";
     }
 
-    return remotes.find((entry) => entry.name === name) ?? `remote not found: ${name}`;
+    return (
+      remotes.find((entry) => entry.name === name) ??
+      `remote not found: ${name}`
+    );
   };
 
   const remoteSubcommands: Record<string, RegisteredSubcommand> = {
@@ -2491,7 +2705,11 @@ const handleNewCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/new ")) {
-    return handleChatCommand(harness, `/chat new ${input.slice("/new ".length).trim()}`, options);
+    return handleChatCommand(
+      harness,
+      `/chat new ${input.slice("/new ".length).trim()}`,
+      options,
+    );
   }
 
   return handleChatCommand(harness, "/chat new", options);
@@ -2531,7 +2749,11 @@ const handleForkCommand: CommandHandler = async (harness, input, options) => {
   }
 
   if (input.startsWith("/fork ")) {
-    return handleChatCommand(harness, `/chat fork ${input.slice("/fork ".length).trim()}`, options);
+    return handleChatCommand(
+      harness,
+      `/chat fork ${input.slice("/fork ".length).trim()}`,
+      options,
+    );
   }
 
   return handleChatCommand(harness, "/chat fork", options);

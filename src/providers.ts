@@ -107,6 +107,16 @@ export class DummyProvider implements Provider {
   }
 }
 
+export class EchoProvider implements Provider {
+  async generate(request: ProviderRequest): Promise<ProviderResult> {
+    return {
+      model: "echo",
+      toolIterations: 0,
+      outputText: request.userInput,
+    };
+  }
+}
+
 export class OpenAIResponsesProvider implements Provider {
   private readonly apiKey: string;
   private readonly model: string;
