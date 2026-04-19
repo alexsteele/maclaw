@@ -3,10 +3,10 @@
 import { runConfigCommand } from "./cli/config.js";
 import { runRepl } from "./cli/repl.js";
 import { normalizeSetupSection, runSetup } from "./cli/setup.js";
-import { isHttpRemoteTarget } from "./remote/index.js";
+import { findRemoteConfig, isHttpRemoteTarget } from "./remote/index.js";
 import { loadServerConfig } from "./server-config.js";
 import { MaclawServer } from "./server.js";
-import { sendTeleportCommand } from "./teleport.js";
+import { sendTeleportCommand, TeleportController } from "./teleport.js";
 
 const cliHelpText = [
   "Usage: maclaw [command]",
@@ -14,7 +14,7 @@ const cliHelpText = [
   "Commands:",
   "  repl            Start the local REPL (default)",
   "  server          Start the maclaw server",
-  "  teleport        Send one command or message to a remote maclaw server",
+  "  teleport        Send one command or attach to a remote maclaw runtime",
   "  setup [section] Run guided setup",
   "  config          Show or update project config",
   "  -h, --help      Show this help",
@@ -84,7 +84,7 @@ const parseFlagValue = (args: string[], name: string): string | undefined => {
 
   const value = args[index + 1]?.trim();
   if (!value) {
-    throw new Error(`Usage: maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>`);
+    throw new Error(teleportUsageText);
   }
 
   return value;
@@ -99,6 +99,12 @@ const removeFlag = (args: string[], name: string): string[] => {
   return [...args.slice(0, index), ...args.slice(index + 2)];
 };
 
+const teleportUsageText = [
+  "Usage:",
+  "  maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>",
+  "  maclaw teleport <shell-remote>",
+].join("\n");
+
 const runTeleportCommand = async (args: string[]): Promise<void> => {
   const project = parseFlagValue(args, "--project");
   const chatId = parseFlagValue(args, "--chat");
@@ -107,12 +113,32 @@ const runTeleportCommand = async (args: string[]): Promise<void> => {
   const target = positional[0]?.trim();
   const text = positional.slice(1).join(" ").trim();
 
-  if (!target || !text) {
-    throw new Error("Usage: maclaw teleport <url|remote> [--project <name>] [--chat <id>] <message>");
+  if (!target) {
+    throw new Error(teleportUsageText);
   }
 
   try {
     const serverConfig = isHttpRemoteTarget(target) ? undefined : loadServerConfig();
+    const remoteConfig = serverConfig ? findRemoteConfig(serverConfig, target) : undefined;
+
+    if (remoteConfig?.client === "shell") {
+      if (text) {
+        throw new Error("Shell remotes attach interactively. Run: maclaw teleport <remote>");
+      }
+
+      const controller = new TeleportController(serverConfig);
+      const result = await controller.attachShell(target);
+      if (result.exitCode !== 0 && result.message.trim().length > 0) {
+        process.stderr.write(`${result.message}\n`);
+        process.exitCode = result.exitCode || 1;
+      }
+      return;
+    }
+
+    if (!text) {
+      throw new Error(teleportUsageText);
+    }
+
     const result = await sendTeleportCommand(
       target,
       {
