@@ -7,6 +7,29 @@ import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { JsonFileAgentStore } from "../src/storage/json.js";
 import { SqliteAgentStore } from "../src/storage/sqlite.js";
+import type { ChatRecord } from "../src/types.js";
+
+const chatOptions = {
+  retentionDays: 30,
+  compressionMode: "none" as const,
+};
+
+const createAgentChat = (chatId: string): ChatRecord => ({
+  id: chatId,
+  createdAt: "2026-04-19T10:00:00.000Z",
+  updatedAt: "2026-04-19T10:00:00.000Z",
+  retentionDays: 30,
+  compressionMode: "none",
+  summary: "Agent work summary",
+  messages: [
+    {
+      id: "msg-1",
+      role: "assistant",
+      content: "hello from agent",
+      createdAt: "2026-04-19T10:00:01.000Z",
+    },
+  ],
+});
 
 test("JsonFileAgentStore persists and reloads agent records", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-agent-store-"));
@@ -39,6 +62,16 @@ test("JsonFileAgentStore persists and reloads agent records", async () => {
       existsSync(path.join(rootDir, "agents", "agent_ab12cd", "agent.json")),
       true,
     );
+
+    await store.saveAgentChat("agent_ab12cd", createAgentChat("agent_ab12cd"));
+    const reloadedWithChat = new JsonFileAgentStore(filePath);
+    const chat = await reloadedWithChat.loadAgentChat("agent_ab12cd", chatOptions);
+    assert.equal(chat.summary, "Agent work summary");
+    assert.equal(chat.messages[0]?.content, "hello from agent");
+    assert.equal(
+      existsSync(path.join(rootDir, "agents", "agent_ab12cd", "chat.jsonl")),
+      true,
+    );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -66,6 +99,10 @@ test("JsonFileAgentStore deletes persisted agent records", async () => {
     assert.equal(store.getAgent("agent_delete"), undefined);
     assert.equal(
       existsSync(path.join(rootDir, "agents", "agent_delete", "agent.json")),
+      false,
+    );
+    assert.equal(
+      existsSync(path.join(rootDir, "agents", "agent_delete", "chat.jsonl")),
       false,
     );
   } finally {
@@ -123,6 +160,10 @@ test("SqliteAgentStore adds missing agent columns for older databases", async ()
     assert.equal(reloaded?.sourceChatId, "main");
     assert.equal(reloaded?.createdByAgentId, "agent_parent");
     assert.equal(reloaded?.notifyTarget?.channel, "inbox");
+
+    await store.saveAgentChat("agent_sqlite", createAgentChat("agent_sqlite"));
+    const chat = await store.loadAgentChat("agent_sqlite", chatOptions);
+    assert.equal(chat.messages[0]?.content, "hello from agent");
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

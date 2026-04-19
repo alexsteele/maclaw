@@ -717,6 +717,10 @@ export class Harness {
       addUsage(summary, await this.loadChat(chat.id));
     }
 
+    for (const agent of this.listAgents()) {
+      addUsage(summary, await this._agentStore.loadAgentChat(agent.id, this.getChatOptions()));
+    }
+
     return summary;
   }
 
@@ -751,13 +755,31 @@ export class Harness {
       });
     }
 
-    const agentRows = agents.map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      status: agent.status,
-      updatedAt: agent.finishedAt ?? agent.startedAt ?? agent.createdAt,
-      usage: chatRows.find((row) => row.id === agent.chatId)?.usage ?? createUsageSummary(),
-    }));
+    const agentRows: UsageReportRow[] = [];
+    for (const agent of agents) {
+      const chat = await this._agentStore.loadAgentChat(agent.id, this.getChatOptions());
+      const usage = createUsageSummary();
+      for (const message of chat.messages) {
+        addMessageUsage(usage, message);
+        addMessageUsage(total, message);
+        if (!message.usage) {
+          continue;
+        }
+
+        const weekOf = getWeekStart(message.createdAt);
+        const weeklyUsage = weeks.get(weekOf) ?? createUsageSummary();
+        addMessageUsage(weeklyUsage, message);
+        weeks.set(weekOf, weeklyUsage);
+      }
+
+      agentRows.push({
+        id: agent.id,
+        name: agent.name,
+        status: agent.status,
+        updatedAt: chat.updatedAt,
+        usage,
+      });
+    }
 
     const nonAgentChatRows = chatRows.filter((row) => !agentByChatId.has(row.id));
     const weeklyRows = Array.from(weeks.entries(), ([weekOf, usage]) => ({ weekOf, usage }))
@@ -792,6 +814,11 @@ export class Harness {
   }
 
   async loadChat(chatId: string): Promise<ChatRecord> {
+    const agent = findAgentByChatId(this.listAgents(), chatId);
+    if (agent) {
+      return this._agentStore.loadAgentChat(agent.id, this.getChatOptions());
+    }
+
     return this._chatStore.loadChat(chatId, this.getChatOptions());
   }
 
@@ -1024,6 +1051,11 @@ export class Harness {
     toolsOverride?: Tool[],
   ): Promise<Message> {
     const prompt = await resolvePromptText(this.config.projectFolder, userInput);
+    const agent = findAgentByChatId(this.listAgents(), chatId);
+    if (agent) {
+      return this.promptAgentChat(agent, prompt, context, toolsOverride);
+    }
+
     return this._chatRuntime.promptChat(chatId, prompt, context, toolsOverride);
   }
 
@@ -1172,8 +1204,9 @@ export class Harness {
     const agent = new Agent(
       record,
       this._agentStore,
-      (chatId, prompt) =>
-        this.promptChat(chatId, prompt, undefined, this.resolveAgentTools(record)),
+      this.getChatOptions(),
+      this._chatRuntime,
+      this.resolveAgentTools(record),
       this.handleAgentStopped.bind(this, record.id),
     );
     this._runningAgents.set(record.id, agent);
@@ -1201,7 +1234,11 @@ export class Harness {
     }
 
     this.pauseAgent(agentRef);
-    await this.switchChat(agent.chatId);
+    const chat = await this._agentStore.loadAgentChat(agent.id, this.getChatOptions());
+    this._chatRuntime.setActiveChat(
+      chat,
+      (currentChat) => this._agentStore.saveAgentChat(agent.id, currentChat),
+    );
     return { agent: this.findAgent(agent.id) ?? agent, chatId: agent.chatId };
   }
 
@@ -1293,6 +1330,23 @@ export class Harness {
       .find((agent) => agent.name === name && this.isLiveAgentStatus(agent.status));
   }
 
+  private async promptAgentChat(
+    agent: AgentRecord,
+    prompt: string,
+    context?: MessageContext,
+    toolsOverride?: Tool[],
+  ): Promise<Message> {
+    const chat = await this._agentStore.loadAgentChat(agent.id, this.getChatOptions());
+    const reply = await this._chatRuntime.runStep(
+      chat,
+      prompt,
+      () => this._agentStore.saveAgentChat(agent.id, chat),
+      context,
+      toolsOverride ?? this.resolveAgentTools(agent),
+    );
+    return reply.message;
+  }
+
   private restorePersistedAgents(): void {
     for (const record of this._agentStore.listAgents()) {
       if (!this.isLiveAgentStatus(record.status) || this._runningAgents.has(record.id)) {
@@ -1302,8 +1356,9 @@ export class Harness {
       const agent = new Agent(
         record,
         this._agentStore,
-        (chatId, prompt) =>
-          this.promptChat(chatId, prompt, undefined, this.resolveAgentTools(record)),
+        this.getChatOptions(),
+        this._chatRuntime,
+        this.resolveAgentTools(record),
         this.handleAgentStopped.bind(this, record.id),
       );
       this._runningAgents.set(record.id, agent);
@@ -1465,7 +1520,7 @@ export class Harness {
       await this.switchChat(agent.sourceChatId ?? this.config.chatId);
     }
 
-    await this._chatStore.deleteChat(agent.chatId);
+    await this._agentStore.deleteAgentChat(agent.id);
     await this._agentInboxStore.clearEntries(agent.id);
     await this._agentMemoryStore.deleteEntry(agent.id);
     return this._agentStore.deleteAgent(agent.id);

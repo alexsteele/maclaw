@@ -480,6 +480,18 @@ export class SqliteAgentStore implements AgentStore {
       .all() as Record<string, unknown>[];
     return rows.map(rowToAgentRecord);
   }
+
+  loadAgentChat(agentId: string, options: ChatLoadOptions): Promise<ChatRecord> {
+    return this.fileStore.loadAgentChat(agentId, options);
+  }
+
+  saveAgentChat(agentId: string, chat: ChatRecord): Promise<void> {
+    return this.fileStore.saveAgentChat(agentId, chat);
+  }
+
+  deleteAgentChat(agentId: string): Promise<boolean> {
+    return this.fileStore.deleteAgentChat(agentId);
+  }
 }
 
 export class SqliteInboxStore implements InboxStore {

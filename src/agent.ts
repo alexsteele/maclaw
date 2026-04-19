@@ -1,4 +1,6 @@
-import type { AgentRecord, Message } from "./types.js";
+import type { ChatLoadOptions, ChatRuntime } from "./chats.js";
+import type { Tool } from "./tools/types.js";
+import type { AgentRecord, ChatRecord, Message } from "./types.js";
 
 export const AGENT_DONE_INSTRUCTIONS =
   "If you are finished, end your response with a final line that contains only <AGENT_DONE>.";
@@ -16,8 +18,6 @@ const isDoneMessage = (content: string): boolean => {
   return lines[lines.length - 1] === "<AGENT_DONE>";
 };
 
-type RunStep = (chatId: string, input: string) => Promise<Message>;
-
 export type AgentMemoryEntry = {
   agentId: string;
   text: string;
@@ -29,6 +29,9 @@ export interface AgentStore {
   saveAgent(record: AgentRecord): void;
   deleteAgent(agentId: string): boolean;
   listAgents(): AgentRecord[];
+  loadAgentChat(agentId: string, options: ChatLoadOptions): Promise<ChatRecord>;
+  saveAgentChat(agentId: string, chat: ChatRecord): Promise<void>;
+  deleteAgentChat(agentId: string): Promise<boolean>;
 }
 
 export interface AgentMemoryStore {
@@ -40,6 +43,7 @@ export interface AgentMemoryStore {
 
 export class MemoryAgentStore implements AgentStore {
   private readonly agents = new Map<string, AgentRecord>();
+  private readonly chats = new Map<string, ChatRecord>();
 
   getAgent(agentId: string): AgentRecord | undefined {
     const record = this.agents.get(agentId);
@@ -56,6 +60,42 @@ export class MemoryAgentStore implements AgentStore {
 
   listAgents(): AgentRecord[] {
     return Array.from(this.agents.values()).map((record) => structuredClone(record));
+  }
+
+  async loadAgentChat(
+    agentId: string,
+    options: ChatLoadOptions,
+  ): Promise<ChatRecord> {
+    const existing = this.chats.get(agentId);
+    if (existing) {
+      const normalized = structuredClone(existing);
+      normalized.retentionDays = options.retentionDays;
+      normalized.compressionMode = options.compressionMode;
+      this.chats.set(agentId, structuredClone(normalized));
+      return normalized;
+    }
+
+    const chatId = this.getAgent(agentId)?.chatId ?? agentId;
+    const now = new Date().toISOString();
+    const chat: ChatRecord = {
+      id: chatId,
+      createdAt: now,
+      updatedAt: now,
+      retentionDays: options.retentionDays,
+      compressionMode: options.compressionMode,
+      messages: [],
+    };
+    this.chats.set(agentId, structuredClone(chat));
+    return chat;
+  }
+
+  async saveAgentChat(agentId: string, chat: ChatRecord): Promise<void> {
+    chat.updatedAt = new Date().toISOString();
+    this.chats.set(agentId, structuredClone(chat));
+  }
+
+  async deleteAgentChat(agentId: string): Promise<boolean> {
+    return this.chats.delete(agentId);
   }
 }
 
@@ -96,7 +136,9 @@ export const createAgentMemoryEntry = (input: {
 // An agent can be "steered" by sending it prompts which are inserted in the loop.
 export class Agent {
   private readonly agentStore: AgentStore;
-  private readonly runStep: RunStep;
+  private readonly chatOptions: ChatLoadOptions;
+  private readonly chatRuntime: Pick<ChatRuntime, "runStep">;
+  private readonly tools: Tool[];
   private readonly record: AgentRecord;
   private readonly steerPrompts: string[] = [];
   private readonly onStopped?: () => void;
@@ -104,12 +146,16 @@ export class Agent {
   constructor(
     record: AgentRecord,
     agentStore: AgentStore,
-    runStep: RunStep,
+    chatOptions: ChatLoadOptions,
+    chatRuntime: Pick<ChatRuntime, "runStep">,
+    tools: Tool[],
     onStopped?: () => void,
   ) {
     this.record = record;
     this.agentStore = agentStore;
-    this.runStep = runStep;
+    this.chatOptions = chatOptions;
+    this.chatRuntime = chatRuntime;
+    this.tools = tools;
     this.onStopped = onStopped;
   }
 
@@ -230,21 +276,28 @@ export class Agent {
       record.stepCount === 0 ? record.prompt : this.consumeSteerPrompt() ?? CONTINUE_PROMPT;
 
     try {
-      const reply = await this.runStep(record.chatId, input);
+      const chat = await this.agentStore.loadAgentChat(record.id, this.chatOptions);
+      const reply = await this.chatRuntime.runStep(
+        chat,
+        input,
+        () => this.agentStore.saveAgentChat(record.id, chat),
+        undefined,
+        this.tools,
+      );
       const latest = this.getRecord();
       if (latest.status !== "running" && latest.status !== "paused") {
         return;
       }
 
       latest.stepCount += 1;
-      latest.lastMessage = reply.content;
+      latest.lastMessage = reply.message.content;
       this.saveRecord(latest);
 
       if (latest.status === "paused") {
         return;
       }
 
-      if (isDoneMessage(reply.content)) {
+      if (isDoneMessage(reply.message.content)) {
         this.finish(latest, "completed");
         return;
       }

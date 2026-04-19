@@ -39,6 +39,15 @@ export const defaultAgentDir = (projectFolder: string, agentId: string): string 
 export const defaultAgentFile = (projectFolder: string, agentId: string): string =>
   path.join(defaultAgentDir(projectFolder, agentId), "agent.json");
 
+export const defaultAgentChatFile = (projectFolder: string, agentId: string): string =>
+  path.join(defaultAgentDir(projectFolder, agentId), "chat.json");
+
+export const defaultAgentChatTranscriptFile = (
+  projectFolder: string,
+  agentId: string,
+): string =>
+  path.join(defaultAgentDir(projectFolder, agentId), "chat.jsonl");
+
 export const defaultInboxFile = (projectFolder: string): string =>
   path.join(defaultProjectDataDir(projectFolder), "inbox.jsonl");
 

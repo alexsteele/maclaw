@@ -474,6 +474,12 @@ test("dispatchCommand renders chat list output", async () => {
     const harness = Harness.load(projectDir);
     await harness.prompt("hello from default");
     await harness.promptChat("branch-a", "hello from branch");
+    const created = await harness.createAgent({
+      name: "hidden-agent",
+      prompt: "Wait here",
+      maxSteps: 50,
+    });
+    assert.ok(created.agent);
 
     const reply = await dispatchCommand(harness, "/chat list");
 
@@ -481,6 +487,8 @@ test("dispatchCommand renders chat list output", async () => {
     assert.match(reply ?? "", /\bmessages\b/u);
     assert.match(reply ?? "", /default/u);
     assert.match(reply ?? "", /branch-a/u);
+    assert.doesNotMatch(reply ?? "", /hidden-agent/u);
+    assert.doesNotMatch(reply ?? "", new RegExp(created.agent.chatId, "u"));
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }
@@ -682,7 +690,11 @@ test("dispatchCommand shows saved inbox notifications", async () => {
 
     await harness.start();
 
-    harness.promptChat = async () => {
+    (
+      harness as unknown as {
+        _chatRuntime: { runStep: () => Promise<never> };
+      }
+    )._chatRuntime.runStep = async () => {
       throw new Error("boom");
     };
 
@@ -2148,6 +2160,10 @@ test("dispatchCommand can pause an agent and switch into its chat", async () => 
     );
     assert.equal(harness.getCurrentChatId(), created.agent.chatId);
     assert.equal(harness.getAgent(created.agent.id)?.status, "paused");
+
+    await harness.prompt("hello from agent chat");
+    const transcript = await harness.getChatTranscript(created.agent.chatId);
+    assert.match(transcript, /hello from agent chat/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

@@ -40,6 +40,17 @@ export type ChatReply = {
   providerResult?: ProviderResult;
 };
 
+export type ChatStepOptions = {
+  config: ProjectConfig;
+  chat: ChatRecord;
+  userInput: string;
+  provider: Provider;
+  tools: Tool[];
+  context?: MessageContext;
+  reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
+  saveChat: () => Promise<void>;
+};
+
 type ChatCreateResult =
   | { chat: ChatRecord; error?: undefined }
   | { chat?: undefined; error: string };
@@ -194,6 +205,62 @@ const measureProviderCall = async (
   };
 };
 
+export const runChatStep = async ({
+  config,
+  chat,
+  userInput,
+  provider,
+  tools,
+  context,
+  reviewToolCall,
+  saveChat,
+}: ChatStepOptions): Promise<ChatReply> => {
+  appendMessage(chat, "user", userInput);
+  await saveChat();
+
+  let assistantMessage: Message;
+  let providerResult: ProviderResult | undefined;
+  try {
+    const systemPrompt = await buildSystemPrompt(config, chat, context);
+    const promptChat = buildPromptChat(chat, config.contextMessages);
+    const measured = await measureProviderCall(() =>
+      provider.generate({
+        chat: promptChat,
+        userInput,
+        systemPrompt,
+        tools,
+        reviewToolCall,
+        onToolCall: async (entry) => {
+          appendMessage(chat, "tool", formatToolCall(entry), entry.name);
+          await saveChat();
+        },
+      }),
+    );
+    providerResult = {
+      ...measured.result,
+      latencyMs: measured.telemetry.latencyMs,
+    };
+
+    assistantMessage = appendMessage(chat, "assistant", providerResult.outputText, undefined, {
+      model: providerResult.model,
+      usage: providerResult.usage,
+      latencyMs: measured.telemetry.latencyMs,
+      toolIterations: measured.telemetry.toolIterations,
+    });
+  } catch (error) {
+    const content = `Request failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    assistantMessage = appendMessage(chat, "assistant", content);
+  }
+
+  await saveChat();
+  return {
+    message: assistantMessage,
+    providerResult,
+  };
+};
+
 const createEmptyChat = (
   chatId: string,
   options: ChatLoadOptions,
@@ -283,7 +350,10 @@ export class ChatRuntime {
   private readonly reviewToolCall?: (tool: Tool, input: unknown) => Promise<boolean>;
   private activeChatId: string;
   private previousChatId?: string;
-  private activeChat?: ChatRecord;
+  private activeChat?: {
+    chat: ChatRecord;
+    save: (chat: ChatRecord) => Promise<void>;
+  };
 
   constructor(
     config: ProjectConfig,
@@ -331,13 +401,15 @@ export class ChatRuntime {
       this.previousChatId = this.activeChatId;
     }
     this.activeChatId = chatId;
-    this.activeChat = await this.loadChat(chatId);
-    await this.chatStore.saveChat(this.activeChat);
+    const chat = await this.loadChat(chatId);
+    const save = (currentChat: ChatRecord) => this.chatStore.saveChat(currentChat);
+    this.activeChat = { chat, save };
+    await save(chat);
     logger.debug("chat", "switched", {
       project: this.config.name,
-      chatId: this.activeChat.id,
+      chatId: chat.id,
     });
-    return this.activeChat;
+    return chat;
   }
 
   async createChat(chatId: string): Promise<ChatCreateResult> {
@@ -380,7 +452,10 @@ export class ChatRuntime {
     await this.chatStore.saveChat(chat);
 
     if (chatId === this.activeChatId) {
-      this.activeChat = chat;
+      this.activeChat = {
+        chat,
+        save: (currentChat) => this.chatStore.saveChat(currentChat),
+      };
     }
 
     logger.info("chat", "reset", {
@@ -424,7 +499,10 @@ export class ChatRuntime {
     await this.chatStore.saveChat(chat);
 
     if (chatId === this.activeChatId) {
-      this.activeChat = chat;
+      this.activeChat = {
+        chat,
+        save: (currentChat) => this.chatStore.saveChat(currentChat),
+      };
     }
 
     logger.info("chat", "compressed", {
@@ -451,7 +529,10 @@ export class ChatRuntime {
     const forkedChat = result.chat;
     this.previousChatId = this.activeChatId;
     this.activeChatId = newChatId;
-    this.activeChat = forkedChat;
+    this.activeChat = {
+      chat: forkedChat,
+      save: (chat) => this.chatStore.saveChat(chat),
+    };
     logger.info("chat", "forked", {
       project: this.config.name,
       sourceChatId: this.previousChatId,
@@ -462,10 +543,26 @@ export class ChatRuntime {
 
   async loadActiveChat(): Promise<ChatRecord> {
     if (!this.activeChat) {
-      this.activeChat = await this.loadChat(this.activeChatId);
+      const chat = await this.loadChat(this.activeChatId);
+      this.activeChat = {
+        chat,
+        save: (currentChat) => this.chatStore.saveChat(currentChat),
+      };
     }
 
-    return this.activeChat;
+    return this.activeChat.chat;
+  }
+
+  setActiveChat(
+    chat: ChatRecord,
+    saveChat: (chat: ChatRecord) => Promise<void>,
+  ): void {
+    if (chat.id !== this.activeChatId) {
+      this.previousChatId = this.activeChatId;
+    }
+
+    this.activeChatId = chat.id;
+    this.activeChat = { chat, save: saveChat };
   }
 
   async prompt(userInput: string, _context?: MessageContext): Promise<Message> {
@@ -492,62 +589,56 @@ export class ChatRuntime {
     return this.promptChatDetailed(chat.id, userInput, context);
   }
 
+  async runStep(
+    chat: ChatRecord,
+    userInput: string,
+    saveChat: () => Promise<void>,
+    context?: MessageContext,
+    toolsOverride?: Tool[],
+  ): Promise<ChatReply> {
+    return runChatStep({
+      config: this.config,
+      chat,
+      userInput,
+      provider: this.provider,
+      tools: this.getTools(toolsOverride),
+      context,
+      reviewToolCall: this.reviewToolCall,
+      saveChat,
+    });
+  }
+
   async promptChatDetailed(
     chatId: string,
     userInput: string,
     context?: MessageContext,
     toolsOverride?: Tool[],
   ): Promise<ChatReply> {
-    const chat =
-      chatId === this.activeChatId ? await this.loadActiveChat() : await this.loadChat(chatId);
+    const activeContext =
+      chatId === this.activeChatId
+        ? (this.activeChat ?? {
+            chat: await this.loadActiveChat(),
+            save: (currentChat: ChatRecord) => this.chatStore.saveChat(currentChat),
+          })
+        : undefined;
+    const chat = activeContext?.chat ?? await this.loadChat(chatId);
+    const saveChat = activeContext?.save ?? ((currentChat: ChatRecord) => this.chatStore.saveChat(currentChat));
 
-    appendMessage(chat, "user", userInput);
-    await this.chatStore.saveChat(chat);
-
-    let assistantMessage: Message;
-    let providerResult: ProviderResult | undefined;
-    try {
-      const systemPrompt = await buildSystemPrompt(this.config, chat, context);
-      const promptChat = buildPromptChat(chat, this.config.contextMessages);
-      const measured = await measureProviderCall(() =>
-        this.provider.generate({
-          chat: promptChat,
-          userInput,
-          systemPrompt,
-          tools: this.getTools(toolsOverride),
-          reviewToolCall: this.reviewToolCall,
-          onToolCall: async (entry) => {
-            appendMessage(chat, "tool", formatToolCall(entry), entry.name);
-            await this.chatStore.saveChat(chat);
-          },
-        }),
-      );
-      providerResult = {
-        ...measured.result,
-        latencyMs: measured.telemetry.latencyMs,
-      };
-
-      assistantMessage = appendMessage(chat, "assistant", providerResult.outputText, undefined, {
-        model: providerResult.model,
-        usage: providerResult.usage,
-        latencyMs: measured.telemetry.latencyMs,
-        toolIterations: measured.telemetry.toolIterations,
-      });
-    } catch (error) {
-      const content = `Request failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-      assistantMessage = appendMessage(chat, "assistant", content);
-    }
-
-    await this.chatStore.saveChat(chat);
+    const reply = await this.runStep(
+      chat,
+      userInput,
+      () => saveChat(chat),
+      context,
+      toolsOverride,
+    );
     if (this.activeChatId === chat.id) {
-      this.activeChat = chat;
+      const save =
+        chatId === this.activeChatId && this.activeChat
+          ? this.activeChat.save
+          : (currentChat: ChatRecord) => this.chatStore.saveChat(currentChat);
+      this.activeChat = { chat, save };
     }
-    return {
-      message: assistantMessage,
-      providerResult,
-    };
+    return reply;
   }
 
   async handleScheduledTask(
@@ -592,14 +683,20 @@ export class ChatRuntime {
       assistantMessage = appendMessage(chat, "assistant", content, "scheduler");
       await this.chatStore.saveChat(chat);
       if (this.activeChatId === chat.id) {
-        this.activeChat = chat;
+        this.activeChat = {
+          chat,
+          save: (currentChat) => this.chatStore.saveChat(currentChat),
+        };
       }
       throw error;
     }
 
     await this.chatStore.saveChat(chat);
     if (this.activeChatId === chat.id) {
-      this.activeChat = chat;
+      this.activeChat = {
+        chat,
+        save: (currentChat) => this.chatStore.saveChat(currentChat),
+      };
     }
     return assistantMessage;
   }

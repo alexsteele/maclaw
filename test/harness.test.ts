@@ -7,6 +7,7 @@ import test from "node:test";
 import { Harness } from "../src/harness.js";
 import {
   defaultAgentFile,
+  defaultAgentChatTranscriptFile,
   defaultAgentMemoryFile,
   defaultAgentsFile,
   defaultInboxFile,
@@ -441,7 +442,11 @@ test("harness emits a notification when an origin-backed agent fails", async () 
     const notifications: Array<{ kind: string; text: string; originUserId?: string }> = [];
     await harness.start();
 
-    harness.promptChat = async () => {
+    (
+      harness as unknown as {
+        _chatRuntime: { runStep: () => Promise<never> };
+      }
+    )._chatRuntime.runStep = async () => {
       throw new Error("boom");
     };
 
@@ -487,7 +492,11 @@ test("harness saves delivered notifications to the project inbox", async () => {
     });
     await harness.start();
 
-    harness.promptChat = async () => {
+    (
+      harness as unknown as {
+        _chatRuntime: { runStep: () => Promise<never> };
+      }
+    )._chatRuntime.runStep = async () => {
       throw new Error("boom");
     };
 
@@ -541,7 +550,11 @@ test("harness stores agents and inbox entries in sqlite when configured", async 
 
     await harness.start();
 
-    harness.promptChat = async () => {
+    (
+      harness as unknown as {
+        _chatRuntime: { runStep: () => Promise<never> };
+      }
+    )._chatRuntime.runStep = async () => {
       throw new Error("boom");
     };
 
@@ -696,7 +709,7 @@ test("harness stores agent inbox entries in sqlite when configured", async () =>
 
     await harness.promptChat(created.agent.id, "SQLite agent chat update");
     assert.equal(
-      existsSync(path.join(projectDir, ".maclaw", "chats", `${created.agent.id}.jsonl`)),
+      existsSync(defaultAgentChatTranscriptFile(projectDir, created.agent.id)),
       true,
     );
   } finally {
@@ -774,7 +787,7 @@ test("updateProjectConfig migrates project data when storage changes", async () 
     assert.equal(existsSync(defaultAgentFile(projectDir, created.agent.id)), true);
     assert.equal(existsSync(defaultAgentMemoryFile(projectDir, created.agent.id)), true);
     assert.equal(
-      existsSync(path.join(projectDir, ".maclaw", "chats", `${created.agent.id}.jsonl`)),
+      existsSync(defaultAgentChatTranscriptFile(projectDir, created.agent.id)),
       true,
     );
 

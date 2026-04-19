@@ -24,6 +24,7 @@ import { createSqliteProjectStorage } from "./sqlite.js";
 
 export type ProjectSnapshot = {
   chats: ChatRecord[];
+  agentChats: ChatRecord[];
   tasks: ScheduledTask[];
   agents: AgentRecord[];
   inbox: InboxEntry[];
@@ -60,6 +61,9 @@ export const loadProjectSnapshot = async (
     chats: await Promise.all(
       Array.from(chatIds, (chatId) => storage.chats.loadChat(chatId, chatOptions)),
     ),
+    agentChats: await Promise.all(
+      storage.agents.listAgents().map((agent) => storage.agents.loadAgentChat(agent.id, chatOptions)),
+    ),
     tasks: await storage.tasks.loadTasks(),
     agents: storage.agents.listAgents(),
     inbox: await storage.inbox.loadEntries(),
@@ -88,6 +92,13 @@ export const restoreProjectSnapshot = async (
 
   for (const agent of snapshot.agents) {
     storage.agents.saveAgent(structuredClone(agent));
+  }
+
+  for (const [index, agent] of snapshot.agents.entries()) {
+    const agentChat = snapshot.agentChats[index];
+    if (agentChat) {
+      await storage.agents.saveAgentChat(agent.id, structuredClone(agentChat));
+    }
   }
 
   await storage.inbox.clearEntries();

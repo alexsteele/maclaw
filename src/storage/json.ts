@@ -46,10 +46,13 @@ import type {
 export class JsonFileAgentStore implements AgentStore {
   private readonly filePath: string;
   private readonly agentsDir: string;
+  private readonly legacyChatsDir: string;
 
   constructor(filePath: string) {
     this.filePath = filePath;
-    this.agentsDir = path.join(path.dirname(filePath), "agents");
+    const dataDir = path.dirname(filePath);
+    this.agentsDir = path.join(dataDir, "agents");
+    this.legacyChatsDir = path.join(dataDir, "chats");
   }
 
   getAgent(agentId: string): AgentRecord | undefined {
@@ -78,6 +81,82 @@ export class JsonFileAgentStore implements AgentStore {
 
   listAgents(): AgentRecord[] {
     return Object.values(this.readAgents()).map((record) => structuredClone(record));
+  }
+
+  async loadAgentChat(
+    agentId: string,
+    options: ChatLoadOptions,
+  ): Promise<ChatRecord> {
+    const agent = this.getAgent(agentId);
+    const chatId = agent?.chatId ?? agentId;
+    const metadataPath = agentChatPath(this.agentsDir, agentId);
+    const transcriptPath = agentChatTranscriptPath(this.agentsDir, agentId);
+    const metadata = await readJsonFile<ChatMetadata | null>(metadataPath, null);
+    if (metadata) {
+      const messages = await readJsonLines<Message>(transcriptPath);
+      return normalizeChat(
+        {
+          ...metadata,
+          messages,
+        },
+        options,
+      );
+    }
+
+    const legacyMetadata = await readJsonFile<ChatMetadata | null>(
+      chatPath(this.legacyChatsDir, chatId),
+      null,
+    );
+    if (legacyMetadata) {
+      const messages = await readJsonLines<Message>(
+        chatTranscriptPath(this.legacyChatsDir, chatId),
+      );
+      const chat = normalizeChat(
+        {
+          ...legacyMetadata,
+          messages,
+        },
+        options,
+      );
+      await this.saveAgentChat(agentId, chat);
+      await rm(chatPath(this.legacyChatsDir, chatId), { force: true });
+      await rm(chatTranscriptPath(this.legacyChatsDir, chatId), { force: true });
+      return chat;
+    }
+
+    return createEmptyChat(chatId, options);
+  }
+
+  async saveAgentChat(agentId: string, chat: ChatRecord): Promise<void> {
+    chat.updatedAt = new Date().toISOString();
+    const metadataPath = agentChatPath(this.agentsDir, agentId);
+    const transcriptPath = agentChatTranscriptPath(this.agentsDir, agentId);
+    await ensureDir(path.dirname(metadataPath));
+    const existingMetadata = await readJsonFile<ChatMetadata | null>(metadataPath, null);
+    const existingMessageCount = existingMetadata?.messageCount ?? 0;
+
+    if (existingMessageCount > chat.messages.length) {
+      const transcript = chat.messages.map((message) => JSON.stringify(message)).join("\n");
+      await writeFile(transcriptPath, transcript.length > 0 ? `${transcript}\n` : "", "utf8");
+    } else {
+      for (const message of chat.messages.slice(existingMessageCount)) {
+        await appendJsonLine(transcriptPath, message);
+      }
+    }
+
+    await writeJsonFile(metadataPath, toChatMetadata(chat));
+  }
+
+  async deleteAgentChat(agentId: string): Promise<boolean> {
+    const metadataPath = agentChatPath(this.agentsDir, agentId);
+    const transcriptPath = agentChatTranscriptPath(this.agentsDir, agentId);
+    if (!existsSync(metadataPath) && !existsSync(transcriptPath)) {
+      return false;
+    }
+
+    await rm(metadataPath, { force: true });
+    await rm(transcriptPath, { force: true });
+    return true;
   }
 
   private readAgents(): Record<string, AgentRecord> {
@@ -268,6 +347,12 @@ const chatPath = (chatsDir: string, chatId: string): string =>
 
 const chatTranscriptPath = (chatsDir: string, chatId: string): string =>
   path.join(chatsDir, `${chatId}.jsonl`);
+
+const agentChatPath = (agentsDir: string, agentId: string): string =>
+  path.join(agentsDir, agentId, "chat.json");
+
+const agentChatTranscriptPath = (agentsDir: string, agentId: string): string =>
+  path.join(agentsDir, agentId, "chat.jsonl");
 
 const createEmptyChat = (
   chatId: string,

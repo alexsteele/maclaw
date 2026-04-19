@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Agent, MemoryAgentStore } from "../src/agent.js";
+import type { ChatReply } from "../src/chats.js";
 import type { AgentRecord, Message } from "../src/types.js";
 
 const createRecord = (): AgentRecord => ({
@@ -12,6 +13,19 @@ const createRecord = (): AgentRecord => ({
   timeoutMs: 60 * 60 * 1000,
   stepCount: 0,
   createdAt: "2026-04-04T10:00:00.000Z",
+});
+
+const chatOptions = {
+  retentionDays: 30,
+  compressionMode: "none" as const,
+};
+
+const createRuntime = (
+  run: (input: string) => Promise<Message>,
+): { runStep: (...args: unknown[]) => Promise<ChatReply> } => ({
+  async runStep(_chat, input) {
+    return { message: await run(String(input)) };
+  },
 });
 
 const waitForAgentToSettle = async (
@@ -41,12 +55,14 @@ test("Agent completes when a step returns the done marker", async () => {
   const agent = new Agent(
     record,
     store,
-    async (_chatId, input): Promise<Message> => ({
+    chatOptions,
+    createRuntime(async (input): Promise<Message> => ({
       id: "msg-1",
       role: "assistant",
       content: input === "Do the thing" ? "Finished\n<AGENT_DONE>" : "unexpected",
       createdAt: new Date().toISOString(),
-    }),
+    })),
+    [],
   );
 
   agent.start();
@@ -65,12 +81,14 @@ test("Agent stops when it reaches max steps without the done marker", async () =
   const agent = new Agent(
     record,
     store,
-    async (): Promise<Message> => ({
+    chatOptions,
+    createRuntime(async (): Promise<Message> => ({
       id: "msg-1",
       role: "assistant",
       content: "Still working",
       createdAt: new Date().toISOString(),
-    }),
+    })),
+    [],
   );
 
   agent.start();
@@ -87,9 +105,11 @@ test("Agent can be cancelled before it starts", async () => {
   const agent = new Agent(
     record,
     store,
-    async () => {
+    chatOptions,
+    createRuntime(async () => {
       throw new Error("should not run");
-    },
+    }),
+    [],
   );
 
   agent.cancel();
@@ -107,7 +127,8 @@ test("Agent steer is used on the next loop iteration", async () => {
   const agent = new Agent(
     record,
     store,
-    async (_chatId, input): Promise<Message> => {
+    chatOptions,
+    createRuntime(async (input): Promise<Message> => {
       inputs.push(input);
 
       if (inputs.length === 1) {
@@ -126,7 +147,8 @@ test("Agent steer is used on the next loop iteration", async () => {
         content: "Done\n<AGENT_DONE>",
         createdAt: new Date().toISOString(),
       };
-    },
+    }),
+    [],
   );
 
   agent.start();
@@ -143,12 +165,14 @@ test("Agent stops when its timeout is exceeded", async () => {
   const agent = new Agent(
     record,
     store,
-    async (): Promise<Message> => ({
+    chatOptions,
+    createRuntime(async (): Promise<Message> => ({
       id: "msg-timeout",
       role: "assistant",
       content: "Still working",
       createdAt: new Date().toISOString(),
-    }),
+    })),
+    [],
   );
 
   agent.start();
@@ -165,7 +189,8 @@ test("Agent waits between steps when stepIntervalMs is set", async () => {
   const agent = new Agent(
     record,
     store,
-    async (): Promise<Message> => {
+    chatOptions,
+    createRuntime(async (): Promise<Message> => {
       timestamps.push(Date.now());
       return {
         id: `msg-${timestamps.length}`,
@@ -173,7 +198,8 @@ test("Agent waits between steps when stepIntervalMs is set", async () => {
         content: "Still working",
         createdAt: new Date().toISOString(),
       };
-    },
+    }),
+    [],
   );
 
   agent.start();
@@ -200,12 +226,14 @@ test("Agent restore resumes a running agent without resetting startedAt", async 
   const agent = new Agent(
     record,
     store,
-    async (): Promise<Message> => ({
+    chatOptions,
+    createRuntime(async (): Promise<Message> => ({
       id: "msg-restored",
       role: "assistant",
       content: "Still working",
       createdAt: new Date().toISOString(),
-    }),
+    })),
+    [],
   );
 
   const restored = agent.restore();
