@@ -17,13 +17,15 @@ import {
 } from "../config.js";
 import { renderModelSuggestions } from "../models.js";
 import {
+  getRemoteRecipe,
+  listRemoteRecipes,
+} from "../remote/index.js";
+import {
   defaultServerPort,
-  defaultTeleportForwardPort,
   defaultServerConfigFile,
   defaultServerSecretsFile,
   maclawHomeDir,
   type EditableServerConfig,
-  type SshConfig,
   type RemoteConfig,
   type ServerSecrets,
   type ServerConfig,
@@ -684,73 +686,39 @@ const runRemoteSetup = async (
 
   prompt.print();
   prompt.print("Remote setup:");
-  prompt.print("  A remote lets maclaw open a temporary SSH tunnel for teleport.");
-  prompt.print("  Run `maclaw server --api-only` on the remote host.");
+  prompt.print("  A remote lets maclaw connect to another maclaw runtime.");
+  prompt.print("  Shell remotes attach to a remote REPL. HTTP remotes talk to a remote server.");
 
   const configuredRemoteNames = (serverConfig.remotes ?? []).map((remote) => remote.name);
   if (configuredRemoteNames.length > 0) {
     prompt.print(`Configured remotes: ${configuredRemoteNames.join(", ")}`);
   }
 
-  const remoteName = await prompt.askLine(
-    "Remote name",
-    configuredRemoteNames[0] ?? "remote",
+  const remoteKinds = listRemoteRecipes().map((recipe) => recipe.name);
+  const existingRemote = configuredRemoteNames.length > 0
+    ? (serverConfig.remotes ?? []).find((remote) => remote.name === configuredRemoteNames[0])
+    : undefined;
+  const remoteKind = await prompt.askChoice(
+    "Remote type",
+    remoteKinds,
+    existingRemote?.provider && remoteKinds.includes(existingRemote.provider)
+      ? existingRemote.provider
+      : remoteKinds[0] ?? "ssh",
   );
-  const existingRemote = (serverConfig.remotes ?? []).find((remote) => remote.name === remoteName);
-  printExistingRemoteConfig(prompt, existingRemote);
-  const existingSshRemote: RemoteConfig | undefined =
-    existingRemote?.provider === "ssh" ? existingRemote : undefined;
-  const existingSshConfig = existingSshRemote?.metadata as SshConfig | undefined;
+  const remoteRecipe = getRemoteRecipe(remoteKind);
+  if (!remoteRecipe) {
+    throw new Error(`Unknown remote recipe: ${remoteKind}`);
+  }
 
-  const sshHost = await prompt.askLine(
-    "SSH host",
-    existingSshConfig?.host ?? "",
-  );
-  const sshUser = await prompt.askLine(
-    "SSH user (optional)",
-    existingSshConfig?.user ?? "",
-    { preserveBlank: true },
-  );
-  const sshPort = Number.parseInt(
-    await prompt.askLine(
-      "SSH port",
-      String(existingSshConfig?.port ?? 22),
-    ),
-    10,
-  ) || 22;
-  const remoteServerPort = Number.parseInt(
-    await prompt.askLine(
-      "Remote maclaw server port",
-      String(existingRemote?.remoteServerPort ?? defaultServerPort()),
-    ),
-    10,
-  ) || defaultServerPort();
-  const localForwardPort = Number.parseInt(
-    await prompt.askLine(
-      "Local forwarded port",
-      String(existingRemote?.localForwardPort ?? defaultTeleportForwardPort()),
-    ),
-    10,
-  ) || defaultTeleportForwardPort();
-  const runtimeKind = await prompt.askLine(
-    "Runtime mode (host or docker)",
-    existingRemote?.runtime?.kind ?? "host",
-  );
+  const existingRemoteForKind = existingRemote?.provider === remoteKind ? existingRemote : undefined;
+  printExistingRemoteConfig(prompt, existingRemoteForKind);
 
-  const remoteConfig: RemoteConfig = {
-    name: remoteName,
-    provider: "ssh",
-    metadata: {
-      host: sshHost,
-      ...(sshUser ? { user: sshUser } : {}),
-      port: sshPort,
-    },
-    remoteServerPort,
-    localForwardPort,
-    runtime: runtimeKind.trim() === "docker" ? { kind: "docker" } : { kind: "host" },
-  };
+  const remoteConfig = await remoteRecipe.setup(createRemoteSetupPrompter(prompt), existingRemoteForKind);
+  if (typeof remoteConfig === "string") {
+    return false;
+  }
   serverConfig.remotes = [
-    ...(serverConfig.remotes ?? []).filter((remote) => remote.name !== remoteName),
+    ...(serverConfig.remotes ?? []).filter((remote) => remote.name !== remoteConfig.name),
     remoteConfig,
   ];
   return true;
@@ -822,6 +790,23 @@ const printExistingRemoteConfig = (
   prompt.print(`Current remote config for ${remoteConfig.name}:`);
   prompt.print(JSON.stringify(remoteConfig, null, 2));
 };
+
+const createRemoteSetupPrompter = (prompt: SetupPrompter) => ({
+  askInt: async (label: string, defaultValue: number): Promise<number> => {
+    const answer = await prompt.askLine(label, String(defaultValue));
+    return Number.parseInt(answer, 10) || defaultValue;
+  },
+  askLine: async (
+    label: string,
+    defaultValue?: string,
+    options?: { preserveBlank?: boolean },
+  ): Promise<string> => {
+    return await prompt.askLine(label, defaultValue, options);
+  },
+  print: (line?: string): void => {
+    prompt.print(line);
+  },
+});
 
 const askSetupSection = async (prompt: SetupPrompter): Promise<SetupSection> => {
   return prompt.askChoice<SetupSection>(

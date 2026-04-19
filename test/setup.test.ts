@@ -334,6 +334,7 @@ test("runSetup can jump straight to remotes with startSection", async () => {
       startSection: "remotes",
       answers: [
         "yes",
+        "ssh",
         "gpu-box",
         "gpu.example.com",
         "alex",
@@ -361,6 +362,7 @@ test("runSetup can jump straight to remotes with startSection", async () => {
 
     assert.deepEqual(serverConfig.remotes, [
       {
+        client: "http",
         metadata: {
           host: "gpu.example.com",
           user: "alex",
@@ -377,6 +379,7 @@ test("runSetup can jump straight to remotes with startSection", async () => {
     ]);
     assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
     assert.match(output.toString(), /Remote setup:/u);
+    assert.match(output.toString(), /Remote type/u);
     assert.match(output.toString(), /SSH host/u);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
