@@ -313,7 +313,12 @@ function runAttachedSshSession(
     provider: remote.provider,
   });
 
-  const child = createSshProcess(remote, buildRemoteReplStartCommand(), options, "inherit");
+  const child = createSshProcess(
+    remote,
+    buildRemoteReplStartCommand(remote.name),
+    options,
+    "inherit",
+  );
   return waitForAttachedProcess(child, "SSH shell session exited.");
 }
 

@@ -491,7 +491,10 @@ test("TeleportController attaches an SSH shell remote", async () => {
   assert.match(spawnCalls[0]?.args.join(" "), /-p 2222/u);
   assert.match(spawnCalls[0]?.args.join(" "), /alex@gpu\.example\.com/u);
   assert.deepEqual(spawnCalls[0]?.args.slice(-3, -1), ["sh", "-lc"]);
-  assert.match(spawnCalls[0]?.args[spawnCalls[0].args.length - 1] ?? "", /npm start/u);
+  assert.match(
+    spawnCalls[0]?.args[spawnCalls[0].args.length - 1] ?? "",
+    /MACLAW_PROMPT='gpu-box' npm start/u,
+  );
 });
 
 test("TeleportController attaches an AWS shell remote", async () => {
@@ -540,7 +543,12 @@ test("TeleportController attaches an AWS shell remote", async () => {
     "AWS-StartInteractiveCommand",
     "--parameters",
   ]);
-  assert.match(spawnCalls[0]?.args.join(" "), /"command":\["sudo sh -lc '[^"]*npm start/u);
+  assert.match(
+    spawnCalls[0]?.args.join(" "),
+    /"command":\["sudo sh -lc '[^"]*MACLAW_PROMPT=/u,
+  );
+  assert.match(spawnCalls[0]?.args.join(" "), /aws-dev/u);
+  assert.match(spawnCalls[0]?.args.join(" "), /npm start/u);
 });
 
 test("TeleportSession reuses one SSH tunnel across multiple commands", async () => {

@@ -374,7 +374,7 @@ function createEc2InteractiveSession(
     "AWS-StartInteractiveCommand",
     "--parameters",
     JSON.stringify({
-      command: [`sudo sh -lc ${shellQuote(buildRemoteReplStartCommand())}`],
+      command: [`sudo sh -lc ${shellQuote(buildRemoteReplStartCommand(remote.name))}`],
     }),
   ];
   logger.info("remote", "aws-cli", {

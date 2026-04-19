@@ -63,9 +63,10 @@ const replOrigin: Origin = {
 
 export const formatReplPrompt = (
   target?: TeleportTarget,
+  promptPrefix: string | undefined = process.env.MACLAW_PROMPT,
 ): string =>
   !target
-    ? "> "
+    ? `${promptPrefix?.trim() ? `${promptPrefix.trim()}> ` : "> "}`
     : `${formatTeleportPromptHeader(target.target)}> `;
 
 const formatTeleportPromptHeader = (target: string): string => {

@@ -104,15 +104,25 @@ export function buildRemoteServerStopCommand(options?: RemoteBootstrapOptions): 
 /**
  * Build the shell command used to launch the interactive remote `maclaw` REPL.
  */
-export function buildRemoteReplStartCommand(options?: RemoteBootstrapOptions): string {
+export function buildRemoteReplStartCommand(
+  promptPrefix?: string,
+  options?: RemoteBootstrapOptions,
+): string {
   const bootstrap = resolveRemoteBootstrapConfig(undefined, options);
+  const promptExport = promptPrefix?.trim()
+    ? `MACLAW_PROMPT=${shellQuote(promptPrefix.trim())} `
+    : "";
   return script(`
     set -e
     cd ${bootstrap.workspace}
-    npm start
+    ${promptExport}npm start
   `);
 }
 
 function script(value: string): string {
   return value.trim();
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }

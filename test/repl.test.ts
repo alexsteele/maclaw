@@ -23,6 +23,7 @@ test("wrapReplLine wraps long lines and preserves indentation", () => {
 
 test("formatReplPrompt shows teleport target when attached", () => {
   assert.equal(formatReplPrompt(), "> ");
+  assert.equal(formatReplPrompt(undefined, "aws-dev"), "aws-dev> ");
   assert.equal(
     formatReplPrompt({
       target: "local-box",
