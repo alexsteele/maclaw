@@ -30,18 +30,18 @@ import type { Tool } from "../tools/types.js";
 import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
 const replHelpText = [
-  helpText,
-  "  /project switch X  Switch the REPL to project folder X",
-  "  /quit             Exit the REPL",
-  "  /verbose <on|off>  Toggle verbose reply metadata",
-  "  /wrap [off|N]     Set REPL output wrap width",
+  helpText.trimEnd(),
+  "* /project switch X  Switch the REPL to project folder X",
+  "* /quit              Exit the REPL",
+  "* /verbose <on|off>  Toggle verbose reply metadata",
+  "* /wrap [off|N]      Set REPL output wrap width",
 ].join("\n");
 
 const replProjectHelpText = [
-  projectHelpText,
-  "  /project switch X  Switch the REPL to project folder X",
-  "  /verbose <on|off>  Toggle verbose reply metadata",
-  "  /wrap [off|N]     Set REPL output wrap width",
+  projectHelpText.trimEnd(),
+  "* /project switch X  Switch the REPL to project folder X",
+  "* /verbose <on|off>  Toggle verbose reply metadata",
+  "* /wrap [off|N]      Set REPL output wrap width",
 ].join("\n");
 
 const expandHome = (value: string): string => {
