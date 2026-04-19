@@ -695,6 +695,11 @@ const runRemoteSetup = async (
   }
 
   const remoteKinds = listRemoteRecipes().map((recipe) => recipe.name);
+  const remoteRecipes = listRemoteRecipes();
+  prompt.print("Available remote types:");
+  remoteRecipes.forEach((recipe) => {
+    prompt.print(`  - ${recipe.name}: ${recipe.description}`);
+  });
   const existingRemote = configuredRemoteNames.length > 0
     ? (serverConfig.remotes ?? []).find((remote) => remote.name === configuredRemoteNames[0])
     : undefined;

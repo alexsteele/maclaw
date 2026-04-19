@@ -379,6 +379,8 @@ test("runSetup can jump straight to remotes with startSection", async () => {
     ]);
     assert.doesNotMatch(output.toString(), /Where do you want to start\?/u);
     assert.match(output.toString(), /Remote setup:/u);
+    assert.match(output.toString(), /Available remote types:/u);
+    assert.match(output.toString(), /ssh: Remote maclaw runtime accessed over SSH\./u);
     assert.match(output.toString(), /Remote type/u);
     assert.match(output.toString(), /SSH host/u);
   } finally {
