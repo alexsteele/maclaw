@@ -24,6 +24,10 @@ export type RemoteConnectOptions = {
   startupDelayMs?: number;
 };
 
+export type RemoteAttachOptions = {
+  spawnFn?: typeof spawn;
+};
+
 export type RemoteBootstrapOptions = {
   installMarker?: string;
   nodeMajor?: number;
@@ -90,6 +94,11 @@ export type Remote = {
    * Connect to the remote runtime and return a ready-to-use maclaw client.
    */
   connect(options?: RemoteConnectOptions): Promise<RemoteConnection>;
+  /**
+   * Attach the current terminal directly to a remote `maclaw` session when the
+   * remote supports an interactive shell client.
+   */
+  attachShell?(options?: RemoteAttachOptions): Promise<RemoteActionResult>;
   /**
    * Stop the remote maclaw runtime when the provider supports it.
    */

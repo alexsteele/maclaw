@@ -19,10 +19,15 @@ import {
   buildDockerStopCommand,
   isDockerRuntime,
 } from "./docker.js";
-import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
+import {
+  buildRemoteReplStartCommand,
+  buildRemoteServerStartCommand,
+  buildRemoteServerStopCommand,
+} from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
+  RemoteAttachOptions,
   RemoteActionResult,
   RemoteConnectOptions,
   RemoteConnection,
@@ -147,7 +152,14 @@ export function createSshRemote(config: RemoteConfig): Remote {
       );
     },
     async connect(options: RemoteConnectOptions = {}) {
+      if (this.config.client === "shell") {
+        throw new Error("Shell remotes require an interactive /teleport session in the REPL.");
+      }
+
       return await createSshConnection(this.config.name, this.config, options);
+    },
+    async attachShell(options: RemoteAttachOptions = {}) {
+      return await runAttachedSshSession(this.config, options);
     },
     async stop(options?: RemoteInitOptions) {
       if (this.config.provider !== "ssh") {
@@ -235,7 +247,10 @@ function sshArgs(remote: RemoteConfig, command: string): string[] {
   ];
 }
 
-function createSshShell(remote: RemoteConfig) {
+function createSshShell(
+  remote: RemoteConfig,
+  options: RemoteConnectOptions = {},
+) {
   return {
     async run(command: string): Promise<RemoteActionResult> {
       logger.info("remote", "run", {
@@ -243,9 +258,7 @@ function createSshShell(remote: RemoteConfig) {
         provider: remote.provider,
       });
 
-      const child = spawn("ssh", sshArgs(remote, command), {
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const child = createSshProcess(remote, command, options);
 
       let stdout = "";
       let stderr = "";
@@ -271,11 +284,52 @@ function createSshShell(remote: RemoteConfig) {
   };
 }
 
+function createSshProcess(
+  remote: RemoteConfig,
+  command: string,
+  options: RemoteConnectOptions | RemoteAttachOptions = {},
+  stdio: "inherit" | ["pipe", "pipe", "pipe"] = ["pipe", "pipe", "pipe"],
+) {
+  const spawnFn = options.spawnFn ?? spawn;
+  return spawnFn("ssh", sshArgs(remote, command), {
+    stdio,
+  });
+}
+
 function runSshCommand(
   remote: RemoteConfig,
   command: string,
+  options: RemoteConnectOptions = {},
 ): Promise<RemoteActionResult> {
-  return createSshShell(remote).run(command);
+  return createSshShell(remote, options).run(command);
+}
+
+function runAttachedSshSession(
+  remote: RemoteConfig,
+  options: RemoteAttachOptions = {},
+): Promise<RemoteActionResult> {
+  logger.info("remote", "attach-shell", {
+    name: remote.name,
+    provider: remote.provider,
+  });
+
+  const child = createSshProcess(remote, buildRemoteReplStartCommand(), options, "inherit");
+  return waitForAttachedProcess(child, "SSH shell session exited.");
+}
+
+function waitForAttachedProcess(
+  child: ReturnType<typeof createSshProcess>,
+  defaultMessage: string,
+): Promise<RemoteActionResult> {
+  return new Promise<RemoteActionResult>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      resolve({
+        exitCode: code ?? (signal ? 1 : 0),
+        message: signal ? `${defaultMessage} (${signal})` : defaultMessage,
+      });
+    });
+  });
 }
 
 function getRemoteServerPort(remote: RemoteConfig): number {

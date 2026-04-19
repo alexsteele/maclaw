@@ -19,6 +19,57 @@ useDummyProviderEnv();
 
 const actualFetch = globalThis.fetch;
 
+const createSpawnedProcess = (
+  {
+    exitCode = 0,
+    stderr = "",
+    stdout = "",
+  }: {
+    exitCode?: number;
+    stderr?: string;
+    stdout?: string;
+  } = {},
+): EventEmitter & {
+  kill: (signal?: NodeJS.Signals | number) => boolean;
+  stdin: {
+    write: (chunk: string) => boolean;
+  };
+  stderr: EventEmitter;
+  stdout: EventEmitter;
+} => {
+  const child = new EventEmitter() as EventEmitter & {
+    kill: (signal?: NodeJS.Signals | number) => boolean;
+    stdin: {
+      write: (chunk: string) => boolean;
+    };
+    stderr: EventEmitter;
+    stdout: EventEmitter;
+  };
+  child.stdin = {
+    write: () => true,
+  };
+  child.stderr = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.kill = () => {
+    queueMicrotask(() => {
+      child.emit("exit", 0, null);
+    });
+    return true;
+  };
+
+  queueMicrotask(() => {
+    if (stdout.length > 0) {
+      child.stdout.emit("data", stdout);
+    }
+    if (stderr.length > 0) {
+      child.stderr.emit("data", stderr);
+    }
+    child.emit("exit", exitCode, null);
+  });
+
+  return child;
+};
+
 const createServer = (
   rootDir: string,
   homeDir: string,
@@ -370,6 +421,126 @@ test("sendTeleportCommand uses a configured AWS remote", async () => {
       ],
     },
   ]);
+});
+
+test("sendTeleportCommand rejects shell remotes outside an interactive REPL", async () => {
+  await assert.rejects(
+    sendTeleportCommand(
+      "gpu-box",
+      {
+        project: "home",
+        chatId: "remote-chat",
+        text: "/project",
+      },
+      {
+        remotes: [
+          {
+            name: "gpu-box",
+            provider: "ssh",
+            client: "shell",
+            metadata: {
+              host: "gpu.example.com",
+              user: "alex",
+              port: 2222,
+            },
+          },
+        ],
+      },
+    ),
+    /interactive \/teleport session in the REPL/u,
+  );
+});
+
+test("TeleportController attaches an SSH shell remote", async () => {
+  const spawnCalls: Array<{
+    command: string;
+    args: string[];
+  }> = [];
+
+  const controller = new TeleportController(
+    {
+      remotes: [
+        {
+          name: "gpu-box",
+          provider: "ssh",
+          client: "shell",
+          metadata: {
+            host: "gpu.example.com",
+            user: "alex",
+            port: 2222,
+          },
+          remoteServerPort: 4400,
+        },
+      ],
+    },
+    {
+      tunnel: {
+        spawnFn(command, args) {
+          spawnCalls.push({ command, args });
+          return createSpawnedProcess() as never;
+        },
+      },
+    },
+  );
+
+  const result = await controller.attachShell("gpu-box");
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(spawnCalls[0]?.command, "ssh");
+  assert.match(spawnCalls[0]?.args.join(" "), /-p 2222/u);
+  assert.match(spawnCalls[0]?.args.join(" "), /alex@gpu\.example\.com/u);
+  assert.deepEqual(spawnCalls[0]?.args.slice(-3, -1), ["sh", "-lc"]);
+  assert.match(spawnCalls[0]?.args[spawnCalls[0].args.length - 1] ?? "", /npm start/u);
+});
+
+test("TeleportController attaches an AWS shell remote", async () => {
+  const spawnCalls: Array<{
+    command: string;
+    args: string[];
+  }> = [];
+
+  const controller = new TeleportController(
+    {
+      remotes: [
+        {
+          name: "aws-dev",
+          provider: "aws-ec2",
+          client: "shell",
+          metadata: {
+            region: "us-west-2",
+            instanceId: "i-1234567890abcdef0",
+          },
+        },
+      ],
+    },
+    {
+      tunnel: {
+        spawnFn(command, args) {
+          spawnCalls.push({ command, args });
+          return createSpawnedProcess() as never;
+        },
+      },
+    },
+  );
+
+  const result = await controller.attachShell("aws-dev");
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(spawnCalls[0]?.command, "aws");
+  assert.deepEqual(spawnCalls[0]?.args.slice(0, 9), [
+    "ssm",
+    "start-session",
+    "--region",
+    "us-west-2",
+    "--target",
+    "i-1234567890abcdef0",
+    "--document-name",
+    "AWS-StartInteractiveCommand",
+    "--parameters",
+  ]);
+  assert.match(spawnCalls[0]?.args.join(" "), /"command":\["sudo sh -lc '[^"]*npm start/u);
 });
 
 test("TeleportSession reuses one SSH tunnel across multiple commands", async () => {

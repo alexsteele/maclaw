@@ -5,7 +5,12 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { Channel } from "../channels/channel.js";
 import { EmailChannel } from "../channels/email.js";
-import { dispatchCommand, helpText, projectHelpText } from "../commands.js";
+import {
+  dispatchCommand,
+  helpText,
+  parseTeleportConnectArgs,
+  projectHelpText,
+} from "../commands.js";
 import { Harness, type HarnessOptions } from "../harness.js";
 import { ChannelRouter } from "../router.js";
 import { REPL_DISPLAY_INSTRUCTIONS } from "../prompt.js";
@@ -527,6 +532,25 @@ class Repl {
     }
 
     if (line.startsWith("/teleport")) {
+      const shellTarget = this.getShellTeleportTarget(line);
+      if (shellTarget) {
+        output.write("\n");
+        this.rl.pause();
+        try {
+          const result = await this.teleport.attachShell(shellTarget);
+          if (result.exitCode !== 0) {
+            this.writeLine(
+              result.message.trim().length > 0
+                ? result.message
+                : `shell session exited with code ${result.exitCode}`,
+            );
+          }
+        } finally {
+          this.rl.resume();
+        }
+        return false;
+      }
+
       const commandReply = await dispatchCommand(this.harness, line, {
         origin: replOrigin,
         teleport: this.teleport,
@@ -588,6 +612,26 @@ class Repl {
       await channel.stop();
     }
     this.channels.clear();
+  }
+
+  private getShellTeleportTarget(line: string): string | undefined {
+    if (line === "/teleport" || line === "/teleport list" || line === "/teleport status" || line === "/teleport disconnect") {
+      return undefined;
+    }
+
+    const args = line.startsWith("/teleport connect ")
+      ? line.slice("/teleport connect ".length)
+      : line.startsWith("/teleport ")
+        ? line.slice("/teleport ".length)
+        : undefined;
+    if (args === undefined) {
+      return undefined;
+    }
+
+    const parsed = parseTeleportConnectArgs(args);
+    return parsed.target && this.teleport.isShellTarget(parsed.target)
+      ? parsed.target
+      : undefined;
   }
 }
 

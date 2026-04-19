@@ -6,6 +6,8 @@
  */
 import { logger } from "../logger.js";
 import type { RemoteCommandResponse } from "../remote/client.js";
+import { createRemote, findRemoteConfig } from "../remote/index.js";
+import type { RemoteActionResult } from "../remote/index.js";
 import type { RemoteConfig, ServerConfig } from "../server-config.js";
 import type { TeleportOptions } from "./options.js";
 import { TeleportSession, type TeleportTarget } from "./session.js";
@@ -34,6 +36,10 @@ export class TeleportController {
 
   listRemotes(): RemoteConfig[] {
     return [...(this.config?.remotes ?? [])];
+  }
+
+  isShellTarget(target: string): boolean {
+    return findRemoteConfig(this.config ?? {}, target)?.client === "shell";
   }
 
   async connect(
@@ -85,5 +91,34 @@ export class TeleportController {
       chatId: this.attachedTarget.chatId,
       text,
     });
+  }
+
+  async attachShell(target: string): Promise<RemoteActionResult> {
+    const remoteConfig = findRemoteConfig(this.config ?? {}, target);
+    if (!remoteConfig) {
+      throw new Error(`Unknown remote: ${target}`);
+    }
+
+    if (remoteConfig.client !== "shell") {
+      throw new Error(`Remote ${target} is not configured with client: shell.`);
+    }
+
+    await this.disconnect();
+    const remote = createRemote(remoteConfig);
+    if (!remote.attachShell) {
+      throw new Error(`Remote ${target} does not support attached shell sessions.`);
+    }
+
+    logger.info("teleport", "attach-shell", {
+      target,
+    });
+    const result = await remote.attachShell({
+      spawnFn: this.options.tunnel?.spawnFn,
+    });
+    logger.info("teleport", "detach-shell", {
+      target,
+      exitCode: result.exitCode,
+    });
+    return result;
   }
 }

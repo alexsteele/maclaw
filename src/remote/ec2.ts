@@ -19,10 +19,15 @@ import {
   buildDockerStopCommand,
   isDockerRuntime,
 } from "./docker.js";
-import { buildRemoteServerStartCommand, buildRemoteServerStopCommand } from "./server-process.js";
+import {
+  buildRemoteReplStartCommand,
+  buildRemoteServerStartCommand,
+  buildRemoteServerStopCommand,
+} from "./server-process.js";
 import { createTunnelConnection } from "./tunnel.js";
 import type {
   Remote,
+  RemoteAttachOptions,
   RemoteActionResult,
   RemoteConnectOptions,
   RemoteConnection,
@@ -128,7 +133,14 @@ export function createEc2Remote(config: RemoteConfig): Remote {
       );
     },
     async connect(options: RemoteConnectOptions = {}) {
+      if (this.config.client === "shell") {
+        throw new Error("Shell remotes require an interactive /teleport session in the REPL.");
+      }
+
       return await createEc2Connection(this.config.name, this.config, options);
+    },
+    async attachShell(options: RemoteAttachOptions = {}) {
+      return await runAttachedEc2Session(this.config, options);
     },
     async stop(options?: RemoteInitOptions) {
       return await runEc2ShellCommand(
@@ -178,18 +190,20 @@ async function runEc2ShellCommand(
   remote: RemoteConfig,
   commands: string[],
   comment: string,
+  options: RemoteConnectOptions = {},
 ): Promise<RemoteActionResult> {
-  const commandId = await sendEc2ShellCommand(remote, commands, comment);
+  const commandId = await sendEc2ShellCommand(remote, commands, comment, options);
   if (typeof commandId !== "string") {
     return commandId;
   }
 
-  return await waitForEc2Command(remote, commandId);
+  return await waitForEc2Command(remote, commandId, options);
 }
 
 async function waitForEc2Command(
   remote: RemoteConfig,
   commandId: string,
+  options: RemoteConnectOptions = {},
 ): Promise<RemoteActionResult> {
   const metadata = remote.metadata as Ec2Config;
 
@@ -205,7 +219,7 @@ async function waitForEc2Command(
       commandId,
       "--output",
       "json",
-    ]);
+    ], options);
 
     if (result.exitCode !== 0) {
       const message = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
@@ -262,6 +276,7 @@ async function sendEc2ShellCommand(
   remote: RemoteConfig,
   commands: string[],
   comment: string,
+  options: RemoteConnectOptions = {},
 ): Promise<string | RemoteActionResult> {
   const metadata = remote.metadata as Ec2Config;
   const result = await runAwsCli(remote, [
@@ -279,7 +294,7 @@ async function sendEc2ShellCommand(
     JSON.stringify({ commands }),
     "--output",
     "json",
-  ]);
+  ], options);
   if (result.exitCode !== 0) {
     return {
       exitCode: result.exitCode,
@@ -304,6 +319,7 @@ async function sendEc2ShellCommand(
 async function runAwsCli(
   remote: RemoteConfig,
   args: string[],
+  options: RemoteConnectOptions = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   logger.info("remote", "aws-cli", {
     name: remote.name,
@@ -311,7 +327,8 @@ async function runAwsCli(
     args: args.join("\n"),
   });
 
-  const child = spawn("aws", args, {
+  const spawnFn = options.spawnFn ?? spawn;
+  const child = spawnFn("aws", args, {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -338,6 +355,57 @@ async function runAwsCli(
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createEc2InteractiveSession(
+  remote: RemoteConfig,
+  options: RemoteAttachOptions = {},
+) {
+  const metadata = remote.metadata as Ec2Config;
+  const spawnFn = options.spawnFn ?? spawn;
+  const sessionArgs = [
+    "ssm",
+    "start-session",
+    "--region",
+    metadata.region,
+    "--target",
+    metadata.instanceId,
+    "--document-name",
+    "AWS-StartInteractiveCommand",
+    "--parameters",
+    JSON.stringify({
+      command: [`sudo sh -lc ${shellQuote(buildRemoteReplStartCommand())}`],
+    }),
+  ];
+  logger.info("remote", "aws-cli", {
+    name: remote.name,
+    provider: remote.provider,
+    args: sessionArgs.join("\n"),
+  });
+
+  return spawnFn("aws", sessionArgs, {
+    stdio: "inherit",
+  });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function runAttachedEc2Session(
+  remote: RemoteConfig,
+  options: RemoteAttachOptions = {},
+): Promise<RemoteActionResult> {
+  const child = createEc2InteractiveSession(remote, options);
+  return new Promise<RemoteActionResult>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      resolve({
+        exitCode: code ?? (signal ? 1 : 0),
+        message: signal ? `AWS EC2 shell session exited. (${signal})` : "AWS EC2 shell session exited.",
+      });
+    });
+  });
 }
 
 function createEc2Connection(

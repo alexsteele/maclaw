@@ -2218,6 +2218,24 @@ const removeTeleportFlag = (value: string, name: string): string => {
   return value.replace(pattern, "").trim();
 };
 
+export const parseTeleportConnectArgs = (
+  args: string,
+): { requestedChatId?: string; requestedProject?: string; target?: string } => {
+  const body = args.trim();
+  const requestedProject = parseTeleportFlagValue(body, "--project");
+  const requestedChatId = parseTeleportFlagValue(body, "--chat");
+  const target = removeTeleportFlag(
+    removeTeleportFlag(body, "--project"),
+    "--chat",
+  ).trim() || undefined;
+
+  return {
+    requestedChatId,
+    requestedProject,
+    target,
+  };
+};
+
 const renderTeleportStatus = (target: ReturnType<TeleportControl["getTarget"]>): string =>
   !target
     ? "teleport: disconnected"
@@ -2267,13 +2285,7 @@ const handleTeleportCommand: CommandHandler = async (harness, input, options) =>
           return "Teleport is not supported in this interface yet.";
         }
 
-        const body = args.trim();
-        const requestedProject = parseTeleportFlagValue(body, "--project");
-        const requestedChatId = parseTeleportFlagValue(body, "--chat");
-        const target = removeTeleportFlag(
-          removeTeleportFlag(body, "--project"),
-          "--chat",
-        ).trim();
+        const { requestedProject, requestedChatId, target } = parseTeleportConnectArgs(args);
         if (!target) {
           return teleportHelpText;
         }

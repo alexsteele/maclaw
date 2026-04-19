@@ -1,5 +1,5 @@
 /**
- * Maclaw request/response types and HTTP client.
+ * Maclaw request/response types and client implementations.
  *
  * This module owns the shared `/api/command` protocol used to talk to a maclaw
  * runtime over HTTP.
@@ -37,6 +37,28 @@ const normalizeBaseUrl = (baseUrl: string): string => {
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 };
 
+const parseRemoteCommandResponse = (rawBody: string): RemoteCommandResponse => {
+  const parsed = rawBody.trim().length === 0
+    ? {}
+    : JSON.parse(rawBody) as { error?: string } & Partial<RemoteCommandResponse>;
+
+  if (
+    typeof parsed.project !== "string" ||
+    typeof parsed.chatId !== "string" ||
+    typeof parsed.reply !== "string" ||
+    typeof parsed.handledAsCommand !== "boolean"
+  ) {
+    throw new Error("Remote command response was invalid.");
+  }
+
+  return {
+    project: parsed.project,
+    chatId: parsed.chatId,
+    reply: parsed.reply,
+    handledAsCommand: parsed.handledAsCommand,
+  };
+};
+
 /**
  * Small client for the remote `POST /api/command` endpoint.
  */
@@ -67,20 +89,6 @@ export class HttpMaclawClient implements MaclawClient {
       throw new Error(parsed.error ?? `Remote command failed with status ${response.status}`);
     }
 
-    if (
-      typeof parsed.project !== "string" ||
-      typeof parsed.chatId !== "string" ||
-      typeof parsed.reply !== "string" ||
-      typeof parsed.handledAsCommand !== "boolean"
-    ) {
-      throw new Error("Remote command response was invalid.");
-    }
-
-    return {
-      project: parsed.project,
-      chatId: parsed.chatId,
-      reply: parsed.reply,
-      handledAsCommand: parsed.handledAsCommand,
-    };
+    return parseRemoteCommandResponse(rawBody);
   }
 }

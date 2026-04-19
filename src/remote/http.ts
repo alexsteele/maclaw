@@ -78,7 +78,14 @@ export function createHttpRemote(config: RemoteConfig): Remote {
       return noop("start");
     },
     async connect(options: RemoteConnectOptions = {}) {
+      if (this.config.client === "shell") {
+        throw new Error("HTTP remotes only support client: http.");
+      }
+
       return createHttpConnection(this.config.name, this.config, options);
+    },
+    async attachShell() {
+      return unsupported("attachShell");
     },
     async stop(_options?: RemoteInitOptions) {
       return noop("stop");
