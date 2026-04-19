@@ -2016,10 +2016,10 @@ test("dispatchCommand loads agent and task prompts from @files", async () => {
 
     const agent = harness.listAgents().find((entry) => entry.name === "planner");
     assert.ok(agent);
-    assert.equal(agent.prompt, "Prompt from file\n");
+    assert.match(agent.prompt, /Prompt from file\n/);
 
     const tasks = await harness.listCurrentChatTasks();
-    assert.equal(tasks[0]?.prompt, "Task prompt from file\n");
+    assert.match(tasks[0]?.prompt, /Task prompt from file\n/);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

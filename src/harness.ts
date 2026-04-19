@@ -1143,7 +1143,8 @@ export class Harness {
       }
     }
 
-    const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
+    const prompt = formatAgentPrompt(
+      await resolvePromptText(this.config.projectFolder, input.prompt));
     const now = new Date().toISOString();
     const id = this.createAgentId();
     const record: AgentRecord = {
