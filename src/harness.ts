@@ -18,6 +18,7 @@ import {
 import {
   Agent,
   createAgentMemoryEntry,
+  formatAgentPrompt,
   type AgentMemoryStore,
   type AgentStore,
 } from "./agent.js";
@@ -951,7 +952,9 @@ export class Harness {
     schedule?: ScheduledTask["schedule"];
     runAt?: string;
   }): Promise<ScheduledTask> {
-    const prompt = await resolvePromptText(this.config.projectFolder, input.prompt);
+    const prompt = formatAgentPrompt(
+      await resolvePromptText(this.config.projectFolder, input.prompt),
+    );
     const task = await this._scheduler.createTask({
       ...input,
       chatId: input.chatId ?? this.getCurrentChatId(),

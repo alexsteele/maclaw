@@ -159,6 +159,7 @@ test("harness createAgent starts a simple agent loop in the background", async (
     assert.equal(result.id, created.agent.id);
     assert.equal(result.status, "stopped");
     assert.equal(result.stepCount, 2);
+    assert.match(result.prompt, /<AGENT_DONE>/u);
 
     const transcript = await harness.getChatTranscript(created.agent.chatId);
     assert.match(transcript, /Work on this task/u);

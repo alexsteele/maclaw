@@ -241,12 +241,13 @@ const parseAgentTailArgs = (
 ): {
   agentRef?: string;
   count: number;
+  explicitCount: boolean;
   follow: boolean;
   error?: string;
 } => {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    return { count: 10, follow: false, error: "Usage: /agent tail [-f] <name> [N]" };
+    return { count: 10, explicitCount: false, follow: false, error: "Usage: /agent tail [-f] <name> [N]" };
   }
 
   let remainder = trimmed;
@@ -255,28 +256,31 @@ const parseAgentTailArgs = (
     follow = true;
     remainder = remainder.slice(3).trim();
   } else if (remainder === "-f") {
-    return { count: 10, follow: true, error: "Usage: /agent tail [-f] <name> [N]" };
+    return { count: 10, explicitCount: false, follow: true, error: "Usage: /agent tail [-f] <name> [N]" };
   }
 
   const parts = remainder.split(/\s+/u).filter((part) => part.length > 0);
   if (parts.length === 0) {
-    return { count: 10, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+    return { count: 10, explicitCount: false, follow, error: "Usage: /agent tail [-f] <name> [N]" };
   }
 
   let count = 10;
+  let explicitCount = false;
   const maybeCount = parts[parts.length - 1];
   if (maybeCount && /^\d+$/u.test(maybeCount)) {
     count = Number.parseInt(maybeCount, 10);
+    explicitCount = true;
     parts.pop();
   }
 
   if (!Number.isFinite(count) || count <= 0 || parts.length === 0) {
-    return { count: 10, follow, error: "Usage: /agent tail [-f] <name> [N]" };
+    return { count: 10, explicitCount: false, follow, error: "Usage: /agent tail [-f] <name> [N]" };
   }
 
   return {
     agentRef: parts.join(" "),
     count,
+    explicitCount,
     follow,
   };
 };
@@ -287,6 +291,19 @@ const formatChatMessages = (
   messages.length === 0
     ? "No history yet."
     : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
+
+const getAgentTailMessages = (
+  messages: Array<{ role: string; content: string }>,
+  count: number,
+  explicitCount: boolean,
+): Array<{ role: string; content: string }> => {
+  if (explicitCount) {
+    return messages.slice(-count);
+  }
+
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  return latestAssistant ? [latestAssistant] : [];
+};
 
 const formatSubcommandHelp = (usage: string, description: string, details?: string[]): string =>
   [usage, description, ...(details ?? [])].join("\n");
@@ -1940,7 +1957,8 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       "Usage: /agent tail [-f] <name> [N]",
       "Show the latest messages from one agent's chat.",
       [
-        "`N` defaults to 10.",
+        "Without `N`, this shows the latest agent reply.",
+        "With `N`, this shows the latest `N` chat messages.",
         "Use `-f` in the REPL to keep following new messages as they arrive.",
       ],
     ),
@@ -1960,7 +1978,9 @@ const agentSubcommands: Record<string, RegisteredSubcommand> = {
       }
 
       const chat = await harness.loadChat(agent.chatId);
-      return formatChatMessages(chat.messages.slice(-parsed.count));
+      return formatChatMessages(
+        getAgentTailMessages(chat.messages, parsed.count, parsed.explicitCount),
+      );
     },
   },
   return: {

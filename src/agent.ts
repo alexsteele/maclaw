@@ -1,7 +1,15 @@
 import type { AgentRecord, Message } from "./types.js";
 
+export const AGENT_DONE_INSTRUCTIONS =
+  "If you are finished, end your response with a final line that contains only <AGENT_DONE>.";
+
 const CONTINUE_PROMPT =
-  "Continue working on the task. If you are finished, end your response with a final line that contains only <AGENT_DONE>.";
+  `Continue working on the task. ${AGENT_DONE_INSTRUCTIONS}`;
+
+export const formatAgentPrompt = (prompt: string): string =>
+  prompt.includes("<AGENT_DONE>")
+    ? prompt
+    : `${prompt.trim()}\n\n${AGENT_DONE_INSTRUCTIONS}`;
 
 const isDoneMessage = (content: string): boolean => {
   const lines = content.trim().split("\n").map((line) => line.trim());

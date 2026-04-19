@@ -2168,10 +2168,10 @@ test("dispatchCommand tails recent agent chat messages", async () => {
     await harness.promptChat(created.agent.chatId, "second line");
     await harness.promptChat(created.agent.chatId, "third line");
 
-    const reply = await dispatchCommand(harness, "/agent tail poet-agent 4");
+    const reply = await dispatchCommand(harness, "/agent tail poet-agent");
 
-    assert.match(reply ?? "", /second line/u);
     assert.match(reply ?? "", /third line/u);
+    assert.doesNotMatch(reply ?? "", /second line/u);
     assert.doesNotMatch(reply ?? "", /first line/u);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -2288,7 +2288,8 @@ test("dispatchCommand treats /command help like /help command", async () => {
       [
         "Usage: /agent tail [-f] <name> [N]",
         "Show the latest messages from one agent's chat.",
-        "`N` defaults to 10.",
+        "Without `N`, this shows the latest agent reply.",
+        "With `N`, this shows the latest `N` chat messages.",
         "Use `-f` in the REPL to keep following new messages as they arrive.",
       ].join("\n"),
     );
