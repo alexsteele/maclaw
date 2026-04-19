@@ -40,7 +40,7 @@ Alex, your dedicated human-in-the-loop
 ## Example
 
 ```shell
-$ maclaw repl
+$ maclaw
 maclaw REPL
 project: default
 folder: /Users/alex/.maclaw/projects/default
@@ -87,10 +87,10 @@ Commands:
 
 These are also available via the portal and connectors.
 
-## Server+Portal
+## Portal
 
-maclaw can also run as a server. The server provides a portal webapp to control
-maclaw. It supports WhatsApp, Slack, and Discord channels and notifications.
+maclaw server runs a server and portal webapp. It supports WhatsApp, Slack, and
+Discord channels and notifications.
 
 ```shell
 $ maclaw server
@@ -101,43 +101,30 @@ Portal screenshot:
 
 ![maclaw portal](screenshots/portal.png)
 
-## Teleport
-
-`maclaw teleport` supports remote control over SSH tunnels. The easiest flow is
-to define a named remote in `~/.maclaw/server.json` and let maclaw open the
-tunnel for a single command:
-
-```shell
-remote$ maclaw server --api-only --port 4000
-
-# automatic forwarding
-local$ manual setup remotes
-local$ maclaw teleport gpu-box --project home "/help"
-
-# manual forwarding
-local$ ssh -L 4100:127.0.0.1:4000 alex@gpu.example.com
-local$ maclaw teleport http://127.0.0.1:4100 --project home "/help"
-```
-
-See [docs/config.md](docs/config.md) for the full server config and secrets
-shape.
-
 ## Projects
 
 Projects are the main unit of organization in maclaw. A project owns its model
 config, chats, agents, tasks, skills, and local state.
 
-Run `/project init` to initialize the current folder, or use `maclaw setup` to
-create a managed default project.
+Projects can live in the current folder under `.maclaw` or in
+`~/.maclaw/projects`
+
+Use `maclaw setup project` create a `~/.maclaw` project or `/project init` to
+create a project in the current folder.
 
 Project data lives in `.maclaw/`:
 
-```text
-project/
-  .maclaw/
-    maclaw.db
-    chats/
-      default.jsonl
+```shell
+$ tree .maclaw
+├── maclaw.db
+├── maclaw.json
+├── inbox.jsonl
+├── agents
+│   ├── agent_c9hwj6
+│   │   └── agent.json
+├── chats
+│   ├── default.jsonl
+│   └── web.jsonl
 ```
 
 `maclaw.json` contains the project config. See [docs/config.md](docs/config.md)
@@ -245,6 +232,28 @@ Send a manual notification with `/send <channel> | message`.
 You can control notifications with a policy (ex: `notifications: "none"`).
 
 See [docs/config.md](docs/config.md) for policy and override examples.
+
+## Teleport
+
+`maclaw teleport` supports remote control over SSH . The easiest flow is to
+create a named remote with `maclaw setup remote` then `maclaw teleport`. maclaw
+currently suppports SSH, EC2 session manager, and plain http remotes.
+
+```shell
+$ maclaw setup remotes
+$ maclaw teleport devbox "/help"
+$ maclaw
+> /help remote
+Command: /remote
+  /remote                  Show remote help
+  /remote list             List configured remotes
+  /remote show <name>      Show one remote config
+  /remote bootstrap <name> Bootstrap one remote
+  /remote start <name>     Start one remote server
+  /remote stop <name>      Stop one remote server
+  /remote rm <name>        Delete one remote config
+  /remote create           Create a remote interactively when supported
+```
 
 ## Concepts
 
