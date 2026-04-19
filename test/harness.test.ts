@@ -46,6 +46,7 @@ const createRecordingRouter = <T>(
   },
 });
 
+// TODO(codex): Remove. Agent methods should wait for state change. agent.coalesce()
 const waitForAgentToSettle = async (
   harness: Harness,
   agentId: string,
@@ -257,7 +258,7 @@ test("harness can pause and resume an agent", async () => {
   }
 });
 
-test("teardown cancels running agents", async () => {
+test("teardown pauses running agents", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-harness-agent-teardown-"));
 
   try {
@@ -272,7 +273,7 @@ test("teardown cancels running agents", async () => {
     await harness.teardown();
 
     const settled = await waitForAgentToSettle(harness, created.agent.id);
-    assert.equal(settled.status, "cancelled");
+    assert.equal(settled.status, "paused");
   } finally {
     await rm(projectDir, { recursive: true, force: true });
   }

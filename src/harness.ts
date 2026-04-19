@@ -467,6 +467,7 @@ export class Harness {
     return existsSync(this._config.projectConfigFile);
   }
 
+  // Starts the harness, resuming tasks and agents.
   async start(): Promise<void> {
     logger.debug("harness", "start", {
       project: this._config.name,
@@ -488,13 +489,14 @@ export class Harness {
     });
   }
 
+  // Stops the harness, pausing tasks and agents.
   async teardown(): Promise<void> {
     logger.debug("harness", "teardown", {
       project: this._config.name,
       runningAgents: this._runningAgents.size,
     });
     for (const agent of this._runningAgents.values()) {
-      agent.cancel();
+      agent.pause();
     }
     this._runningAgents.clear();
     this._scheduler.stop();
