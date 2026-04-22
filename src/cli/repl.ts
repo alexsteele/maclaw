@@ -10,7 +10,6 @@ import {
   dispatchCommand,
   helpText,
   parseTeleportConnectArgs,
-  projectHelpText,
 } from "../commands.js";
 import { Harness, type HarnessOptions } from "../harness.js";
 import { writeJsonFile } from "../fs-utils.js";
@@ -35,19 +34,10 @@ import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js
 
 const replHelpText = [
   helpText.trimEnd(),
-  "* !<command>         Run a shell command",
-  "* /project switch <name>  Switch to a managed project",
-  "* /project new <name>     Create and switch to a managed project",
   "* /quit              Exit the REPL",
   "* /verbose <on|off>  Toggle verbose reply metadata",
   "* /wrap [off|N]      Set REPL output wrap width",
-].join("\n");
-
-const replProjectHelpText = [
-  projectHelpText.trimEnd(),
   "* !<command>         Run a shell command",
-  "* /verbose <on|off>  Toggle verbose reply metadata",
-  "* /wrap [off|N]      Set REPL output wrap width",
 ].join("\n");
 
 const expandHome = (value: string): string => {
@@ -552,11 +542,6 @@ class Repl {
 
     if (line === "/help") {
       this.writeLine(replHelpText);
-      return false;
-    }
-
-    if (line === "/help project") {
-      this.writeLine(replProjectHelpText);
       return false;
     }
 
