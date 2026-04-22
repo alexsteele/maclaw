@@ -1,4 +1,5 @@
 import os from "node:os";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
@@ -31,6 +32,7 @@ import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js
 
 const replHelpText = [
   helpText.trimEnd(),
+  "* !<command>         Run a shell command",
   "* /project switch X  Switch the REPL to project folder X",
   "* /quit              Exit the REPL",
   "* /verbose <on|off>  Toggle verbose reply metadata",
@@ -39,6 +41,7 @@ const replHelpText = [
 
 const replProjectHelpText = [
   projectHelpText.trimEnd(),
+  "* !<command>         Run a shell command",
   "* /project switch X  Switch the REPL to project folder X",
   "* /verbose <on|off>  Toggle verbose reply metadata",
   "* /wrap [off|N]      Set REPL output wrap width",
@@ -151,6 +154,15 @@ export const parseAgentTailFollow = (
     agentRef: parts.join(" "),
     count,
   };
+};
+
+export const parseShellEscape = (line: string): string | undefined => {
+  if (!line.startsWith("!")) {
+    return undefined;
+  }
+
+  const command = line.slice(1).trim();
+  return command.length > 0 ? command : undefined;
 };
 
 export const loadReplHarness = (
@@ -459,9 +471,36 @@ class Repl {
     return lines.join("\n");
   }
 
+  private async runShellCommand(command: string): Promise<void> {
+    output.write("\n");
+    this.rl.pause();
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(command, {
+          cwd: this.harness.config.projectFolder,
+          shell: process.env.SHELL ?? true,
+          stdio: "inherit",
+        });
+
+        child.on("error", reject);
+        child.on("exit", () => resolve());
+      });
+    } finally {
+      this.rl.resume();
+      output.write("\n");
+    }
+  }
+
   private async handleLine(line: string): Promise<boolean> {
     if (line === "/quit") {
       return true;
+    }
+
+    const shellCommand = parseShellEscape(line);
+    if (shellCommand) {
+      await this.runShellCommand(shellCommand);
+      return false;
     }
 
     if (line === "/help") {

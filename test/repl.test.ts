@@ -11,6 +11,7 @@ import {
   loadReplHarness,
   looksLikeMarkdown,
   parseAgentTailFollow,
+  parseShellEscape,
   wrapReplLine,
 } from "../src/cli/repl.js";
 import { renderMarkdownForTerminal } from "../src/cli/render.js";
@@ -71,6 +72,13 @@ test("parseAgentTailFollow parses follow mode arguments", () => {
     count: 25,
   });
   assert.equal(parseAgentTailFollow("/agent tail poet"), undefined);
+});
+
+test("parseShellEscape parses shell escape commands", () => {
+  assert.equal(parseShellEscape("!pwd"), "pwd");
+  assert.equal(parseShellEscape("! ls -la"), "ls -la");
+  assert.equal(parseShellEscape("!"), undefined);
+  assert.equal(parseShellEscape("/help"), undefined);
 });
 
 test("loadReplHarness falls back to the managed default project when cwd is headless", async () => {
