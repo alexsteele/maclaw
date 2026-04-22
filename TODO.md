@@ -2,28 +2,13 @@
 
 - More models
 - MCP
-- Prettier terminal output
+- Unify project management commands
 - Portal asset packaging
   - Stop depending on `node_modules` paths at runtime for browser markdown bundles
   - Decide whether to bundle portal assets into `dist/`, embed generated assets, or serve a packaged static directory
 - Tool roadmap
-  - More read tools first
   - Web read tools with domain controls and robots.txt compliance
-  - Sandboxed file and shell tools before any host file access
   - Explicit review/apply step before writing changes back to the host
   - Narrow cloud tools later: Google Docs, Sheets, Calendar
 - Simpler notification routing
-- Sandboxed agents
-  - Design a `/sandbox` flow for running agents in an isolated environment
-  - Start with a clear local-vs-cloud runner abstraction
-  - Figure out the first sandbox environment, likely AWS
 - Agent orchestration/coordination demo
-- Easy cloud setup. aws script
-- /teleport talk to cloud maclaw over ssh
-  - Let teleport bootstrap remote maclaw itself by inspecting remote config
-  - Consider using a remote REPL/session when the remote server is not already running
-  - Add a long-lived teleport session/tunnel for remote REPL and portal flows
-- Logging and telemetry
-  - Expand critical-path logging beyond startup/locks into task execution and portal requests
-  - Decide whether logs should stay env-gated or become configurable in server/project config
-  - Consider a simple JSONL runtime log under `.maclaw/` for debugging production issues
