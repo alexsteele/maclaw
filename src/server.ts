@@ -43,6 +43,7 @@ const helpText = [
   "  /help                    Show this help",
   "  /project                 Show the current project",
   "  /project list            List available projects",
+  "  /project show            Show the current project",
   "  /project switch <name>   Switch to a different project",
   "",
   "Any other message is sent to the current project's chat.",
@@ -348,6 +349,26 @@ export class MaclawServer {
 
     this.setActiveProjectName(message, projectName);
     return `Switched to project: ${projectName}`;
+  }
+
+  private renderActiveProject(
+    message: Pick<ChannelMessage, "channel" | "userId">,
+  ): string {
+    const projectName = this.getActiveProjectName(message);
+    return projectName
+      ? `Current project: ${projectName}`
+      : `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
+  }
+
+  private createProjectControl(
+    message: Pick<ChannelMessage, "channel" | "userId">,
+  ) {
+    return {
+      show: () => this.renderActiveProject(message),
+      list: () => this.listProjectNames().join("\n"),
+      create: async () => "/project new is not supported in this channel yet.",
+      switch: async (projectName: string) => this.handleProjectSwitch(message, projectName),
+    };
   }
 
   private getPortalOrigin(projectName: string, chatId: string): Origin {
@@ -706,24 +727,6 @@ export class MaclawServer {
       return helpText;
     }
 
-    if (message.text === "/project") {
-      const projectName = this.getActiveProjectName(message);
-      return projectName
-        ? `Current project: ${projectName}`
-        : `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
-    }
-
-    if (message.text === "/project list") {
-      return this.listProjectNames().join("\n");
-    }
-
-    if (message.text.startsWith("/project switch ")) {
-      return this.handleProjectSwitch(
-        message,
-        message.text.slice("/project switch ".length).trim(),
-      );
-    }
-
     const projectName = this.getActiveProjectName(message) ?? this.getDefaultProjectName();
     if (!projectName) {
       return `No project selected. Choose one with /project switch <name>\n${this.listProjectNames().join("\n")}`;
@@ -741,6 +744,7 @@ export class MaclawServer {
       const commandReply = await dispatchCommand(harness, message.text, {
         chatId: message.userId,
         origin,
+        project: this.createProjectControl(message),
         teleport,
       });
       return commandReply;
@@ -754,6 +758,7 @@ export class MaclawServer {
     const commandReply = await dispatchCommand(harness, message.text, {
       chatId: message.userId,
       origin,
+      project: this.createProjectControl(message),
       teleport,
     });
     if (commandReply !== null) {

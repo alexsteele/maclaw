@@ -13,6 +13,8 @@ import {
   projectHelpText,
 } from "../commands.js";
 import { Harness, type HarnessOptions } from "../harness.js";
+import { writeJsonFile } from "../fs-utils.js";
+import { initProjectConfig } from "../config.js";
 import { ChannelRouter } from "../router.js";
 import { REPL_DISPLAY_INSTRUCTIONS } from "../prompt.js";
 import { renderMarkdownForTerminal } from "./render.js";
@@ -22,6 +24,7 @@ import {
   loadServerConfig,
   loadServerSecrets,
   maclawHomeDir,
+  type EditableServerConfig,
   type ServerConfig,
   type ServerSecrets,
 } from "../server-config.js";
@@ -33,7 +36,8 @@ import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js
 const replHelpText = [
   helpText.trimEnd(),
   "* !<command>         Run a shell command",
-  "* /project switch X  Switch the REPL to project folder X",
+  "* /project switch <name>  Switch to a managed project",
+  "* /project new <name>     Create and switch to a managed project",
   "* /quit              Exit the REPL",
   "* /verbose <on|off>  Toggle verbose reply metadata",
   "* /wrap [off|N]      Set REPL output wrap width",
@@ -42,7 +46,6 @@ const replHelpText = [
 const replProjectHelpText = [
   projectHelpText.trimEnd(),
   "* !<command>         Run a shell command",
-  "* /project switch X  Switch the REPL to project folder X",
   "* /verbose <on|off>  Toggle verbose reply metadata",
   "* /wrap [off|N]      Set REPL output wrap width",
 ].join("\n");
@@ -433,15 +436,7 @@ class Repl {
   }
 
   private async switchProject(requestedFolder: string): Promise<string> {
-    const trimmedFolder = requestedFolder.trim();
-    if (trimmedFolder.length === 0) {
-      return "Provide a project folder, for example: /project switch ../other-project";
-    }
-    const nextFolder = path.resolve(
-      this.harness.config.projectFolder,
-      expandHome(trimmedFolder),
-    );
-
+    const nextFolder = requestedFolder;
     await this.harness.teardown();
     await this.teleport.disconnect();
     await this.stopChannels();
@@ -469,6 +464,58 @@ class Repl {
     }
 
     return lines.join("\n");
+  }
+
+  private async createManagedProject(name: string): Promise<string> {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) {
+      return "Usage: /project new <name>";
+    }
+
+    const editableConfig = this.loadEditableServerConfig();
+    if (editableConfig.projects?.some((project) => project.name === trimmedName)) {
+      return `project already exists: ${trimmedName}`;
+    }
+
+    const projectFolder = path.join(maclawHomeDir(), "projects", trimmedName);
+    await initProjectConfig(projectFolder, {
+      name: trimmedName,
+      model: this.harness.config.model,
+    });
+
+    const nextServerConfig: EditableServerConfig = {
+      ...editableConfig,
+      projects: [
+        ...(editableConfig.projects ?? []),
+        { name: trimmedName, folder: projectFolder },
+      ],
+    };
+    if (!nextServerConfig.defaultProject) {
+      nextServerConfig.defaultProject = trimmedName;
+    }
+
+    await writeJsonFile(defaultServerConfigFile(), nextServerConfig);
+    return this.switchProject(projectFolder);
+  }
+
+  private async switchManagedProject(name: string): Promise<string> {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) {
+      return "Usage: /project switch <name>";
+    }
+
+    const project = this.serverConfig?.projects.find((entry) => entry.name === trimmedName);
+    if (!project) {
+      return `project not found: ${trimmedName}`;
+    }
+
+    return this.switchProject(project.folder);
+  }
+
+  private loadEditableServerConfig(): EditableServerConfig {
+    return this.serverConfig ?? {
+      projects: [],
+    };
   }
 
   private async runShellCommand(command: string): Promise<void> {
@@ -558,13 +605,6 @@ class Repl {
       return false;
     }
 
-    if (line.startsWith("/project switch ")) {
-      this.writeLine(
-        await this.switchProject(line.slice("/project switch ".length)),
-      );
-      return false;
-    }
-
     const followTail = parseAgentTailFollow(line);
     if (followTail) {
       await this.followAgentTail(followTail.agentRef, followTail.count);
@@ -593,6 +633,10 @@ class Repl {
 
       const commandReply = await dispatchCommand(this.harness, line, {
         origin: replOrigin,
+        project: {
+          create: this.createManagedProject.bind(this),
+          switch: this.switchManagedProject.bind(this),
+        },
         teleport: this.teleport,
       });
       this.writeLine(commandReply ?? "");
@@ -612,6 +656,10 @@ class Repl {
 
     const commandReply = await dispatchCommand(this.harness, line, {
       origin: replOrigin,
+      project: {
+        create: this.createManagedProject.bind(this),
+        switch: this.switchManagedProject.bind(this),
+      },
       teleport: this.teleport,
     });
     if (commandReply !== null) {

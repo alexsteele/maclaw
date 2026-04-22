@@ -59,9 +59,17 @@ type TeleportControl = {
   listRemotes(): RemoteConfig[];
 };
 
+type ProjectControl = {
+  show?(): Promise<string> | string;
+  list?(): Promise<string> | string;
+  create(name: string): Promise<string>;
+  switch(name: string): Promise<string>;
+};
+
 type DispatchOptions = {
   chatId?: string;
   origin?: Origin;
+  project?: ProjectControl;
   // Optional teleport context supplied by interactive clients such as the REPL
   // or server-backed channels. When present, shared /teleport commands can
   // attach, list, inspect, and disconnect remote sessions.
@@ -115,10 +123,12 @@ export const helpText = [
 export const projectHelpText = [
   "## `/project`",
   "- `/project` Show the active project",
-  "- `/project list` Show the active project",
+  "- `/project list` List managed projects when available",
   "- `/project show` Show the active project",
-  "- `/project usage` Show token usage for the project",
   "- `/project init` Create `.maclaw/maclaw.json` for this project",
+  "- `/project new <name>` Create and switch to a new managed project",
+  "- `/project switch <name>` Switch to a managed project by name",
+  "- `/project usage` Show token usage for the project",
   "- `/project wipeout` Delete `.maclaw/` for this project after confirmation",
 ].join("\n");
 
@@ -494,6 +504,8 @@ const parseChatId = (value: string): string | null => {
 
   return /^[A-Za-z0-9._-]+$/u.test(trimmed) ? trimmed : null;
 };
+
+const parseProjectName = (value: string): string | null => parseChatId(value);
 
 type ServerConfigData = EditableServerConfig;
 
@@ -1245,11 +1257,64 @@ const handleHelpCommand: CommandHandler = async (_harness, input) => {
   return helpTopics[topic] ?? helpText;
 };
 
+const renderProjectShow = async (
+  harness: Harness,
+  options: DispatchOptions,
+): Promise<string> => {
+  if (options.project?.show) {
+    return options.project.show();
+  }
+
+  return renderProjectInfo(harness, getScopedChatId(harness, options));
+};
+
+const renderProjectList = async (
+  harness: Harness,
+  options: DispatchOptions,
+): Promise<string> => {
+  if (options.project?.list) {
+    return options.project.list();
+  }
+
+  return renderProjectInfo(harness, getScopedChatId(harness, options));
+};
+
 const projectSubcommands: Record<string, RegisteredSubcommand> = {
+  show: {
+    run: async (harness, _args, options) => renderProjectShow(harness, options),
+  },
   list: {
-    aliases: ["show"],
-    run: async (harness, _args, options) =>
-      renderProjectInfo(harness, getScopedChatId(harness, options)),
+    run: async (harness, _args, options) => renderProjectList(harness, options),
+  },
+  new: {
+    help: "Usage: /project new <name>",
+    run: async (_harness, args, options) => {
+      const name = parseProjectName(args);
+      if (!name) {
+        return "Usage: /project new <name>";
+      }
+
+      if (!options.project) {
+        return "/project new is not supported in this channel yet.";
+      }
+
+      return options.project.create(name);
+    },
+  },
+  switch: {
+    help: "Usage: /project switch <name>",
+    run: async (_harness, args, options) => {
+      const name = parseProjectName(args);
+      if (!name) {
+        return "Usage: /project switch <name>";
+      }
+
+      if (!options.project) {
+        return "/project switch is not supported in this channel yet.";
+      }
+
+      return options.project.switch(name);
+    },
   },
   usage: {
     run: async (harness) =>
@@ -1312,7 +1377,7 @@ const handleProjectCommand: CommandHandler = async (
     projectHelpText,
     projectSubcommands,
     {
-      defaultSubcommand: "list",
+      defaultSubcommand: "show",
     },
   );
 };

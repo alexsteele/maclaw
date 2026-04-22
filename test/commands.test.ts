@@ -585,6 +585,81 @@ test("dispatchCommand supports /projects as an alias for /project list", async (
   }
 });
 
+test("dispatchCommand can create and switch managed projects through project control", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-project-control-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const calls: string[] = [];
+    const project = {
+      async create(name: string) {
+        calls.push(`create:${name}`);
+        return `switched to project: ${name}`;
+      },
+      async switch(name: string) {
+        calls.push(`switch:${name}`);
+        return `switched to project: ${name}`;
+      },
+    };
+
+    const createReply = await dispatchCommand(harness, "/project new jazz", { project });
+    const switchReply = await dispatchCommand(harness, "/project switch jazz", { project });
+
+    assert.equal(createReply, "switched to project: jazz");
+    assert.equal(switchReply, "switched to project: jazz");
+    assert.deepEqual(calls, ["create:jazz", "switch:jazz"]);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand can show and list projects through project control", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-project-show-list-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    const project = {
+      show() {
+        return "Current project: home";
+      },
+      list() {
+        return "home\nwork";
+      },
+      async create(name: string) {
+        return `created: ${name}`;
+      },
+      async switch(name: string) {
+        return `switched: ${name}`;
+      },
+    };
+
+    assert.equal(await dispatchCommand(harness, "/project", { project }), "Current project: home");
+    assert.equal(await dispatchCommand(harness, "/project show", { project }), "Current project: home");
+    assert.equal(await dispatchCommand(harness, "/project list", { project }), "home\nwork");
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("dispatchCommand reports unsupported managed project commands without project control", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-project-unsupported-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+
+    assert.equal(
+      await dispatchCommand(harness, "/project new jazz"),
+      "/project new is not supported in this channel yet.",
+    );
+    assert.equal(
+      await dispatchCommand(harness, "/project switch jazz"),
+      "/project switch is not supported in this channel yet.",
+    );
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand persists a switched chat so it appears in chat list output", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-chat-switch-list-"));
 
