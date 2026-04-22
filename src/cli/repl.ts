@@ -32,13 +32,41 @@ import type { TeleportTarget } from "../teleport.js";
 import type { Tool } from "../tools/types.js";
 import type { Message, Origin, ProviderResult, ScheduledTask } from "../types.js";
 
-const replHelpText = [
-  helpText.trimEnd(),
-  "* /quit              Exit the REPL",
-  "* /verbose <on|off>  Toggle verbose reply metadata",
-  "* /wrap [off|N]      Set REPL output wrap width",
-  "* !<command>         Run a shell command",
-].join("\n");
+type ReplCommandDefinition = {
+  description: string;
+  usage: string;
+  run(args: string): Promise<boolean>;
+};
+
+const formatReplCommandLine = (usage: string, description: string): string =>
+  `* ${usage.padEnd(20)} ${description}`;
+
+const findReplCommand = (
+  registry: Record<string, ReplCommandDefinition>,
+  line: string,
+): {
+  command?: ReplCommandDefinition;
+  args: string;
+} => {
+  if (!line.startsWith("/")) {
+    return { args: "" };
+  }
+
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return { args: "" };
+  }
+
+  const firstSpace = trimmed.indexOf(" ");
+  const commandName =
+    firstSpace < 0 ? trimmed : trimmed.slice(0, firstSpace);
+  const args = firstSpace < 0 ? "" : trimmed.slice(firstSpace + 1).trim();
+
+  return {
+    command: registry[commandName],
+    args,
+  };
+};
 
 const expandHome = (value: string): string => {
   if (value === "~") {
@@ -245,6 +273,7 @@ class ReplChannel implements Channel {
 class Repl {
   private readonly rl = readline.createInterface({ input, output });
   private readonly channels = new Map<string, Channel>();
+  private readonly replCommands: Record<string, ReplCommandDefinition>;
   private harness: Harness;
   private _router?: ChannelRouter;
   private serverConfig: ServerConfig | undefined;
@@ -280,6 +309,7 @@ class Repl {
     this.serverConfig = loadReplServerConfig();
     this.serverSecrets = loadServerSecrets(defaultServerSecretsFile());
     this.teleport = new TeleportController(this.serverConfig);
+    this.replCommands = this.createReplCommands();
     this.refreshChannels();
     this.harness = loadReplHarness(process.cwd(), {
       onTaskMessage: this.onTaskMessage,
@@ -529,65 +559,106 @@ class Repl {
     }
   }
 
-  private async handleLine(line: string): Promise<boolean> {
-    if (line === "/quit") {
-      return true;
+  private createReplCommands(): Record<string, ReplCommandDefinition> {
+    return {
+      "/help": {
+        usage: "/help",
+        description: "Show REPL help",
+        run: async () => {
+          this.writeLine(this.renderReplHelpText());
+          return false;
+        },
+      },
+      "/quit": {
+        usage: "/quit",
+        description: "Exit the REPL",
+        run: async () => true,
+      },
+      "/verbose": {
+        usage: "/verbose <on|off>",
+        description: "Toggle verbose reply metadata",
+        run: async (args) => {
+          if (args.length === 0) {
+            this.verbose = !this.verbose;
+            this.writeLine(`verbose: ${this.verbose ? "on" : "off"}`);
+            return false;
+          }
+
+          if (args === "on") {
+            this.verbose = true;
+            this.writeLine("verbose: on");
+            return false;
+          }
+
+          if (args === "off") {
+            this.verbose = false;
+            this.writeLine("verbose: off");
+            return false;
+          }
+
+          this.writeLine("Usage: /verbose <on|off>");
+          return false;
+        },
+      },
+      "/wrap": {
+        usage: "/wrap [off|N]",
+        description: "Set REPL output wrap width",
+        run: async (args) => {
+          if (args.length === 0) {
+            this.writeLine(`wrap: ${this.wrapWidth > 0 ? this.wrapWidth : "off"}`);
+            return false;
+          }
+
+          if (args === "off") {
+            this.wrapWidth = 0;
+            this.writeLine("wrap: off");
+            return false;
+          }
+
+          const value = Number.parseInt(args, 10);
+          if (!Number.isFinite(value) || value <= 0) {
+            this.writeLine("Usage: /wrap [off|N]");
+            return false;
+          }
+
+          this.wrapWidth = value;
+          this.writeLine(`wrap: ${this.wrapWidth}`);
+          return false;
+        },
+      },
+    };
+  }
+
+  private renderReplHelpText(): string {
+    const commands = Object.values(this.replCommands);
+    return [
+      helpText.trimEnd(),
+      ...commands.map((command) =>
+        formatReplCommandLine(command.usage, command.description),
+      ),
+      formatReplCommandLine("!<command>", "Run a shell command"),
+    ].join("\n");
+  }
+
+  private async dispatchReplCommand(line: string): Promise<boolean | undefined> {
+    const { command, args } = findReplCommand(this.replCommands, line);
+    if (!command) {
+      return undefined;
     }
 
+    return command.run(args);
+  }
+
+  private async handleLine(line: string): Promise<boolean> {
     const shellCommand = parseShellEscape(line);
     if (shellCommand) {
       await this.runShellCommand(shellCommand);
       return false;
     }
 
-    if (line === "/help") {
-      this.writeLine(replHelpText);
-      return false;
-    }
-
-    if (line === "/verbose") {
-      this.writeLine(`verbose: ${this.verbose ? "on" : "off"}`);
-      return false;
-    }
-
-    if (line === "/verbose on") {
-      this.verbose = true;
-      this.writeLine("verbose: on");
-      return false;
-    }
-
-    if (line === "/verbose off") {
-      this.verbose = false;
-      this.writeLine("verbose: off");
-      return false;
-    }
-
-    if (line.startsWith("/verbose")) {
-      this.writeLine("Usage: /verbose <on|off>");
-      return false;
-    }
-
-    if (line === "/wrap") {
-      this.writeLine(`wrap: ${this.wrapWidth > 0 ? this.wrapWidth : "off"}`);
-      return false;
-    }
-
-    if (line === "/wrap off") {
-      this.wrapWidth = 0;
-      this.writeLine("wrap: off");
-      return false;
-    }
-
-    if (line.startsWith("/wrap ")) {
-      const value = Number.parseInt(line.slice("/wrap ".length).trim(), 10);
-      if (!Number.isFinite(value) || value <= 0) {
-        this.writeLine("Usage: /wrap [off|N]");
-        return false;
-      }
-
-      this.wrapWidth = value;
-      this.writeLine(`wrap: ${this.wrapWidth}`);
-      return false;
+    const replCommandResult = await this.dispatchReplCommand(line);
+    if (replCommandResult !== undefined) {
+      return replCommandResult;
     }
 
     const followTail = parseAgentTailFollow(line);
