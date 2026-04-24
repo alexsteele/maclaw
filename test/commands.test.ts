@@ -585,6 +585,27 @@ test("dispatchCommand supports /projects as an alias for /project list", async (
   }
 });
 
+test("dispatchCommand supports short aliases for common command trees", async () => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-short-aliases-"));
+
+  try {
+    const harness = Harness.load(projectDir);
+    await harness.prompt("hello from default");
+
+    const projectReply = await dispatchCommand(harness, "/p");
+    const chatReply = await dispatchCommand(harness, "/c list");
+    const taskReply = await dispatchCommand(harness, "/t list");
+    const agentReply = await dispatchCommand(harness, "/a list");
+
+    assert.equal(projectReply, await dispatchCommand(harness, "/project"));
+    assert.equal(chatReply, await dispatchCommand(harness, "/chat list"));
+    assert.equal(taskReply, await dispatchCommand(harness, "/task list"));
+    assert.equal(agentReply, await dispatchCommand(harness, "/agent list"));
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("dispatchCommand can create and switch managed projects through project control", async () => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), "maclaw-commands-project-control-"));
 

@@ -2827,6 +2827,27 @@ const handleForkCommand: CommandHandler = async (harness, input, options) => {
 const handleCostCommand: CommandHandler = async (harness, _input, options) =>
   handleUsageCommand(harness, "/usage report", options);
 
+const expandCommandAlias = (input: string): string => {
+  const aliases: Record<string, string> = {
+    "/p": "/project",
+    "/c": "/chat",
+    "/t": "/task",
+    "/a": "/agent",
+  };
+
+  for (const [alias, target] of Object.entries(aliases)) {
+    if (input === alias) {
+      return target;
+    }
+
+    if (input.startsWith(`${alias} `)) {
+      return `${target}${input.slice(alias.length)}`;
+    }
+  }
+
+  return input;
+};
+
 const commandHandlers: Record<string, CommandHandler> = {
   help: handleHelpCommand,
   new: handleNewCommand,
@@ -2863,6 +2884,8 @@ export const dispatchCommand = async (
   input: string,
   options: DispatchOptions = {},
 ): Promise<string | null> => {
+  input = expandCommandAlias(input);
+
   if (input === "/chats") {
     return handleChatCommand(harness, "/chat list", options);
   }
