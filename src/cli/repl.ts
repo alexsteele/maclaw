@@ -135,6 +135,16 @@ export const wrapReplLine = (line: string, width: number): string => {
   return wrapped.join("\n");
 };
 
+export const defaultReplWrapWidth = (
+  columns: number | undefined = output.columns,
+): number => {
+  if (!Number.isFinite(columns) || columns === undefined || columns <= 4) {
+    return 100;
+  }
+
+  return Math.max(20, columns - 2);
+};
+
 export const looksLikeMarkdown = (text: string): boolean => {
   return /(^|\n)#{1,6}\s/u.test(text)
     || /(^|\n)-\s/u.test(text)
@@ -280,7 +290,7 @@ class Repl {
   private serverSecrets: ServerSecrets;
   private teleport: TeleportController;
   private verbose = false;
-  private wrapWidth = 100;
+  private wrapWidthOverride?: number;
   private readonly onTaskMessage = async (task: ScheduledTask, message: Message): Promise<void> => {
     output.write(
       `\n${this.formatForDisplay(`[scheduled:${task.title}] ${message.content}`)}\n\n${this.getPrompt()}`,
@@ -367,13 +377,13 @@ class Repl {
 
   private writeLine(text: string): void {
     const body = looksLikeMarkdown(text)
-      ? renderMarkdownForTerminal(text, this.wrapWidth)
+      ? renderMarkdownForTerminal(text, this.getWrapWidth())
       : this.formatForDisplay(text);
     output.write(`${body}\n\n`);
   }
 
   private writeAssistantReply(text: string, result?: ProviderResult): void {
-    const body = renderMarkdownForTerminal(text, this.wrapWidth);
+    const body = renderMarkdownForTerminal(text, this.getWrapWidth());
     const verboseFooter = this.verbose ? this.formatVerboseFooter(result) : null;
     output.write(
       `${body}${verboseFooter ? `\n${this.formatForDisplay(verboseFooter)}` : ""}\n\n`,
@@ -390,14 +400,19 @@ class Repl {
       : messages.map((message) => `[${message.role}] ${message.content}`).join("\n");
   }
 
+  private getWrapWidth(): number {
+    return this.wrapWidthOverride ?? defaultReplWrapWidth();
+  }
+
   private formatForDisplay(text: string): string {
-    if (this.wrapWidth <= 0) {
+    const width = this.getWrapWidth();
+    if (width <= 0) {
       return text;
     }
 
     return text
       .split("\n")
-      .map((line) => wrapReplLine(line, this.wrapWidth))
+      .map((line) => wrapReplLine(line, width))
       .join("\n");
   }
 
@@ -601,28 +616,39 @@ class Repl {
         },
       },
       "/wrap": {
-        usage: "/wrap [off|N]",
+        usage: "/wrap [auto|off|N]",
         description: "Set REPL output wrap width",
         run: async (args) => {
           if (args.length === 0) {
-            this.writeLine(`wrap: ${this.wrapWidth > 0 ? this.wrapWidth : "off"}`);
+            const value = this.wrapWidthOverride;
+            this.writeLine(
+              value === undefined
+                ? `wrap: auto (${this.getWrapWidth()})`
+                : `wrap: ${value > 0 ? value : "off"}`,
+            );
             return false;
           }
 
           if (args === "off") {
-            this.wrapWidth = 0;
+            this.wrapWidthOverride = 0;
             this.writeLine("wrap: off");
+            return false;
+          }
+
+          if (args === "auto") {
+            this.wrapWidthOverride = undefined;
+            this.writeLine(`wrap: auto (${this.getWrapWidth()})`);
             return false;
           }
 
           const value = Number.parseInt(args, 10);
           if (!Number.isFinite(value) || value <= 0) {
-            this.writeLine("Usage: /wrap [off|N]");
+            this.writeLine("Usage: /wrap [auto|off|N]");
             return false;
           }
 
-          this.wrapWidth = value;
-          this.writeLine(`wrap: ${this.wrapWidth}`);
+          this.wrapWidthOverride = value;
+          this.writeLine(`wrap: ${value}`);
           return false;
         },
       },

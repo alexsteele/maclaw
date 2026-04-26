@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import test from "node:test";
 import { initProjectConfig } from "../src/config.js";
 import {
+  defaultReplWrapWidth,
   formatReplPrompt,
   loadReplChannels,
   loadReplServerConfig,
@@ -20,6 +21,13 @@ test("wrapReplLine wraps long lines and preserves indentation", () => {
   const wrapped = wrapReplLine("  alpha beta gamma delta", 12);
 
   assert.equal(wrapped, "  alpha beta\n  gamma\n  delta");
+});
+
+test("defaultReplWrapWidth uses terminal columns when available", () => {
+  assert.equal(defaultReplWrapWidth(120), 118);
+  assert.equal(defaultReplWrapWidth(22), 20);
+  assert.equal(defaultReplWrapWidth(undefined), 100);
+  assert.equal(defaultReplWrapWidth(0), 100);
 });
 
 test("formatReplPrompt shows teleport target when attached", () => {
