@@ -55,6 +55,25 @@ test("renderMarkdownForTerminal preserves markdown structure for lists", () => {
   assert.match(rendered, /\n/u);
 });
 
+test("renderMarkdownForTerminal normalizes accidentally indented list items", () => {
+  const rendered = renderMarkdownForTerminal(
+    "    * **Elite runners:**\n",
+    80,
+  );
+
+  assert.doesNotMatch(rendered, /\*\*Elite runners:\*\*/u);
+  assert.match(rendered, /Elite runners:/u);
+});
+
+test("renderMarkdownForTerminal preserves real indented code blocks", () => {
+  const rendered = renderMarkdownForTerminal(
+    "    const answer = 42;\n",
+    80,
+  );
+
+  assert.match(rendered, /const answer = 42;/u);
+});
+
 test("looksLikeMarkdown detects markdown-oriented command output", () => {
   assert.equal(looksLikeMarkdown("## Files\n- item"), true);
   assert.equal(looksLikeMarkdown("Use `code` here"), true);

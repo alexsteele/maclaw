@@ -9,6 +9,37 @@ import { Marked } from "marked";
 import chalk from "chalk";
 import { markedTerminal } from "marked-terminal";
 
+/**
+ * Normalizes accidentally indented list items so the terminal markdown parser
+ * treats them as lists rather than indented code blocks.
+ */
+const normalizeIndentedLists = (text: string): string => {
+  return text
+    .split("\n")
+    .map((line) => {
+      const match = /^( {4,})([*+-]|\d+\.)\s+/u.exec(line);
+      if (!match) {
+        return line;
+      }
+
+      const indent = match[1] ?? "";
+      const marker = match[2] ?? "";
+      const normalizedIndent = " ".repeat(Math.max(0, indent.length - 4));
+      return `${normalizedIndent}${line.slice(indent.length).replace(/^([*+-]|\d+\.)\s+/u, `${marker} `)}`;
+    })
+    .join("\n");
+};
+
+const formatRenderedListLine = (line: string): string => {
+  if (!/^\s*(?:[*+-]|\d+\.)\s+/u.test(line)) {
+    return line;
+  }
+
+  return line
+    .replace(/\*\*(.+?)\*\*/gu, (_match, content: string) => chalk.green.bold(content))
+    .replace(/`(.+?)`/gu, (_match, content: string) => chalk.green(content));
+};
+
 const createMarkdownRenderer = (width: number): Marked =>
   new Marked(
     markedTerminal({
@@ -27,6 +58,14 @@ export const renderMarkdownForTerminal = (
   width: number,
 ): string => {
   const renderer = createMarkdownRenderer(width);
-  const rendered = renderer.parse(text);
-  return typeof rendered === "string" ? rendered.trimEnd() : text;
+  const rendered = renderer.parse(normalizeIndentedLists(text));
+  if (typeof rendered !== "string") {
+    return text;
+  }
+
+  return rendered
+    .split("\n")
+    .map(formatRenderedListLine)
+    .join("\n")
+    .trimEnd();
 };
