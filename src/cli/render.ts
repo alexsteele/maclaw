@@ -9,6 +9,8 @@ import { Marked } from "marked";
 import chalk from "chalk";
 import { markedTerminal } from "marked-terminal";
 
+const ANSI_PATTERN = /\u001B\[[0-9;]*m/gu;
+
 /**
  * Normalizes accidentally indented list items so the terminal markdown parser
  * treats them as lists rather than indented code blocks.
@@ -40,6 +42,46 @@ const formatRenderedListLine = (line: string): string => {
     .replace(/`(.+?)`/gu, (_match, content: string) => chalk.green(content));
 };
 
+const visibleLength = (value: string): number =>
+  value.replace(ANSI_PATTERN, "").length;
+
+const wrapRenderedListLine = (line: string, width: number): string => {
+  if (width <= 0 || visibleLength(line) <= width) {
+    return line;
+  }
+
+  const bulletMatch = /^(\s*)((?:[*+-]|\d+\.))\s+(.*)$/u.exec(line);
+  if (!bulletMatch) {
+    return line;
+  }
+
+  const baseIndent = `${bulletMatch[1] ?? ""}${bulletMatch[2] ?? ""} `;
+  const continuationIndent = `${bulletMatch[1] ?? ""}${" ".repeat((bulletMatch[2] ?? "").length + 1)}`;
+  const words = (bulletMatch[3] ?? "").split(/\s+/u).filter((word) => word.length > 0);
+  const wrapped: string[] = [];
+  let current = baseIndent;
+
+  for (const word of words) {
+    const next =
+      visibleLength(current) <= visibleLength(baseIndent)
+        ? `${current}${word}`
+        : `${current} ${word}`;
+    if (visibleLength(current) > visibleLength(baseIndent) && visibleLength(next) > width) {
+      wrapped.push(current);
+      current = `${continuationIndent}${word}`;
+      continue;
+    }
+
+    current = next;
+  }
+
+  if (current.length > 0) {
+    wrapped.push(current);
+  }
+
+  return wrapped.join("\n");
+};
+
 const createMarkdownRenderer = (width: number): Marked =>
   new Marked(
     markedTerminal({
@@ -66,6 +108,7 @@ export const renderMarkdownForTerminal = (
   return rendered
     .split("\n")
     .map(formatRenderedListLine)
+    .map((line) => wrapRenderedListLine(line, width))
     .join("\n")
     .trimEnd();
 };

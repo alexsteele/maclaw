@@ -23,6 +23,17 @@ test("wrapReplLine wraps long lines and preserves indentation", () => {
   assert.equal(wrapped, "  alpha beta\n  gamma\n  delta");
 });
 
+test("wrapReplLine aligns wrapped bullet and numbered list items", () => {
+  assert.equal(
+    wrapReplLine("- alpha beta gamma delta", 14),
+    "- alpha beta\n  gamma delta",
+  );
+  assert.equal(
+    wrapReplLine("  12. alpha beta gamma delta", 18),
+    "  12. alpha beta\n      gamma delta",
+  );
+});
+
 test("defaultReplWrapWidth uses terminal columns when available", () => {
   assert.equal(defaultReplWrapWidth(120), 118);
   assert.equal(defaultReplWrapWidth(22), 20);
@@ -61,6 +72,17 @@ test("renderMarkdownForTerminal preserves markdown structure for lists", () => {
   assert.match(rendered, /alpha/u);
   assert.match(rendered, /beta/u);
   assert.match(rendered, /\n/u);
+});
+
+test("renderMarkdownForTerminal wraps long list items to terminal width", () => {
+  const rendered = renderMarkdownForTerminal(
+    "* Size: One of the largest marathons globally with 40,000-45,000 finishers annually.\n",
+    50,
+  );
+
+  assert.match(rendered, /Size:/u);
+  assert.match(rendered, /finishers annually\./u);
+  assert.match(rendered, /\n\s+with 40,000-45,000 finishers annually\./u);
 });
 
 test("renderMarkdownForTerminal normalizes accidentally indented list items", () => {

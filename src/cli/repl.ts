@@ -110,18 +110,24 @@ export const wrapReplLine = (line: string, width: number): string => {
     return line;
   }
 
+  const bulletMatch = /^(\s*)((?:[*+-]|\d+\.))\s+(.*)$/u.exec(line);
   const indentMatch = line.match(/^(\s*)/u);
   const indent = indentMatch?.[1] ?? "";
-  const content = line.trim();
+  const firstIndent = bulletMatch ? `${bulletMatch[1] ?? ""}${bulletMatch[2] ?? ""}` : indent;
+  const continuationIndent = bulletMatch
+    ? `${bulletMatch[1] ?? ""}${" ".repeat((bulletMatch[2] ?? "").length + 1)}`
+    : indent;
+  const content = bulletMatch ? (bulletMatch[3] ?? "").trim() : line.trim();
   const words = content.split(/\s+/u);
   const wrapped: string[] = [];
-  let current = indent;
+  let current = firstIndent;
 
   for (const word of words) {
-    const next = current.trim().length === 0 ? `${indent}${word}` : `${current} ${word}`;
-    if (current.length > indent.length && next.length > width) {
+    const baseIndent = wrapped.length === 0 ? firstIndent : continuationIndent;
+    const next = current.trim().length === 0 ? `${baseIndent}${word}` : `${current} ${word}`;
+    if (current.length > baseIndent.length && next.length > width) {
       wrapped.push(current);
-      current = `${indent}${word}`;
+      current = `${continuationIndent}${word}`;
       continue;
     }
 
