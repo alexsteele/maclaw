@@ -14,11 +14,17 @@ Derived from local git history.
 | 2026-04-12 |         6 |   5.2 | +1,776 / -779   |
 | 2026-04-13 |         1 |   0.0 | +1,119 / -693   |
 | 2026-04-15 |         3 |   1.1 | +911 / -78      |
+| 2026-04-16 |         4 |   0.5 | +1,032 / -230   |
+| 2026-04-18 |        11 |   2.5 | +2,785 / -877   |
+| 2026-04-19 |        13 |   3.5 | +1,639 / -476   |
+| 2026-04-21 |         5 |   0.5 | +503 / -222     |
+| 2026-04-24 |         1 |   0.0 | +44 / -0        |
+| 2026-04-25 |         3 |   0.3 | +181 / -18      |
 
 Current code size:
 
-- `src/`: `16,950` lines
-- `test/`: `7,673` lines
+- `src/`: `20,299` lines
+- `test/`: `9,400` lines
 
 <!-- codex: Include sessions near midnight with the prior day. -->
 <!-- codex: Commits hours apart are separate sessions. -->
@@ -146,3 +152,44 @@ Current code size:
 - Taught SSH and EC2 remotes to bootstrap, start, and stop maclaw in Docker.
 - Simplified server remote config loading so sparse remote config stays sparse
   instead of being reshaped with lots of implicit defaults.
+
+## 2026-04-16 Notes
+
+- Added startup-time sqlite column backfill for older local databases.
+- Added `/agent prune` and `/agent rm`.
+- Continued moving command handling toward smaller alias/subcommand registries.
+
+## 2026-04-18 Notes
+
+- Reorganized command dispatch around cleaner subcommand registries.
+- Added `/tasks prune`, `/chats prune`, `/cost`, and `/agent show`.
+- Added rooted workspace search/file listing improvements.
+- Improved help rendering and `/agent tail`.
+- Added project defaults for agent max steps and timeout.
+- Started SSH shell-style remote clients.
+
+## 2026-04-19 Notes
+
+- Added shell remote attach flow and `maclaw teleport <remote>`.
+- Improved remote setup prompts, recipe-driven setup, and remote prompt labels.
+- Continued REPL/help cleanup and agent steering prompt work.
+- Changed harness teardown to pause running agents instead of cancelling them.
+- Moved agent transcripts into agent-owned folders.
+
+## 2026-04-21 Notes
+
+- Added `!<command>` shell escapes in the REPL.
+- Added first-class `/project new` and `/project switch` dispatcher commands.
+- Removed backticks from command help bullets for better terminal rendering.
+- Moved REPL custom commands to a small command registry.
+
+## 2026-04-24 Notes
+
+- Added short aliases for common command trees: `/p`, `/c`, `/t`, and `/a`.
+
+## 2026-04-25 Notes
+
+- Improved terminal markdown list rendering and list-line wrapping.
+- Switched REPL wrap width to follow the live terminal width by default.
+- Improved wrapping for both plain-text bullets and markdown-rendered list
+  items.
